@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from .config import settings
 from .database import engine, Base, AsyncSessionLocal
-from .migrations import run_additive_migrations
+from .migrations import run_additive_migrations, seed_media_subtypes, backfill_media_subtypes
 from .api.v1.router import router
 from . import models  # noqa: F401 — registers ORM classes before create_all
 
@@ -47,6 +47,10 @@ async def lifespan(app: FastAPI):
 
     Path(settings.covers_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.backup_dir).mkdir(parents=True, exist_ok=True)
+
+    async with AsyncSessionLocal() as db:
+        await seed_media_subtypes(db)
+        await backfill_media_subtypes(db)
 
     await _ensure_admin()
     yield

@@ -55,5 +55,17 @@ class MediaItem(Base):
     location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)
     location = relationship("Location", back_populates="items", lazy="selectin")
 
+    # Media subtype (Physical/Digital x Music/Films & TV/Books)
+    media_subtype_id = Column(Integer, ForeignKey("media_subtypes.id", ondelete="SET NULL"), nullable=True, index=True)
+    media_subtype = relationship("MediaSubtype", lazy="selectin")
+
+    # Digital platform (e.g. Netflix, Plex, Spotify)
+    platform_id = Column(Integer, ForeignKey("platforms.id", ondelete="SET NULL"), nullable=True, index=True)
+    platform = relationship("Platform", lazy="selectin")
+
+    # Films & TV — seasons/episodes owned (physical box sets or digital)
+    seasons_owned = Column(String(100))
+    episode_count = Column(Integer)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
