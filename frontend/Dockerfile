@@ -8,13 +8,13 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# Production stage: nginx serves the built assets
-FROM nginx:1.25-alpine
+# Production stage: nginx serves the built assets as a non-root user
+FROM nginxinc/nginx-unprivileged:1.25-alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY nginx/security-headers.conf /etc/nginx/conf.d/security-headers.conf
 
-EXPOSE 80
+EXPOSE 8765
 
 CMD ["nginx", "-g", "daemon off;"]
