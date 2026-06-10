@@ -102,6 +102,11 @@ async def backfill_media_subtypes(session: AsyncSession) -> None:
     """
     from .models.media_subtype import MediaSubtype
 
+    columns = (await session.execute(text('PRAGMA table_info("media_items")'))).fetchall()
+    column_names = {row[1] for row in columns}
+    if "media_type" not in column_names:
+        return  # fresh database — `media_type` was never part of the ORM model, nothing to backfill
+
     rows = (await session.execute(
         text("SELECT id, media_type FROM media_items WHERE media_subtype_id IS NULL")
     )).all()
@@ -126,3 +131,32 @@ async def backfill_media_subtypes(session: AsyncSession) -> None:
     if updated:
         await session.commit()
         logger.info("Backfilled media_subtype_id for %d item(s)", updated)
+
+
+async def drop_legacy_media_type_column(conn: AsyncConnection) -> None:
+    """Drop the orphaned NOT NULL `media_type` column from `media_items`.
+
+    `media_type` was removed from the ORM model in favour of
+    `media_subtype_id`, but on existing databases the column is still present
+    with a NOT NULL constraint that SQLite can't relax in place — every
+    INSERT that omits it fails. Must run *after* `backfill_media_subtypes`
+    has copied its data into `media_subtype_id`. No-op once the column is
+    gone (fresh databases never had it, since it's no longer in the model).
+    """
+    if conn.engine.dialect.name != "sqlite":
+        return
+
+    result = await conn.execute(text('PRAGMA table_info("media_items")'))
+    columns = {row[1] for row in result.fetchall()}
+    if "media_type" not in columns:
+        return
+
+    indexes = await conn.execute(text('PRAGMA index_list("media_items")'))
+    for idx in indexes.fetchall():
+        idx_name = idx[1]
+        idx_info = await conn.execute(text(f'PRAGMA index_info("{idx_name}")'))
+        if any(row[2] == "media_type" for row in idx_info.fetchall()):
+            await conn.execute(text(f'DROP INDEX "{idx_name}"'))
+
+    await conn.execute(text('ALTER TABLE "media_items" DROP COLUMN "media_type"'))
+    logger.info("Dropped legacy media_items.media_type column")

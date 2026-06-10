@@ -1,15 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
-import enum
 from ..database import Base
-
-
-class MediaType(str, enum.Enum):
-    CD = "cd"
-    DVD = "dvd"
-    BLURAY = "bluray"
-    BOOK = "book"
 
 
 class MediaItem(Base):
@@ -17,7 +9,6 @@ class MediaItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(500), nullable=False, index=True)
-    media_type = Column(SQLEnum(MediaType), nullable=False, index=True)
     year = Column(Integer, index=True)
     genres = Column(String(500))       # comma-separated
     description = Column(Text)

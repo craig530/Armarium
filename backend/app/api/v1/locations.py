@@ -1,15 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import List
+from typing import List, Optional
+from pathlib import Path
 
 from ...database import get_db
 from ...models.location import Location
 from ...models.media import MediaItem
 from ...schemas.location import LocationCreate, LocationUpdate, LocationResponse
 from ...services.auth import get_current_user
+from ...services.asset_upload import save_asset, remove_asset
+from ...config import settings
 
 router = APIRouter()
+
+ALLOWED_ICON_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml", "image/bmp"}
+MAX_ICON_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+def _icon_url(icon_path: Optional[str]) -> Optional[str]:
+    return f"/location-icons/{Path(icon_path).name}" if icon_path else None
 
 
 async def _location_rows(db: AsyncSession):
@@ -21,7 +31,11 @@ async def _location_rows(db: AsyncSession):
     """
     return (
         await db.execute(
-            select(Location.id, Location.name, Location.parent_id, Location.created_at, Location.updated_at)
+            select(
+                Location.id, Location.name, Location.parent_id,
+                Location.icon_key, Location.icon_path,
+                Location.created_at, Location.updated_at,
+            )
             .order_by(Location.name)
         )
     ).all()
@@ -40,6 +54,8 @@ def _build_tree(rows, count_map: dict):
             id=row.id,
             name=row.name,
             parent_id=row.parent_id,
+            icon_key=row.icon_key,
+            icon_url=_icon_url(row.icon_path),
             created_at=row.created_at,
             updated_at=row.updated_at,
             item_count=count_map.get(row.id, 0),
@@ -52,15 +68,18 @@ def _build_tree(rows, count_map: dict):
     return roots, by_id
 
 
-@router.get("", response_model=List[LocationResponse])
-async def list_locations(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def _count_map(db: AsyncSession) -> dict:
     count_rows = await db.execute(
         select(MediaItem.location_id, func.count(MediaItem.id))
         .where(MediaItem.location_id.is_not(None))
         .group_by(MediaItem.location_id)
     )
-    count_map = {row[0]: row[1] for row in count_rows}
+    return {row[0]: row[1] for row in count_rows}
 
+
+@router.get("", response_model=List[LocationResponse])
+async def list_locations(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    count_map = await _count_map(db)
     rows = await _location_rows(db)
     roots, _by_id = _build_tree(rows, count_map)
     return roots
@@ -77,12 +96,13 @@ async def create_location(
         if not parent:
             raise HTTPException(status_code=404, detail="Parent location not found")
 
-    loc = Location(name=payload.name, parent_id=payload.parent_id)
+    loc = Location(name=payload.name, parent_id=payload.parent_id, icon_key=payload.icon_key)
     db.add(loc)
     await db.commit()
     await db.refresh(loc)
     return LocationResponse(
         id=loc.id, name=loc.name, parent_id=loc.parent_id,
+        icon_key=loc.icon_key, icon_url=_icon_url(loc.icon_path),
         created_at=loc.created_at, updated_at=loc.updated_at,
         item_count=0, children=[],
     )
@@ -98,13 +118,7 @@ async def get_location(
     if not any(row.id == loc_id for row in rows):
         raise HTTPException(status_code=404, detail="Location not found")
 
-    count_rows = await db.execute(
-        select(MediaItem.location_id, func.count(MediaItem.id))
-        .where(MediaItem.location_id.is_not(None))
-        .group_by(MediaItem.location_id)
-    )
-    count_map = {row[0]: row[1] for row in count_rows}
-
+    count_map = await _count_map(db)
     _roots, by_id = _build_tree(rows, count_map)
     return by_id[loc_id]
 
@@ -122,6 +136,8 @@ async def update_location(
 
     if payload.name is not None:
         loc.name = payload.name
+    if "icon_key" in payload.model_fields_set:
+        loc.icon_key = payload.icon_key
     if payload.parent_id is not None:
         if payload.parent_id == loc_id:
             raise HTTPException(status_code=400, detail="Location cannot be its own parent")
@@ -149,6 +165,7 @@ async def update_location(
     await db.refresh(loc)
     return LocationResponse(
         id=loc.id, name=loc.name, parent_id=loc.parent_id,
+        icon_key=loc.icon_key, icon_url=_icon_url(loc.icon_path),
         created_at=loc.created_at, updated_at=loc.updated_at,
         item_count=0, children=[],
     )
@@ -175,5 +192,40 @@ async def delete_location(
     for item in items:
         item.location_id = None
 
+    remove_asset(settings.location_icons_dir, loc.icon_path)
     await db.delete(loc)
     await db.commit()
+
+
+@router.post("/{loc_id}/icon", response_model=LocationResponse)
+async def upload_location_icon(
+    loc_id: int,
+    file: UploadFile = File(...),
+    _=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    loc = (await db.execute(select(Location).where(Location.id == loc_id))).scalar_one_or_none()
+    if not loc:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    if file.content_type not in ALLOWED_ICON_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported image type. Use JPEG, PNG, WebP, GIF, SVG or BMP.")
+
+    data = await file.read()
+    if len(data) > MAX_ICON_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Icon too large (max 2 MB)")
+
+    filename = await save_asset(data, file.content_type, settings.location_icons_dir, f"location_{loc_id}")
+    if filename is None:
+        raise HTTPException(status_code=400, detail="File is not a valid image")
+
+    if loc.icon_path and loc.icon_path != filename:
+        remove_asset(settings.location_icons_dir, loc.icon_path)
+
+    loc.icon_path = filename
+    await db.commit()
+
+    rows = await _location_rows(db)
+    count_map = await _count_map(db)
+    _roots, by_id = _build_tree(rows, count_map)
+    return by_id[loc_id]

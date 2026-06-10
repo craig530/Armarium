@@ -2,7 +2,8 @@ import httpx
 import logging
 import re
 from typing import List, Optional
-from ..schemas.media import LookupCandidate, MediaType
+from ..schemas.media import LookupCandidate
+from ..models.enums import MediaCategory
 
 logger = logging.getLogger("armarium")
 
@@ -91,7 +92,7 @@ def _isbn_book_to_candidate(book: dict, isbn: str) -> Optional[LookupCandidate]:
         source="openlibrary",
         title=title,
         year=year,
-        media_type=MediaType.BOOK,
+        category=MediaCategory.BOOKS,
         creator=author,
         cover_url=cover_url,
         metadata=metadata,
@@ -135,7 +136,7 @@ def _search_doc_to_candidate(doc: dict) -> Optional[LookupCandidate]:
         source="openlibrary",
         title=title,
         year=year,
-        media_type=MediaType.BOOK,
+        category=MediaCategory.BOOKS,
         creator=author,
         cover_url=cover_url,
         metadata=metadata,

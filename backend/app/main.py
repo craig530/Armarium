@@ -9,7 +9,12 @@ from sqlalchemy import select
 
 from .config import settings
 from .database import engine, Base, AsyncSessionLocal
-from .migrations import run_additive_migrations, seed_media_subtypes, backfill_media_subtypes
+from .migrations import (
+    run_additive_migrations,
+    seed_media_subtypes,
+    backfill_media_subtypes,
+    drop_legacy_media_type_column,
+)
 from .api.v1.router import router
 from . import models  # noqa: F401 — registers ORM classes before create_all
 
@@ -47,10 +52,15 @@ async def lifespan(app: FastAPI):
 
     Path(settings.covers_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.backup_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.location_icons_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.platform_logos_dir).mkdir(parents=True, exist_ok=True)
 
     async with AsyncSessionLocal() as db:
         await seed_media_subtypes(db)
         await backfill_media_subtypes(db)
+
+    async with engine.begin() as conn:
+        await drop_legacy_media_type_column(conn)
 
     await _ensure_admin()
     yield
@@ -80,6 +90,14 @@ app.include_router(router)
 covers_dir = Path(settings.covers_dir)
 covers_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/covers", StaticFiles(directory=str(covers_dir)), name="covers")
+
+location_icons_dir = Path(settings.location_icons_dir)
+location_icons_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/location-icons", StaticFiles(directory=str(location_icons_dir)), name="location-icons")
+
+platform_logos_dir = Path(settings.platform_logos_dir)
+platform_logos_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/platform-logos", StaticFiles(directory=str(platform_logos_dir)), name="platform-logos")
 
 
 @app.get("/health", tags=["system"])

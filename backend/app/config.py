@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     # Storage
     covers_dir: str = "./data/covers"
     backup_dir: str = "./data/backups"
+    location_icons_dir: str = "./data/location_icons"
+    platform_logos_dir: str = "./data/platform_logos"
 
     # External APIs
     tmdb_api_key: Optional[str] = None

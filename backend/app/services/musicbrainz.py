@@ -2,7 +2,8 @@ import httpx
 import logging
 import re
 from typing import List, Optional
-from ..schemas.media import LookupCandidate, MediaType
+from ..schemas.media import LookupCandidate
+from ..models.enums import MediaCategory
 
 logger = logging.getLogger("armarium")
 
@@ -115,7 +116,7 @@ def _release_to_candidate(release: dict) -> Optional[LookupCandidate]:
         source="musicbrainz",
         title=title,
         year=year,
-        media_type=MediaType.CD,
+        category=MediaCategory.MUSIC,
         edition=edition,
         creator=artist,
         cover_url=cover_url,

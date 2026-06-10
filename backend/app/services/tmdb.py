@@ -1,7 +1,8 @@
 import httpx
 import logging
 from typing import List, Optional
-from ..schemas.media import LookupCandidate, MediaType
+from ..schemas.media import LookupCandidate
+from ..models.enums import MediaCategory
 from ..config import settings
 
 logger = logging.getLogger("armarium")
@@ -102,7 +103,7 @@ def _result_to_candidate(result: dict, mt: str) -> Optional[LookupCandidate]:
         source="tmdb",
         title=title,
         year=year,
-        media_type=MediaType.DVD,
+        category=MediaCategory.FILMS_TV,
         creator=None,
         cover_url=cover_url,
         metadata=metadata,

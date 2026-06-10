@@ -4,13 +4,19 @@ from sqlalchemy import select, func, or_, and_
 from sqlalchemy.orm import selectinload
 from typing import Optional
 import math
-import shutil
 from pathlib import Path
 
 from ...database import get_db
-from ...models.media import MediaItem, MediaType
+from ...models.media import MediaItem
 from ...models.location import Location
-from ...schemas.media import MediaItemCreate, MediaItemUpdate, MediaItemResponse, MediaListResponse, LibraryStats
+from ...models.media_subtype import MediaSubtype
+from ...models.platform import Platform
+from ...models.item_link import ItemLink
+from ...models.enums import MediaCategory, Supertype
+from ...schemas.media import (
+    MediaItemCreate, MediaItemUpdate, MediaItemResponse, MediaListResponse, LibraryStats,
+    MediaSubtypeSummary, PlatformSummary, LinkedItemSummary, ItemLinkCreate,
+)
 from ...services.cover_art import download_cover
 from ...services.auth import get_current_user
 from ...config import settings
@@ -20,8 +26,15 @@ router = APIRouter()
 ALLOWED_COVER_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
 MAX_COVER_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
+# Category -> external-id field used to auto-match a physical/digital pair.
+_AUTO_LINK_FIELD = {
+    MediaCategory.FILMS_TV: "tmdb_id",
+    MediaCategory.MUSIC: "musicbrainz_id",
+    MediaCategory.BOOKS: "isbn",
+}
 
-async def _location_path_map(db: AsyncSession) -> dict[int, str]:
+
+async def _location_path_map(db: AsyncSession) -> dict:
     """Build a {location_id: "A → B → C"} breadcrumb map for every location.
 
     Built from a flat (id, name, parent_id) query rather than by walking the
@@ -32,7 +45,7 @@ async def _location_path_map(db: AsyncSession) -> dict[int, str]:
     rows = (await db.execute(select(Location.id, Location.name, Location.parent_id))).all()
     by_id = {row.id: (row.name, row.parent_id) for row in rows}
 
-    paths: dict[int, str] = {}
+    paths: dict = {}
 
     def build(loc_id: int, visited: frozenset) -> str:
         if loc_id in paths:
@@ -50,41 +63,195 @@ async def _location_path_map(db: AsyncSession) -> dict[int, str]:
     return paths
 
 
-async def _reload_with_location(db: AsyncSession, item_id: int) -> MediaItem:
-    # populate_existing is required: with expire_on_commit=False, `item` (already
-    # in the session's identity map) keeps its stale `location` relationship
-    # value from before this request's edits unless we force a re-population.
-    stmt = (
-        select(MediaItem)
-        .where(MediaItem.id == item_id)
-        .options(selectinload(MediaItem.location))
-        .execution_options(populate_existing=True)
-    )
-    return (await db.execute(stmt)).scalar_one()
+async def _location_icon_map(db: AsyncSession) -> dict:
+    rows = (await db.execute(select(Location.id, Location.icon_key, Location.icon_path))).all()
+    return {
+        row.id: {
+            "icon_key": row.icon_key,
+            "icon_url": f"/location-icons/{Path(row.icon_path).name}" if row.icon_path else None,
+        }
+        for row in rows
+    }
 
 
-def _item_to_response(item: MediaItem, path_map: dict[int, str]) -> MediaItemResponse:
+async def _subtype_map(db: AsyncSession) -> dict:
+    rows = (await db.execute(select(MediaSubtype))).scalars().all()
+    return {
+        s.id: {"id": s.id, "name": s.name, "category": s.category, "supertype": s.supertype}
+        for s in rows
+    }
+
+
+async def _platform_map(db: AsyncSession) -> dict:
+    rows = (await db.execute(select(Platform))).scalars().all()
+    return {
+        p.id: {
+            "id": p.id,
+            "name": p.name,
+            "logo_key": p.logo_key,
+            "logo_url": f"/platform-logos/{Path(p.logo_path).name}" if p.logo_path else None,
+        }
+        for p in rows
+    }
+
+
+async def _link_map(db: AsyncSession, item_ids: list) -> dict:
+    """Bidirectional {item_id: linked_item_id} map for the given item ids."""
+    if not item_ids:
+        return {}
+    links = (
+        await db.execute(
+            select(ItemLink).where(
+                or_(ItemLink.item_a_id.in_(item_ids), ItemLink.item_b_id.in_(item_ids))
+            )
+        )
+    ).scalars().all()
+
+    pairs: dict = {}
+    for link in links:
+        pairs[link.item_a_id] = link.item_b_id
+        pairs[link.item_b_id] = link.item_a_id
+    return pairs
+
+
+async def _link_summaries(
+    db: AsyncSession,
+    item_ids: list,
+    subtype_map: dict,
+    platform_map: dict,
+    path_map: dict,
+    icon_map: dict,
+) -> dict:
+    link_map = await _link_map(db, item_ids)
+    if not link_map:
+        return {}
+
+    partners = (
+        await db.execute(select(MediaItem).where(MediaItem.id.in_(set(link_map.values()))))
+    ).scalars().all()
+    partner_by_id = {p.id: p for p in partners}
+
+    summaries: dict = {}
+    for item_id, partner_id in link_map.items():
+        partner = partner_by_id.get(partner_id)
+        if partner is None:
+            continue
+
+        subtype_info = subtype_map.get(partner.media_subtype_id)
+        if subtype_info is None:
+            continue
+
+        platform_info = platform_map.get(partner.platform_id)
+        icon_info = icon_map.get(partner.location_id, {})
+        cover_url = (
+            f"/covers/{Path(partner.cover_image_path).name}"
+            if partner.cover_image_path
+            else partner.cover_image_url
+        )
+
+        summaries[item_id] = LinkedItemSummary(
+            id=partner.id,
+            title=partner.title,
+            cover_url=cover_url,
+            media_subtype=MediaSubtypeSummary(**subtype_info),
+            category=subtype_info["category"],
+            supertype=subtype_info["supertype"],
+            location_id=partner.location_id,
+            location_name=partner.location.name if partner.location else None,
+            location_path=path_map.get(partner.location_id) if partner.location_id is not None else None,
+            location_icon_key=icon_info.get("icon_key"),
+            location_icon_url=icon_info.get("icon_url"),
+            platform=PlatformSummary(**platform_info) if platform_info else None,
+        )
+    return summaries
+
+
+def _item_to_response(
+    item: MediaItem,
+    path_map: dict,
+    subtype_map: dict,
+    platform_map: dict,
+    icon_map: dict,
+    link_summaries: dict,
+) -> MediaItemResponse:
     cover_url = (
         f"/covers/{Path(item.cover_image_path).name}"
         if item.cover_image_path
         else item.cover_image_url
     )
+
+    subtype_info = subtype_map.get(item.media_subtype_id)
+    platform_info = platform_map.get(item.platform_id)
+    icon_info = icon_map.get(item.location_id, {})
+    linked = link_summaries.get(item.id)
+
+    if linked is not None:
+        ownership = "both"
+    elif subtype_info is not None:
+        ownership = subtype_info["supertype"].value
+    else:
+        ownership = "physical"
+
     return MediaItemResponse(
         **{
             col: getattr(item, col)
             for col in [
-                "id", "title", "media_type", "year", "genres", "description",
+                "id", "title", "year", "genres", "description",
                 "cover_image_path", "cover_image_url", "barcode", "edition", "notes",
                 "artist", "label", "track_count", "director", "studio",
-                "runtime_minutes", "rating", "cast_list", "author", "publisher",
-                "page_count", "isbn", "language", "musicbrainz_id", "tmdb_id",
-                "openlibrary_id", "location_id", "created_at", "updated_at",
+                "runtime_minutes", "rating", "cast_list", "seasons_owned", "episode_count",
+                "author", "publisher", "page_count", "isbn", "language",
+                "musicbrainz_id", "tmdb_id", "openlibrary_id",
+                "media_subtype_id", "location_id", "platform_id",
+                "created_at", "updated_at",
             ]
         },
         cover_url=cover_url,
+        media_subtype=MediaSubtypeSummary(**subtype_info) if subtype_info else None,
+        category=subtype_info["category"] if subtype_info else None,
+        supertype=subtype_info["supertype"] if subtype_info else None,
         location_name=item.location.name if item.location else None,
         location_path=path_map.get(item.location_id) if item.location_id is not None else None,
+        location_icon_key=icon_info.get("icon_key"),
+        location_icon_url=icon_info.get("icon_url"),
+        platform=PlatformSummary(**platform_info) if platform_info else None,
+        linked_item=linked,
+        ownership=ownership,
     )
+
+
+async def _build_responses(db: AsyncSession, items: list) -> list:
+    path_map = await _location_path_map(db)
+    subtype_map = await _subtype_map(db)
+    platform_map = await _platform_map(db)
+    icon_map = await _location_icon_map(db)
+    item_ids = [i.id for i in items]
+    link_summaries = await _link_summaries(db, item_ids, subtype_map, platform_map, path_map, icon_map)
+    return [
+        _item_to_response(i, path_map, subtype_map, platform_map, icon_map, link_summaries)
+        for i in items
+    ]
+
+
+async def _build_response(db: AsyncSession, item: MediaItem) -> MediaItemResponse:
+    return (await _build_responses(db, [item]))[0]
+
+
+async def _reload_item(db: AsyncSession, item_id: int) -> MediaItem:
+    # populate_existing is required: with expire_on_commit=False, `item` (already
+    # in the session's identity map) keeps its stale relationship values from
+    # before this request's edits unless we force a re-population.
+    stmt = (
+        select(MediaItem)
+        .where(MediaItem.id == item_id)
+        .options(
+            selectinload(MediaItem.location),
+            selectinload(MediaItem.media_subtype),
+            selectinload(MediaItem.platform),
+        )
+        .execution_options(populate_existing=True)
+    )
+    return (await db.execute(stmt)).scalar_one()
 
 
 @router.get("", response_model=MediaListResponse)
@@ -92,7 +259,10 @@ async def list_media(
     page: int = Query(1, ge=1),
     per_page: int = Query(24, ge=1, le=100),
     q: Optional[str] = None,
-    media_type: Optional[MediaType] = None,
+    category: Optional[MediaCategory] = None,
+    supertype: Optional[Supertype] = None,
+    media_subtype_id: Optional[int] = None,
+    platform_id: Optional[int] = None,
     genre: Optional[str] = None,
     year: Optional[int] = None,
     location_id: Optional[int] = None,
@@ -116,14 +286,23 @@ async def list_media(
                 MediaItem.description.ilike(term),
             )
         )
-    if media_type:
-        filters.append(MediaItem.media_type == media_type)
     if genre:
         filters.append(MediaItem.genres.ilike(f"%{genre}%"))
     if year:
         filters.append(MediaItem.year == year)
     if location_id:
         filters.append(MediaItem.location_id == location_id)
+    if media_subtype_id:
+        filters.append(MediaItem.media_subtype_id == media_subtype_id)
+    if platform_id:
+        filters.append(MediaItem.platform_id == platform_id)
+
+    if category is not None or supertype is not None:
+        stmt = stmt.join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
+        if category is not None:
+            filters.append(MediaSubtype.category == category)
+        if supertype is not None:
+            filters.append(MediaSubtype.supertype == supertype)
 
     if filters:
         stmt = stmt.where(and_(*filters))
@@ -138,10 +317,9 @@ async def list_media(
 
     result = await db.execute(stmt)
     items = result.scalars().all()
-    path_map = await _location_path_map(db)
 
     return MediaListResponse(
-        items=[_item_to_response(i, path_map) for i in items],
+        items=await _build_responses(db, items),
         total=total,
         page=page,
         per_page=per_page,
@@ -157,13 +335,89 @@ async def _check_location_exists(db: AsyncSession, location_id: Optional[int]) -
         raise HTTPException(status_code=404, detail="Location not found")
 
 
+async def _check_platform_exists(db: AsyncSession, platform_id: Optional[int]) -> None:
+    if platform_id is None:
+        return
+    platform = (await db.execute(select(Platform).where(Platform.id == platform_id))).scalar_one_or_none()
+    if not platform:
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+
+async def _resolve_subtype(db: AsyncSession, media_subtype_id: int) -> MediaSubtype:
+    subtype = (
+        await db.execute(select(MediaSubtype).where(MediaSubtype.id == media_subtype_id))
+    ).scalar_one_or_none()
+    if not subtype:
+        raise HTTPException(status_code=404, detail="Media subtype not found")
+    return subtype
+
+
+def _validate_ownership_fields(supertype: Supertype, location_id: Optional[int], platform_id: Optional[int]) -> None:
+    if supertype == Supertype.PHYSICAL and platform_id is not None:
+        raise HTTPException(status_code=400, detail="Physical items cannot have a platform")
+    if supertype == Supertype.DIGITAL and location_id is not None:
+        raise HTTPException(status_code=400, detail="Digital items cannot have a location")
+
+
+async def _try_auto_link(db: AsyncSession, item: MediaItem, subtype: MediaSubtype) -> None:
+    field = _AUTO_LINK_FIELD.get(subtype.category)
+    if field is None:
+        return
+
+    value = getattr(item, field)
+    if not value:
+        return
+
+    already_linked = (
+        await db.execute(
+            select(ItemLink.id).where(or_(ItemLink.item_a_id == item.id, ItemLink.item_b_id == item.id))
+        )
+    ).scalar_one_or_none()
+    if already_linked is not None:
+        return
+
+    opposite = Supertype.DIGITAL if subtype.supertype == Supertype.PHYSICAL else Supertype.PHYSICAL
+
+    candidates = (
+        await db.execute(
+            select(MediaItem)
+            .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
+            .where(
+                MediaSubtype.category == subtype.category,
+                MediaSubtype.supertype == opposite,
+                getattr(MediaItem, field) == value,
+                MediaItem.id != item.id,
+            )
+        )
+    ).scalars().all()
+
+    unlinked = []
+    for candidate in candidates:
+        link = (
+            await db.execute(
+                select(ItemLink.id).where(
+                    or_(ItemLink.item_a_id == candidate.id, ItemLink.item_b_id == candidate.id)
+                )
+            )
+        ).scalar_one_or_none()
+        if link is None:
+            unlinked.append(candidate)
+
+    if len(unlinked) == 1:
+        db.add(ItemLink(item_a_id=item.id, item_b_id=unlinked[0].id, matched_via="auto"))
+        await db.commit()
+
+
 @router.post("", response_model=MediaItemResponse, status_code=201)
 async def create_media(
     payload: MediaItemCreate,
     _=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    subtype = await _resolve_subtype(db, payload.media_subtype_id)
     await _check_location_exists(db, payload.location_id)
+    await _check_platform_exists(db, payload.platform_id)
+    _validate_ownership_fields(subtype.supertype, payload.location_id, payload.platform_id)
 
     item = MediaItem(**payload.model_dump())
     db.add(item)
@@ -175,19 +429,36 @@ async def create_media(
             item.cover_image_path = local_path
 
     await db.commit()
-    item = await _reload_with_location(db, item.id)
-    path_map = await _location_path_map(db)
-    return _item_to_response(item, path_map)
+    await _try_auto_link(db, item, subtype)
+
+    item = await _reload_item(db, item.id)
+    return await _build_response(db, item)
 
 
 @router.get("/stats", response_model=LibraryStats)
 async def get_stats(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     total = (await db.execute(select(func.count(MediaItem.id)))).scalar_one()
 
-    by_type_rows = await db.execute(
-        select(MediaItem.media_type, func.count(MediaItem.id)).group_by(MediaItem.media_type)
+    by_subtype_rows = await db.execute(
+        select(MediaSubtype.name, func.count(MediaItem.id))
+        .join(MediaItem, MediaItem.media_subtype_id == MediaSubtype.id)
+        .group_by(MediaSubtype.name)
     )
-    by_type = {row[0].value: row[1] for row in by_type_rows}
+    by_subtype = {row[0]: row[1] for row in by_subtype_rows}
+
+    by_category_rows = await db.execute(
+        select(MediaSubtype.category, func.count(MediaItem.id))
+        .join(MediaItem, MediaItem.media_subtype_id == MediaSubtype.id)
+        .group_by(MediaSubtype.category)
+    )
+    by_category = {row[0].value: row[1] for row in by_category_rows}
+
+    by_supertype_rows = await db.execute(
+        select(MediaSubtype.supertype, func.count(MediaItem.id))
+        .join(MediaItem, MediaItem.media_subtype_id == MediaSubtype.id)
+        .group_by(MediaSubtype.supertype)
+    )
+    by_supertype = {row[0].value: row[1] for row in by_supertype_rows}
 
     recent_stmt = (
         select(MediaItem)
@@ -196,13 +467,64 @@ async def get_stats(_=Depends(get_current_user), db: AsyncSession = Depends(get_
         .limit(6)
     )
     recent_items = (await db.execute(recent_stmt)).scalars().all()
-    path_map = await _location_path_map(db)
 
     return LibraryStats(
         total=total,
-        by_type=by_type,
-        recent_additions=[_item_to_response(i, path_map) for i in recent_items],
+        by_category=by_category,
+        by_supertype=by_supertype,
+        by_subtype=by_subtype,
+        recent_additions=await _build_responses(db, recent_items),
     )
+
+
+@router.post("/link", response_model=MediaItemResponse, status_code=201)
+async def link_items(
+    payload: ItemLinkCreate,
+    _=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if payload.item_a_id == payload.item_b_id:
+        raise HTTPException(status_code=400, detail="Cannot link an item to itself")
+
+    items = (
+        await db.execute(select(MediaItem).where(MediaItem.id.in_([payload.item_a_id, payload.item_b_id])))
+    ).scalars().all()
+    items_by_id = {i.id: i for i in items}
+    if payload.item_a_id not in items_by_id or payload.item_b_id not in items_by_id:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item_a, item_b = items_by_id[payload.item_a_id], items_by_id[payload.item_b_id]
+
+    subtype_map = await _subtype_map(db)
+    subtype_a = subtype_map.get(item_a.media_subtype_id)
+    subtype_b = subtype_map.get(item_b.media_subtype_id)
+    if not subtype_a or not subtype_b:
+        raise HTTPException(status_code=400, detail="Item is missing a media subtype")
+
+    if subtype_a["supertype"] == subtype_b["supertype"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Linked items must have different ownership types (one physical, one digital)",
+        )
+
+    existing = (
+        await db.execute(
+            select(ItemLink.id).where(
+                or_(
+                    ItemLink.item_a_id.in_([item_a.id, item_b.id]),
+                    ItemLink.item_b_id.in_([item_a.id, item_b.id]),
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=400, detail="One of these items is already linked")
+
+    db.add(ItemLink(item_a_id=item_a.id, item_b_id=item_b.id, matched_via="manual"))
+    await db.commit()
+
+    item_a = await _reload_item(db, item_a.id)
+    return await _build_response(db, item_a)
 
 
 @router.get("/{item_id}", response_model=MediaItemResponse)
@@ -211,8 +533,7 @@ async def get_media(item_id: int, _=Depends(get_current_user), db: AsyncSession 
     item = (await db.execute(stmt)).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    path_map = await _location_path_map(db)
-    return _item_to_response(item, path_map)
+    return await _build_response(db, item)
 
 
 @router.put("/{item_id}", response_model=MediaItemResponse)
@@ -229,6 +550,17 @@ async def update_media(
 
     if "location_id" in payload.model_fields_set:
         await _check_location_exists(db, payload.location_id)
+    if "platform_id" in payload.model_fields_set:
+        await _check_platform_exists(db, payload.platform_id)
+
+    if "media_subtype_id" in payload.model_fields_set and payload.media_subtype_id is not None:
+        subtype = await _resolve_subtype(db, payload.media_subtype_id)
+    else:
+        subtype = await _resolve_subtype(db, item.media_subtype_id)
+
+    new_location_id = payload.location_id if "location_id" in payload.model_fields_set else item.location_id
+    new_platform_id = payload.platform_id if "platform_id" in payload.model_fields_set else item.platform_id
+    _validate_ownership_fields(subtype.supertype, new_location_id, new_platform_id)
 
     old_url = item.cover_image_url
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -240,9 +572,8 @@ async def update_media(
             item.cover_image_path = local_path
 
     await db.commit()
-    item = await _reload_with_location(db, item.id)
-    path_map = await _location_path_map(db)
-    return _item_to_response(item, path_map)
+    item = await _reload_item(db, item.id)
+    return await _build_response(db, item)
 
 
 @router.delete("/{item_id}", status_code=204)
@@ -252,11 +583,37 @@ async def delete_media(item_id: int, _=Depends(get_current_user), db: AsyncSessi
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    links = (
+        await db.execute(
+            select(ItemLink).where(or_(ItemLink.item_a_id == item_id, ItemLink.item_b_id == item_id))
+        )
+    ).scalars().all()
+    for link in links:
+        await db.delete(link)
+
     if item.cover_image_path:
         cover_file = Path(settings.covers_dir) / Path(item.cover_image_path).name
         cover_file.unlink(missing_ok=True)
 
     await db.delete(item)
+    await db.commit()
+
+
+@router.delete("/{item_id}/link", status_code=204)
+async def unlink_item(item_id: int, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    item = (await db.execute(select(MediaItem.id).where(MediaItem.id == item_id))).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    link = (
+        await db.execute(
+            select(ItemLink).where(or_(ItemLink.item_a_id == item_id, ItemLink.item_b_id == item_id))
+        )
+    ).scalar_one_or_none()
+    if link is None:
+        raise HTTPException(status_code=404, detail="Item is not linked")
+
+    await db.delete(link)
     await db.commit()
 
 
@@ -286,6 +643,5 @@ async def upload_cover(
 
     item.cover_image_path = local_path
     await db.commit()
-    item = await _reload_with_location(db, item.id)
-    path_map = await _location_path_map(db)
-    return _item_to_response(item, path_map)
+    item = await _reload_item(db, item.id)
+    return await _build_response(db, item)

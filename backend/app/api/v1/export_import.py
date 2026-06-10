@@ -20,7 +20,7 @@ from ...config import settings
 router = APIRouter()
 
 CSV_FIELDS = [
-    "title", "media_type", "year", "genres", "edition", "barcode",
+    "title", "media_subtype_id", "year", "genres", "edition", "barcode",
     "artist", "label", "track_count",
     "director", "studio", "runtime_minutes", "rating",
     "author", "publisher", "page_count", "isbn", "language",
@@ -37,7 +37,7 @@ def _item_to_row(item: MediaItem) -> dict:
 def _row_to_create(row: dict) -> Optional[MediaItemCreate]:
     try:
         # Type coerce numeric strings
-        for int_field in ("year", "track_count", "runtime_minutes", "page_count", "tmdb_id"):
+        for int_field in ("year", "track_count", "runtime_minutes", "page_count", "tmdb_id", "media_subtype_id", "episode_count"):
             if row.get(int_field):
                 row[int_field] = int(row[int_field]) if str(row[int_field]).strip() else None
             else:

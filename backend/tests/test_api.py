@@ -4,6 +4,7 @@ Run: cd backend && pip install -r requirements.txt && pytest
 """
 import pytest
 import os
+import base64
 from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
@@ -14,6 +15,13 @@ os.environ.setdefault("ADMIN_PASSWORD", "testpass123")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-not-for-production")
 os.environ.setdefault("COVERS_DIR", "/tmp/armarium_test_covers")
 os.environ.setdefault("BACKUP_DIR", "/tmp/armarium_test_backups")
+os.environ.setdefault("LOCATION_ICONS_DIR", "/tmp/armarium_test_location_icons")
+os.environ.setdefault("PLATFORM_LOGOS_DIR", "/tmp/armarium_test_platform_logos")
+
+# A minimal valid 1x1 PNG, used for icon/logo/cover upload tests.
+PNG_1X1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 @pytest.fixture
@@ -45,6 +53,16 @@ async def auth_headers(client):
     assert resp.status_code == 200, resp.text
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+async def _subtype_id(client, auth_headers, name: str) -> int:
+    """Resolve a seeded media subtype's id by name (e.g. "CD", "Blu-ray", "Book")."""
+    resp = await client.get("/api/v1/media-subtypes", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    for subtype in resp.json():
+        if subtype["name"] == name:
+            return subtype["id"]
+    raise AssertionError(f"Media subtype {name!r} not found in {resp.json()!r}")
 
 
 # ── System ──────────────────────────────────────────────────────────────────
@@ -98,17 +116,22 @@ async def test_locations_requires_auth(client):
 # ── Media CRUD ──────────────────────────────────────────────────────────────
 
 async def test_media_crud(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+
     # Create
     resp = await client.post(
         "/api/v1/media",
-        json={"title": "Test Album", "media_type": "cd", "artist": "Test Artist", "year": 2024},
+        json={"title": "Test Album", "media_subtype_id": cd_id, "artist": "Test Artist", "year": 2024},
         headers=auth_headers,
     )
     assert resp.status_code == 201
     item = resp.json()
     item_id = item["id"]
     assert item["title"] == "Test Album"
-    assert item["media_type"] == "cd"
+    assert item["media_subtype"]["name"] == "CD"
+    assert item["category"] == "music"
+    assert item["supertype"] == "physical"
+    assert item["ownership"] == "physical"
 
     # Read
     resp = await client.get(f"/api/v1/media/{item_id}", headers=auth_headers)
@@ -144,18 +167,20 @@ async def test_media_crud(client, auth_headers):
 
 
 async def test_create_media_rejects_unknown_location(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
     resp = await client.post(
         "/api/v1/media",
-        json={"title": "Orphaned Item", "media_type": "cd", "location_id": 999999},
+        json={"title": "Orphaned Item", "media_subtype_id": cd_id, "location_id": 999999},
         headers=auth_headers,
     )
     assert resp.status_code == 404
 
 
 async def test_update_media_rejects_unknown_location(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
     resp = await client.post(
         "/api/v1/media",
-        json={"title": "Movable Item", "media_type": "cd"},
+        json={"title": "Movable Item", "media_subtype_id": cd_id},
         headers=auth_headers,
     )
     assert resp.status_code == 201
@@ -169,6 +194,52 @@ async def test_update_media_rejects_unknown_location(client, auth_headers):
     assert resp.status_code == 404
 
     resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_create_media_rejects_unknown_subtype(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "No Subtype", "media_subtype_id": 999999},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+
+# ── Ownership validation (physical vs digital) ───────────────────────────────
+
+async def test_ownership_field_validation(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+    digital_music_id = await _subtype_id(client, auth_headers, "Digital Music")
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Validation Platform"}, headers=auth_headers)
+    assert resp.status_code == 201
+    platform_id = resp.json()["id"]
+
+    resp = await client.post("/api/v1/locations", json={"name": "Validation Shelf"}, headers=auth_headers)
+    assert resp.status_code == 201
+    location_id = resp.json()["id"]
+
+    # Physical item with a platform set -> rejected
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Bad Physical", "media_subtype_id": cd_id, "platform_id": platform_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    # Digital item with a location set -> rejected
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Bad Digital", "media_subtype_id": digital_music_id, "location_id": location_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    # Cleanup
+    resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/locations/{location_id}", headers=auth_headers)
     assert resp.status_code == 204
 
 
@@ -232,6 +303,8 @@ async def test_media_with_nested_location_returns_breadcrumb_path(client, auth_h
     # Build a 3-level location tree: Living Room -> Bookshelf -> Top Shelf.
     # Past bug: location_path / list / get / stats all 500'd once a media
     # item's location had a parent (MissingGreenlet on Location.parent).
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+
     root_resp = await client.post("/api/v1/locations", json={"name": "Living Room"}, headers=auth_headers)
     root_id = root_resp.json()["id"]
 
@@ -247,7 +320,7 @@ async def test_media_with_nested_location_returns_breadcrumb_path(client, auth_h
 
     create_resp = await client.post(
         "/api/v1/media",
-        json={"title": "Located CD", "media_type": "cd"},
+        json={"title": "Located CD", "media_subtype_id": cd_id},
         headers=auth_headers,
     )
     item_id = create_resp.json()["id"]
@@ -315,17 +388,347 @@ async def test_delete_location_with_children_rejected(client, auth_headers):
     assert resp.status_code == 204
 
 
-# ── Lookup ───────────────────────────────────────────────────────────────────
+async def test_location_icon_key_and_upload(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/locations",
+        json={"name": "Iconic Shelf", "icon_key": "bookshelf"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    loc = resp.json()
+    loc_id = loc["id"]
+    assert loc["icon_key"] == "bookshelf"
+    assert loc["icon_url"] is None
 
-async def test_lookup_barcode_flags_existing_library_item(client, auth_headers):
-    from app.models.media import MediaType
-    from app.schemas.media import LookupCandidate
+    files = {"file": ("icon.png", PNG_1X1, "image/png")}
+    resp = await client.post(f"/api/v1/locations/{loc_id}/icon", files=files, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["icon_url"] == f"/location-icons/location_{loc_id}.png"
 
-    isbn = "9780134685991"
+    # Icon should appear on media items located here too.
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Iconic Item", "media_subtype_id": cd_id, "location_id": loc_id},
+        headers=auth_headers,
+    )
+    item_id = resp.json()["id"]
+    assert resp.json()["location_icon_url"] == f"/location-icons/location_{loc_id}.png"
+    assert resp.json()["location_icon_key"] == "bookshelf"
+
+    # Cleanup
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/locations/{loc_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+# ── Media Subtypes ───────────────────────────────────────────────────────────
+
+async def test_media_subtype_seed_and_crud(client, auth_headers):
+    resp = await client.get("/api/v1/media-subtypes", headers=auth_headers)
+    assert resp.status_code == 200
+    subtypes = resp.json()
+    names = {s["name"] for s in subtypes}
+    assert {"CD", "Blu-ray", "Book", "Digital Music", "Streaming TV"}.issubset(names)
+
+    # Create
+    resp = await client.post(
+        "/api/v1/media-subtypes",
+        json={"name": "Cassette", "category": "music", "supertype": "physical", "sort_order": 99},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    subtype = resp.json()
+    subtype_id = subtype["id"]
+    assert subtype["item_count"] == 0
+
+    # Duplicate name within the same category/supertype -> 409
+    resp = await client.post(
+        "/api/v1/media-subtypes",
+        json={"name": "Cassette", "category": "music", "supertype": "physical"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+
+    # Rename
+    resp = await client.put(
+        f"/api/v1/media-subtypes/{subtype_id}",
+        json={"name": "Cassette Tape", "sort_order": 5},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Cassette Tape"
+    assert resp.json()["sort_order"] == 5
+
+    # Delete
+    resp = await client.delete(f"/api/v1/media-subtypes/{subtype_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_delete_media_subtype_in_use_rejected(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
 
     resp = await client.post(
         "/api/v1/media",
-        json={"title": "Effective Java", "media_type": "book", "isbn": isbn},
+        json={"title": "In-use CD", "media_subtype_id": cd_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    item_id = resp.json()["id"]
+
+    resp = await client.delete(f"/api/v1/media-subtypes/{cd_id}", headers=auth_headers)
+    assert resp.status_code == 400
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+# ── Platforms ────────────────────────────────────────────────────────────────
+
+async def test_platform_crud_and_logo_upload(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/platforms",
+        json={"name": "Netflix", "logo_key": "netflix"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    platform = resp.json()
+    platform_id = platform["id"]
+    assert platform["logo_key"] == "netflix"
+    assert platform["logo_url"] is None
+    assert platform["item_count"] == 0
+
+    # Duplicate name -> 409
+    resp = await client.post("/api/v1/platforms", json={"name": "Netflix"}, headers=auth_headers)
+    assert resp.status_code == 409
+
+    # List
+    resp = await client.get("/api/v1/platforms", headers=auth_headers)
+    assert resp.status_code == 200
+    assert any(p["name"] == "Netflix" for p in resp.json())
+
+    # Update
+    resp = await client.put(
+        f"/api/v1/platforms/{platform_id}",
+        json={"name": "Netflix UK"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Netflix UK"
+
+    # Logo upload
+    files = {"file": ("logo.png", PNG_1X1, "image/png")}
+    resp = await client.post(f"/api/v1/platforms/{platform_id}/logo", files=files, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["logo_url"] == f"/platform-logos/platform_{platform_id}.png"
+
+    # Delete
+    resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_delete_platform_in_use_rejected(client, auth_headers):
+    resp = await client.post("/api/v1/platforms", json={"name": "Spotify"}, headers=auth_headers)
+    assert resp.status_code == 201
+    platform_id = resp.json()["id"]
+
+    digital_music_id = await _subtype_id(client, auth_headers, "Digital Music")
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Streamed Album", "media_subtype_id": digital_music_id, "platform_id": platform_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    item = resp.json()
+    item_id = item["id"]
+    assert item["platform"]["name"] == "Spotify"
+    assert item["ownership"] == "digital"
+
+    resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=auth_headers)
+    assert resp.status_code == 400
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+# ── Media filters ─────────────────────────────────────────────────────────────
+
+async def test_media_filters_by_category_supertype_subtype_platform(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+    book_id = await _subtype_id(client, auth_headers, "Book")
+    digital_music_id = await _subtype_id(client, auth_headers, "Digital Music")
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Filter Platform"}, headers=auth_headers)
+    platform_id = resp.json()["id"]
+
+    cd_resp = await client.post(
+        "/api/v1/media", json={"title": "Filter CD", "media_subtype_id": cd_id}, headers=auth_headers
+    )
+    cd_item_id = cd_resp.json()["id"]
+
+    book_resp = await client.post(
+        "/api/v1/media", json={"title": "Filter Book", "media_subtype_id": book_id}, headers=auth_headers
+    )
+    book_item_id = book_resp.json()["id"]
+
+    digital_resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Filter Digital Music", "media_subtype_id": digital_music_id, "platform_id": platform_id},
+        headers=auth_headers,
+    )
+    digital_item_id = digital_resp.json()["id"]
+
+    # category filter
+    resp = await client.get("/api/v1/media?category=music", headers=auth_headers)
+    assert resp.status_code == 200
+    titles = {i["title"] for i in resp.json()["items"]}
+    assert "Filter CD" in titles and "Filter Digital Music" in titles
+    assert "Filter Book" not in titles
+
+    # supertype filter
+    resp = await client.get("/api/v1/media?supertype=digital", headers=auth_headers)
+    assert resp.status_code == 200
+    titles = {i["title"] for i in resp.json()["items"]}
+    assert "Filter Digital Music" in titles
+    assert "Filter CD" not in titles
+
+    # media_subtype_id filter
+    resp = await client.get(f"/api/v1/media?media_subtype_id={cd_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    assert all(i["media_subtype_id"] == cd_id for i in resp.json()["items"])
+
+    # platform_id filter
+    resp = await client.get(f"/api/v1/media?platform_id={platform_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    titles = {i["title"] for i in resp.json()["items"]}
+    assert titles == {"Filter Digital Music"}
+
+    # Cleanup
+    for item_id in (cd_item_id, book_item_id, digital_item_id):
+        resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+        assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+# ── Physical/Digital linking ─────────────────────────────────────────────────
+
+async def test_manual_link_and_unlink(client, auth_headers):
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+    digital_film_id = await _subtype_id(client, auth_headers, "Digital Film")
+
+    physical_resp = await client.post(
+        "/api/v1/media", json={"title": "Physical Film", "media_subtype_id": bluray_id}, headers=auth_headers
+    )
+    physical_id = physical_resp.json()["id"]
+
+    digital_resp = await client.post(
+        "/api/v1/media", json={"title": "Digital Film", "media_subtype_id": digital_film_id}, headers=auth_headers
+    )
+    digital_id = digital_resp.json()["id"]
+
+    # Same supertype -> rejected
+    resp = await client.post(
+        "/api/v1/media/link",
+        json={"item_a_id": physical_id, "item_b_id": physical_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    resp = await client.post(
+        "/api/v1/media/link",
+        json={"item_a_id": physical_id, "item_b_id": digital_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["ownership"] == "both"
+    assert body["linked_item"]["id"] == digital_id
+    assert body["linked_item"]["title"] == "Digital Film"
+
+    # Already linked -> rejected
+    resp = await client.post(
+        "/api/v1/media/link",
+        json={"item_a_id": physical_id, "item_b_id": digital_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    # Partner reflects the link too
+    resp = await client.get(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.json()["ownership"] == "both"
+    assert resp.json()["linked_item"]["id"] == physical_id
+
+    # Unlink
+    resp = await client.delete(f"/api/v1/media/{physical_id}/link", headers=auth_headers)
+    assert resp.status_code == 204
+
+    # Unlinking again -> 404
+    resp = await client.delete(f"/api/v1/media/{physical_id}/link", headers=auth_headers)
+    assert resp.status_code == 404
+
+    resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.json()["ownership"] == "physical"
+    assert resp.json()["linked_item"] is None
+
+    # Cleanup
+    resp = await client.delete(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_auto_link_on_matching_tmdb_id(client, auth_headers):
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+    digital_film_id = await _subtype_id(client, auth_headers, "Digital Film")
+
+    physical_resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Inception", "media_subtype_id": bluray_id, "tmdb_id": 27205},
+        headers=auth_headers,
+    )
+    assert physical_resp.status_code == 201
+    physical_id = physical_resp.json()["id"]
+    assert physical_resp.json()["ownership"] == "physical"
+    assert physical_resp.json()["linked_item"] is None
+
+    digital_resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Inception (Digital)", "media_subtype_id": digital_film_id, "tmdb_id": 27205},
+        headers=auth_headers,
+    )
+    assert digital_resp.status_code == 201
+    digital_id = digital_resp.json()["id"]
+    assert digital_resp.json()["ownership"] == "both"
+    assert digital_resp.json()["linked_item"]["id"] == physical_id
+
+    resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.json()["ownership"] == "both"
+    assert resp.json()["linked_item"]["id"] == digital_id
+
+    # Cleanup
+    resp = await client.delete(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+# ── Lookup ───────────────────────────────────────────────────────────────────
+
+async def test_lookup_barcode_flags_existing_library_item(client, auth_headers):
+    from app.models.enums import MediaCategory
+    from app.schemas.media import LookupCandidate
+
+    isbn = "9780134685991"
+    book_id = await _subtype_id(client, auth_headers, "Book")
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Effective Java", "media_subtype_id": book_id, "isbn": isbn},
         headers=auth_headers,
     )
     assert resp.status_code == 201
@@ -335,7 +738,7 @@ async def test_lookup_barcode_flags_existing_library_item(client, auth_headers):
         external_id=isbn,
         source="openlibrary",
         title="Effective Java",
-        media_type=MediaType.BOOK,
+        category=MediaCategory.BOOKS,
     )
 
     with patch("app.services.openlibrary.lookup_by_isbn", new=AsyncMock(return_value=[fake_candidate])):
@@ -357,7 +760,9 @@ async def test_stats(client, auth_headers):
     assert resp.status_code == 200
     body = resp.json()
     assert "total" in body
-    assert "by_type" in body
+    assert "by_category" in body
+    assert "by_supertype" in body
+    assert "by_subtype" in body
 
 
 # ── Export ───────────────────────────────────────────────────────────────────
