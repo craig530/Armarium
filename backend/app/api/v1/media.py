@@ -21,24 +21,54 @@ ALLOWED_COVER_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "im
 MAX_COVER_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-def _location_path(location: Optional[Location]) -> Optional[str]:
-    if not location:
-        return None
-    parts = [location.name]
-    cur = location.parent
-    while cur:
-        parts.insert(0, cur.name)
-        cur = cur.parent
-    return " → ".join(parts)
+async def _location_path_map(db: AsyncSession) -> dict[int, str]:
+    """Build a {location_id: "A → B → C"} breadcrumb map for every location.
+
+    Built from a flat (id, name, parent_id) query rather than by walking the
+    ORM `Location.parent` relationship — that relationship isn't eagerly
+    loaded alongside `MediaItem.location`, and accessing it lazily outside an
+    AsyncSession call raises MissingGreenlet.
+    """
+    rows = (await db.execute(select(Location.id, Location.name, Location.parent_id))).all()
+    by_id = {row.id: (row.name, row.parent_id) for row in rows}
+
+    paths: dict[int, str] = {}
+
+    def build(loc_id: int, visited: frozenset) -> str:
+        if loc_id in paths:
+            return paths[loc_id]
+        name, parent_id = by_id[loc_id]
+        if parent_id is None or parent_id not in by_id or parent_id in visited:
+            path = name
+        else:
+            path = f"{build(parent_id, visited | {loc_id})} → {name}"
+        paths[loc_id] = path
+        return path
+
+    for loc_id in by_id:
+        build(loc_id, frozenset())
+    return paths
 
 
-def _item_to_response(item: MediaItem) -> MediaItemResponse:
+async def _reload_with_location(db: AsyncSession, item_id: int) -> MediaItem:
+    # populate_existing is required: with expire_on_commit=False, `item` (already
+    # in the session's identity map) keeps its stale `location` relationship
+    # value from before this request's edits unless we force a re-population.
+    stmt = (
+        select(MediaItem)
+        .where(MediaItem.id == item_id)
+        .options(selectinload(MediaItem.location))
+        .execution_options(populate_existing=True)
+    )
+    return (await db.execute(stmt)).scalar_one()
+
+
+def _item_to_response(item: MediaItem, path_map: dict[int, str]) -> MediaItemResponse:
     cover_url = (
         f"/covers/{Path(item.cover_image_path).name}"
         if item.cover_image_path
         else item.cover_image_url
     )
-    loc_path = _location_path(item.location)
     return MediaItemResponse(
         **{
             col: getattr(item, col)
@@ -53,7 +83,7 @@ def _item_to_response(item: MediaItem) -> MediaItemResponse:
         },
         cover_url=cover_url,
         location_name=item.location.name if item.location else None,
-        location_path=loc_path,
+        location_path=path_map.get(item.location_id) if item.location_id is not None else None,
     )
 
 
@@ -108,9 +138,10 @@ async def list_media(
 
     result = await db.execute(stmt)
     items = result.scalars().all()
+    path_map = await _location_path_map(db)
 
     return MediaListResponse(
-        items=[_item_to_response(i) for i in items],
+        items=[_item_to_response(i, path_map) for i in items],
         total=total,
         page=page,
         per_page=per_page,
@@ -144,8 +175,9 @@ async def create_media(
             item.cover_image_path = local_path
 
     await db.commit()
-    await db.refresh(item)
-    return _item_to_response(item)
+    item = await _reload_with_location(db, item.id)
+    path_map = await _location_path_map(db)
+    return _item_to_response(item, path_map)
 
 
 @router.get("/stats", response_model=LibraryStats)
@@ -164,11 +196,12 @@ async def get_stats(_=Depends(get_current_user), db: AsyncSession = Depends(get_
         .limit(6)
     )
     recent_items = (await db.execute(recent_stmt)).scalars().all()
+    path_map = await _location_path_map(db)
 
     return LibraryStats(
         total=total,
         by_type=by_type,
-        recent_additions=[_item_to_response(i) for i in recent_items],
+        recent_additions=[_item_to_response(i, path_map) for i in recent_items],
     )
 
 
@@ -178,7 +211,8 @@ async def get_media(item_id: int, _=Depends(get_current_user), db: AsyncSession 
     item = (await db.execute(stmt)).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    return _item_to_response(item)
+    path_map = await _location_path_map(db)
+    return _item_to_response(item, path_map)
 
 
 @router.put("/{item_id}", response_model=MediaItemResponse)
@@ -206,8 +240,9 @@ async def update_media(
             item.cover_image_path = local_path
 
     await db.commit()
-    await db.refresh(item)
-    return _item_to_response(item)
+    item = await _reload_with_location(db, item.id)
+    path_map = await _location_path_map(db)
+    return _item_to_response(item, path_map)
 
 
 @router.delete("/{item_id}", status_code=204)
@@ -251,5 +286,6 @@ async def upload_cover(
 
     item.cover_image_path = local_path
     await db.commit()
-    await db.refresh(item)
-    return _item_to_response(item)
+    item = await _reload_with_location(db, item.id)
+    path_map = await _location_path_map(db)
+    return _item_to_response(item, path_map)
