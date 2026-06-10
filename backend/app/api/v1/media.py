@@ -17,6 +17,9 @@ from ...config import settings
 
 router = APIRouter()
 
+ALLOWED_COVER_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
+MAX_COVER_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
 
 def _location_path(location: Optional[Location]) -> Optional[str]:
     if not location:
@@ -221,8 +224,18 @@ async def upload_cover(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    if file.content_type not in ALLOWED_COVER_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported image type. Use JPEG, PNG, WebP, GIF or BMP.")
+
+    data = await file.read()
+    if len(data) > MAX_COVER_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large (max 10 MB)")
+
     from ...services.cover_art import optimise_and_save
-    local_path = await optimise_and_save(await file.read(), item_id, "custom")
+    local_path = await optimise_and_save(data, item_id, "custom")
+    if local_path is None:
+        raise HTTPException(status_code=400, detail="File is not a valid image")
+
     item.cover_image_path = local_path
     await db.commit()
     await db.refresh(item)

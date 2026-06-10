@@ -30,13 +30,19 @@ async def lookup_by_barcode(barcode: str) -> List[LookupCandidate]:
     return [c for c in (_release_to_candidate(r) for r in data.get("releases", [])) if c]
 
 
+def _escape_lucene_phrase(value: str) -> str:
+    """Escape characters that would break out of a Lucene quoted phrase."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 async def search_releases(query: str, limit: int = 10) -> List[LookupCandidate]:
+    escaped = _escape_lucene_phrase(query)
     async with httpx.AsyncClient(headers=HEADERS, timeout=10.0) as client:
         try:
             resp = await client.get(
                 f"{BASE_URL}/release",
                 params={
-                    "query": f'release:"{query}"',
+                    "query": f'release:"{escaped}"',
                     "fmt": "json",
                     "limit": limit,
                     "inc": "artist-credits labels",

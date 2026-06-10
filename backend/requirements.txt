@@ -13,9 +13,12 @@ aiofiles==23.2.1
 # Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# bcrypt>=4.1 raises ValueError on passlib's internal self-test (>72 byte
+# input), which crashes auth entirely. Pin to the last compatible release.
+bcrypt==4.0.1
 
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.23.2
 httpx==0.25.2
-anyio==4.2.0
+anyio==3.7.1

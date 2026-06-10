@@ -40,7 +40,8 @@ async def lookup_barcode(
         if not candidates:
             candidates = await openlibrary.lookup_by_isbn(barcode)
 
-    lookup_cache.set(cache_key, candidates)
+    if candidates:
+        lookup_cache.set(cache_key, candidates)
     return candidates
 
 
@@ -74,7 +75,8 @@ async def search_lookup(
     else:
         results = []
 
-    lookup_cache.set(cache_key, results)
+    if results:
+        lookup_cache.set(cache_key, results)
     return results
 
 

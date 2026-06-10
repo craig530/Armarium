@@ -13,6 +13,7 @@ FROM nginx:1.25-alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/security-headers.conf /etc/nginx/conf.d/security-headers.conf
 
 EXPOSE 80
 

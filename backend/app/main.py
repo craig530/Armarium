@@ -57,14 +57,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Bearer-token auth doesn't rely on cookies, so allow_credentials is left off —
+# combining it with a wildcard origin is both unnecessary and rejected by browsers.
+_cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=(
-        settings.cors_origins.split(",")
-        if "," in settings.cors_origins
-        else [settings.cors_origins]
-    ),
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -21,6 +21,7 @@ client.interceptors.response.use(
     if (err.response?.status === 401) {
       localStorage.removeItem('armarium-token')
       localStorage.removeItem('armarium-user')
+      navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_API_CACHE' })
       window.location.href = '/login'
       return Promise.reject(new Error('Session expired. Please log in again.'))
     }

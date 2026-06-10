@@ -1,6 +1,10 @@
 const CACHE = 'armarium-v1'
 const OFFLINE_URLS = ['/']
 
+// Per-account identity/admin data — never persisted to Cache Storage.
+const NO_CACHE_PATTERNS = [/^\/api\/v1\/auth\//, /^\/api\/v1\/users/]
+const isCacheable = (pathname) => !NO_CACHE_PATTERNS.some((re) => re.test(pathname))
+
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE).then((c) => c.addAll(OFFLINE_URLS))
@@ -17,6 +21,23 @@ self.addEventListener('activate', (e) => {
   self.clients.claim()
 })
 
+// Let the page clear cached API responses on logout, so the next account to
+// use this browser can't read the previous user's cached identity/admin data.
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'CLEAR_API_CACHE') {
+    e.waitUntil(
+      caches.open(CACHE).then(async (c) => {
+        const requests = await c.keys()
+        await Promise.all(
+          requests
+            .filter((req) => new URL(req.url).pathname.startsWith('/api/'))
+            .map((req) => c.delete(req))
+        )
+      })
+    )
+  }
+})
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
 
@@ -25,7 +46,7 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       fetch(e.request)
         .then((res) => {
-          if (res.ok && e.request.method === 'GET') {
+          if (res.ok && e.request.method === 'GET' && isCacheable(url.pathname)) {
             caches.open(CACHE).then((c) => c.put(e.request, res.clone()))
           }
           return res

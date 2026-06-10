@@ -1,6 +1,11 @@
-from pydantic_settings import BaseSettings
-from typing import Optional
+import logging
 import secrets
+from typing import Optional
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings
+
+logger = logging.getLogger("armarium")
 
 
 class Settings(BaseSettings):
@@ -8,7 +13,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/armarium.db"
 
     # Auth
-    jwt_secret: str = secrets.token_hex(32)   # overridden by .env in production
+    jwt_secret: str = ""              # required in production — set via .env
     jwt_expire_minutes: int = 60 * 24 * 7     # 7 days
 
     # Default admin (created on first run if no users exist)
@@ -22,11 +27,22 @@ class Settings(BaseSettings):
     # External APIs
     tmdb_api_key: Optional[str] = None
 
-    # CORS — comma-separated origins, or * for all
+    # CORS — comma-separated origins, or * for all. Empty = same-origin only.
     cors_origins: str = "*"
 
     class Config:
         env_file = ".env"
+
+    @model_validator(mode="after")
+    def _ensure_jwt_secret(self):
+        if not self.jwt_secret:
+            self.jwt_secret = secrets.token_hex(32)
+            logger.warning(
+                "JWT_SECRET is not set — using a randomly generated secret for this "
+                "process only. All existing sessions will be invalidated on restart. "
+                "Set JWT_SECRET in your .env file (generate with: openssl rand -hex 32)."
+            )
+        return self
 
 
 settings = Settings()

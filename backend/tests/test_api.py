@@ -15,19 +15,16 @@ os.environ.setdefault("COVERS_DIR", "/tmp/armarium_test_covers")
 os.environ.setdefault("BACKUP_DIR", "/tmp/armarium_test_backups")
 
 
-@pytest.fixture(scope="session")
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def client():
-    from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
+    from app.main import app, lifespan
+
+    async with lifespan(app):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            yield c
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def auth_headers(client):
     resp = await client.post(
         "/api/v1/auth/login",
