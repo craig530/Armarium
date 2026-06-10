@@ -1,10 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/library'
+import {
+  BrowserMultiFormatReader,
+  NotFoundException,
+  ChecksumException,
+  FormatException,
+  DecodeHintType,
+  BarcodeFormat,
+} from '@zxing/library'
 import { CameraOff } from 'lucide-react'
 import Button from '../ui/Button'
 
 const SECURE_CONTEXT_ERROR =
   'Camera scanning requires a secure (HTTPS) connection. Use manual entry below, or access this site over HTTPS.'
+
+// Books, CDs, DVDs and Blu-rays all use these retail barcode formats. Restricting
+// to just these (with TRY_HARDER) avoids the default reader set — which also
+// tries Code39/Code93/Code128/ITF/RSS — occasionally mis-decoding a UPC/EAN
+// barcode as a different, shorter/garbled code under one of those formats.
+const HINTS = new Map([
+  [DecodeHintType.POSSIBLE_FORMATS, [
+    BarcodeFormat.EAN_13,
+    BarcodeFormat.EAN_8,
+    BarcodeFormat.UPC_A,
+    BarcodeFormat.UPC_E,
+  ]],
+  [DecodeHintType.TRY_HARDER, true],
+])
 
 function isCameraSupported() {
   return (
@@ -44,7 +65,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
       return
     }
 
-    const reader = readerRef.current ?? (readerRef.current = new BrowserMultiFormatReader())
+    const reader = readerRef.current ?? (readerRef.current = new BrowserMultiFormatReader(HINTS))
     setScanning(true)
     setError(null)
 
@@ -62,7 +83,14 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           setScanning(false)
           onDetected(text)
         }
-        if (err && err.name !== 'NotFoundException') {
+        // NotFoundException fires on every frame with no decodable code, and
+        // ChecksumException/FormatException on a partial/garbled read — all
+        // three are normal "keep scanning" outcomes, not camera errors.
+        const isScanMiss =
+          err instanceof NotFoundException ||
+          err instanceof ChecksumException ||
+          err instanceof FormatException
+        if (err && !isScanMiss) {
           setError(describeCameraError(err))
           setScanning(false)
         }
