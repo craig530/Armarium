@@ -9,7 +9,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/data/covers
+RUN mkdir -p /app/data/covers /app/data/backups && \
+    useradd --system --no-create-home --shell /usr/sbin/nologin appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8000
 

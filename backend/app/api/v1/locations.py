@@ -103,6 +103,22 @@ async def update_location(
     if payload.parent_id is not None:
         if payload.parent_id == loc_id:
             raise HTTPException(status_code=400, detail="Location cannot be its own parent")
+
+        # Walk up from the proposed parent toward the root. If loc_id appears in
+        # that chain, reparenting would make loc_id its own ancestor, creating a
+        # cycle that hangs _location_path()'s parent-chain walk and recurses
+        # forever in _build_response(). `visited` also bounds the walk if a
+        # cycle already exists in the data for an unrelated branch.
+        ancestor_id = payload.parent_id
+        visited = set()
+        while ancestor_id is not None and ancestor_id not in visited:
+            if ancestor_id == loc_id:
+                raise HTTPException(status_code=400, detail="Cannot move a location under one of its own descendants")
+            visited.add(ancestor_id)
+            ancestor_id = (
+                await db.execute(select(Location.parent_id).where(Location.id == ancestor_id))
+            ).scalar_one_or_none()
+
         loc.parent_id = payload.parent_id
     elif "parent_id" in payload.model_fields_set:
         loc.parent_id = None

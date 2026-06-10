@@ -163,6 +163,30 @@ async def test_location_crud(client, auth_headers):
     assert resp.status_code == 204
 
 
+async def test_location_reparent_rejects_cycle(client, auth_headers):
+    root_resp = await client.post("/api/v1/locations", json={"name": "Root"}, headers=auth_headers)
+    root_id = root_resp.json()["id"]
+
+    child_resp = await client.post(
+        "/api/v1/locations",
+        json={"name": "Child", "parent_id": root_id},
+        headers=auth_headers,
+    )
+    child_id = child_resp.json()["id"]
+
+    # Reparenting root under its own child would create a 2-node cycle.
+    resp = await client.put(
+        f"/api/v1/locations/{root_id}",
+        json={"parent_id": child_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    # Tree should still be intact and listable without recursing forever.
+    resp = await client.get("/api/v1/locations", headers=auth_headers)
+    assert resp.status_code == 200
+
+
 # ── Stats ────────────────────────────────────────────────────────────────────
 
 async def test_stats(client, auth_headers):
