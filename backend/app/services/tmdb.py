@@ -1,7 +1,10 @@
 import httpx
+import logging
 from typing import List, Optional
 from ..schemas.media import LookupCandidate, MediaType
 from ..config import settings
+
+logger = logging.getLogger("armarium")
 
 BASE_URL = "https://api.themoviedb.org/3"
 IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
@@ -19,7 +22,8 @@ async def search_titles(query: str, limit: int = 10) -> List[LookupCandidate]:
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception:
+        except Exception as e:
+            logger.warning("TMDB search failed for %r: %s", query, e)
             return []
 
     candidates = []
@@ -46,7 +50,8 @@ async def get_movie_details(tmdb_id: int) -> Optional[dict]:
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception:
+        except Exception as e:
+            logger.warning("TMDB movie details lookup failed for id=%s: %s", tmdb_id, e)
             return None
 
     credits = data.get("credits", {})

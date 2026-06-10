@@ -45,6 +45,11 @@ export default function ScanOrSearch({ onResults }) {
       if (!results.length) {
         toast('No barcode match found — try a title search.', { icon: '📋' })
         setQuery(barcode)
+      } else {
+        const count = results[0]?.metadata?.library_count || 0
+        if (count > 0) {
+          toast(`You already have ${count} ${count === 1 ? 'copy' : 'copies'} of this in your library.`, { icon: '📚' })
+        }
       }
       onResults(results, mediaType)
     } catch (err) {

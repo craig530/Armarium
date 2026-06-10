@@ -4,6 +4,7 @@ Run: cd backend && pip install -r requirements.txt && pytest
 """
 import pytest
 import os
+from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
 # Use an in-memory SQLite database for tests
@@ -22,6 +23,17 @@ async def client():
     async with lifespan(app):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             yield c
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit():
+    """The login rate limiter is an in-process global, so it persists across
+    tests within the same pytest run. Reset it before each test so the number
+    of tests doesn't accidentally trip the production rate limit."""
+    from app.api.v1.auth import _login_attempts
+
+    _login_attempts.clear()
+    yield
 
 
 @pytest.fixture
@@ -131,6 +143,35 @@ async def test_media_crud(client, auth_headers):
     assert resp.status_code == 404
 
 
+async def test_create_media_rejects_unknown_location(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Orphaned Item", "media_type": "cd", "location_id": 999999},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+
+async def test_update_media_rejects_unknown_location(client, auth_headers):
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Movable Item", "media_type": "cd"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    item_id = resp.json()["id"]
+
+    resp = await client.put(
+        f"/api/v1/media/{item_id}",
+        json={"location_id": 999999},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
 # ── Locations ───────────────────────────────────────────────────────────────
 
 async def test_location_crud(client, auth_headers):
@@ -185,6 +226,60 @@ async def test_location_reparent_rejects_cycle(client, auth_headers):
     # Tree should still be intact and listable without recursing forever.
     resp = await client.get("/api/v1/locations", headers=auth_headers)
     assert resp.status_code == 200
+
+
+async def test_delete_location_with_children_rejected(client, auth_headers):
+    root_resp = await client.post("/api/v1/locations", json={"name": "Shelf"}, headers=auth_headers)
+    root_id = root_resp.json()["id"]
+
+    child_resp = await client.post(
+        "/api/v1/locations", json={"name": "Bin", "parent_id": root_id}, headers=auth_headers
+    )
+    child_id = child_resp.json()["id"]
+
+    resp = await client.delete(f"/api/v1/locations/{root_id}", headers=auth_headers)
+    assert resp.status_code == 400
+
+    # Removing the child first allows the (now childless) root to be deleted.
+    resp = await client.delete(f"/api/v1/locations/{child_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/locations/{root_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+# ── Lookup ───────────────────────────────────────────────────────────────────
+
+async def test_lookup_barcode_flags_existing_library_item(client, auth_headers):
+    from app.models.media import MediaType
+    from app.schemas.media import LookupCandidate
+
+    isbn = "9780134685991"
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Effective Java", "media_type": "book", "isbn": isbn},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    item_id = resp.json()["id"]
+
+    fake_candidate = LookupCandidate(
+        external_id=isbn,
+        source="openlibrary",
+        title="Effective Java",
+        media_type=MediaType.BOOK,
+    )
+
+    with patch("app.services.openlibrary.lookup_by_isbn", new=AsyncMock(return_value=[fake_candidate])):
+        resp = await client.get(f"/api/v1/lookup/barcode/{isbn}", headers=auth_headers)
+
+    assert resp.status_code == 200
+    results = resp.json()
+    assert len(results) == 1
+    assert results[0]["metadata"]["library_count"] == 1
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
 
 
 # ── Stats ────────────────────────────────────────────────────────────────────

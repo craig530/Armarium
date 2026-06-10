@@ -1,7 +1,10 @@
 import httpx
+import logging
 import re
 from typing import List, Optional
 from ..schemas.media import LookupCandidate, MediaType
+
+logger = logging.getLogger("armarium")
 
 BASE_URL = "https://openlibrary.org"
 COVERS_URL = "https://covers.openlibrary.org"
@@ -18,7 +21,8 @@ async def lookup_by_isbn(isbn: str) -> List[LookupCandidate]:
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception:
+        except Exception as e:
+            logger.warning("OpenLibrary ISBN lookup failed for %s: %s", clean, e)
             return []
 
     return [c for c in (_isbn_book_to_candidate(book, clean) for book in data.values()) if c]
@@ -37,7 +41,8 @@ async def search_books(query: str, limit: int = 10) -> List[LookupCandidate]:
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception:
+        except Exception as e:
+            logger.warning("OpenLibrary search failed for %r: %s", query, e)
             return []
 
     return [c for c in (_search_doc_to_candidate(d) for d in data.get("docs", [])) if c][:limit]

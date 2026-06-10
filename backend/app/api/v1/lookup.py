@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Query, HTTPException, Depends
+from sqlalchemy import select, func, or_
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
+from ...database import get_db
+from ...models.media import MediaItem
 from ...schemas.media import LookupCandidate, MediaType
 from ...services import openlibrary, musicbrainz, tmdb
 from ...services.cache import lookup_cache
@@ -19,29 +23,47 @@ def _guess_type(barcode: str) -> MediaType:
     return MediaType.CD
 
 
+async def _library_count(db: AsyncSession, barcode: str) -> int:
+    """Count items already catalogued under this barcode (or ISBN)."""
+    clean = barcode.replace("-", "").strip()
+    values = {barcode, clean}
+    stmt = select(func.count(MediaItem.id)).where(
+        or_(MediaItem.barcode.in_(values), MediaItem.isbn.in_(values))
+    )
+    return (await db.execute(stmt)).scalar_one()
+
+
 @router.get("/barcode/{barcode}", response_model=List[LookupCandidate])
 async def lookup_barcode(
     barcode: str,
     media_type: Optional[MediaType] = Query(None),
     _=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     cache_key = f"barcode:{barcode}:{media_type}"
-    cached = lookup_cache.get(cache_key, ttl=3600)
-    if cached is not None:
-        return cached
+    candidates = lookup_cache.get(cache_key, ttl=3600)
 
-    detected = media_type or _guess_type(barcode)
-    candidates: List[LookupCandidate] = []
+    if candidates is None:
+        detected = media_type or _guess_type(barcode)
+        candidates = []
 
-    if detected == MediaType.BOOK:
-        candidates = await openlibrary.lookup_by_isbn(barcode)
-    elif detected == MediaType.CD:
-        candidates = await musicbrainz.lookup_by_barcode(barcode)
-        if not candidates:
+        if detected == MediaType.BOOK:
             candidates = await openlibrary.lookup_by_isbn(barcode)
+        elif detected == MediaType.CD:
+            candidates = await musicbrainz.lookup_by_barcode(barcode)
+            if not candidates:
+                candidates = await openlibrary.lookup_by_isbn(barcode)
+
+        if candidates:
+            lookup_cache.set(cache_key, candidates)
 
     if candidates:
-        lookup_cache.set(cache_key, candidates)
+        # Computed fresh on every call (not cached) so it reflects items
+        # added to the library since the lookup result was first cached.
+        count = await _library_count(db, barcode)
+        for c in candidates:
+            c.metadata["library_count"] = count
+
     return candidates
 
 

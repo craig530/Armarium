@@ -142,6 +142,13 @@ async def delete_location(
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
 
+    child = (await db.execute(select(Location.id).where(Location.parent_id == loc_id))).scalars().first()
+    if child is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete a location that has child locations. Move or delete them first.",
+        )
+
     items = (await db.execute(select(MediaItem).where(MediaItem.location_id == loc_id))).scalars().all()
     for item in items:
         item.location_id = None

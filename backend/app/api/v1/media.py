@@ -118,12 +118,22 @@ async def list_media(
     )
 
 
+async def _check_location_exists(db: AsyncSession, location_id: Optional[int]) -> None:
+    if location_id is None:
+        return
+    location = (await db.execute(select(Location).where(Location.id == location_id))).scalar_one_or_none()
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+
 @router.post("", response_model=MediaItemResponse, status_code=201)
 async def create_media(
     payload: MediaItemCreate,
     _=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await _check_location_exists(db, payload.location_id)
+
     item = MediaItem(**payload.model_dump())
     db.add(item)
     await db.flush()
@@ -182,6 +192,9 @@ async def update_media(
     item = (await db.execute(stmt)).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+
+    if "location_id" in payload.model_fields_set:
+        await _check_location_exists(db, payload.location_id)
 
     old_url = item.cover_image_url
     for field, value in payload.model_dump(exclude_unset=True).items():

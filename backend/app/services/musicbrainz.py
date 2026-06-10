@@ -1,7 +1,10 @@
 import httpx
+import logging
 import re
 from typing import List, Optional
 from ..schemas.media import LookupCandidate, MediaType
+
+logger = logging.getLogger("armarium")
 
 BASE_URL = "https://musicbrainz.org/ws/2"
 HEADERS = {
@@ -24,7 +27,8 @@ async def lookup_by_barcode(barcode: str) -> List[LookupCandidate]:
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception:
+        except Exception as e:
+            logger.warning("MusicBrainz barcode lookup failed for %s: %s", barcode, e)
             return []
 
     return [c for c in (_release_to_candidate(r) for r in data.get("releases", [])) if c]
@@ -50,7 +54,8 @@ async def search_releases(query: str, limit: int = 10) -> List[LookupCandidate]:
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception:
+        except Exception as e:
+            logger.warning("MusicBrainz search failed for %r: %s", query, e)
             return []
 
     return [c for c in (_release_to_candidate(r) for r in data.get("releases", [])) if c][:limit]

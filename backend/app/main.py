@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from .config import settings
 from .database import engine, Base, AsyncSessionLocal
+from .migrations import run_additive_migrations
 from .api.v1.router import router
 from . import models  # noqa: F401 — registers ORM classes before create_all
 
@@ -42,6 +43,7 @@ async def _ensure_admin():
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await run_additive_migrations(conn)
 
     Path(settings.covers_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.backup_dir).mkdir(parents=True, exist_ok=True)
