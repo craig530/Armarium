@@ -16,6 +16,7 @@ const TYPES = [
 export default function ScanOrSearch({ onResults }) {
   const [mode, setMode] = useState('search')   // 'search' | 'scan'
   const [query, setQuery] = useState('')
+  const [manualBarcode, setManualBarcode] = useState('')
   const [mediaType, setMediaType] = useState('book')
   const [loading, setLoading] = useState(false)
 
@@ -51,6 +52,14 @@ export default function ScanOrSearch({ onResults }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleManualBarcodeSubmit = (e) => {
+    e.preventDefault()
+    const code = manualBarcode.trim()
+    if (!code) return
+    handleBarcodeDetected(code)
+    setManualBarcode('')
   }
 
   if (mode === 'scan') {
@@ -115,6 +124,21 @@ export default function ScanOrSearch({ onResults }) {
         <Scan size={18} />
         Scan barcode with camera
       </Button>
+
+      {/* Manual fallback for when the camera isn't available (e.g. no HTTPS,
+          camera permission denied, or no camera on the device) */}
+      <form onSubmit={handleManualBarcodeSubmit} className="flex gap-2">
+        <Input
+          value={manualBarcode}
+          onChange={(e) => setManualBarcode(e.target.value)}
+          inputMode="numeric"
+          placeholder="Or type the barcode/ISBN number…"
+          className="flex-1"
+        />
+        <Button type="submit" variant="outline" loading={loading}>
+          Look up
+        </Button>
+      </form>
 
       <p className="text-xs text-gray-400 text-center">
         Books use OpenLibrary · CDs use MusicBrainz · Films use TMDB (requires API key)

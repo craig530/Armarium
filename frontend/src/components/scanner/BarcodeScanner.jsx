@@ -1,7 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/library'
-import { X, Camera, CameraOff } from 'lucide-react'
+import { CameraOff } from 'lucide-react'
 import Button from '../ui/Button'
+
+const SECURE_CONTEXT_ERROR =
+  'Camera scanning requires a secure (HTTPS) connection. Use manual entry below, or access this site over HTTPS.'
+
+function isCameraSupported() {
+  return (
+    typeof window !== 'undefined' &&
+    window.isSecureContext &&
+    !!navigator.mediaDevices?.getUserMedia
+  )
+}
+
+function describeCameraError(err) {
+  switch (err?.name) {
+    case 'NotAllowedError':
+    case 'PermissionDeniedError':
+      return 'Camera permission was denied. Enable camera access for this site in Settings → Safari → Camera, then reopen the scanner — or use manual entry below.'
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+      return 'No camera was found on this device. Use manual entry below.'
+    case 'NotReadableError':
+    case 'TrackStartError':
+      return 'The camera is already in use by another app.'
+    default:
+      return err?.message || 'Could not start the camera.'
+  }
+}
 
 export default function BarcodeScanner({ onDetected, onClose }) {
   const videoRef = useRef(null)
@@ -12,32 +39,23 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   const [scanning, setScanning] = useState(false)
 
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader()
-    readerRef.current = reader
-
-    reader.listVideoInputDevices().then((videoDevices) => {
-      setDevices(videoDevices)
-      // Prefer rear camera on mobile
-      const rear = videoDevices.find(
-        (d) => /back|rear|environment/i.test(d.label)
-      )
-      setSelectedDevice((rear || videoDevices[0])?.deviceId || null)
-    }).catch(() => setError('Camera access denied or unavailable.'))
-
-    return () => {
-      reader.reset()
+    if (!isCameraSupported()) {
+      setError(SECURE_CONTEXT_ERROR)
+      return
     }
-  }, [])
 
-  useEffect(() => {
-    if (!selectedDevice || !videoRef.current) return
-
-    const reader = readerRef.current
+    const reader = readerRef.current ?? (readerRef.current = new BrowserMultiFormatReader())
     setScanning(true)
     setError(null)
 
+    // Passing no deviceId falls back to `{ facingMode: 'environment' }`, which
+    // both selects the rear camera on mobile and triggers the permission
+    // prompt on first use. enumerateDevices() alone never prompts — and on iOS
+    // Safari it returns devices with empty deviceIds/labels until permission
+    // has been granted, so selecting a deviceId up front leaves the scanner
+    // stuck with nothing to decode from.
     reader
-      .decodeFromVideoDevice(selectedDevice, videoRef.current, (result, err) => {
+      .decodeFromVideoDevice(selectedDevice || undefined, videoRef.current, (result, err) => {
         if (result) {
           const text = result.getText()
           reader.reset()
@@ -45,11 +63,17 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           onDetected(text)
         }
         if (err && err.name !== 'NotFoundException') {
-          setError('Scanner error: ' + err.message)
+          setError(describeCameraError(err))
+          setScanning(false)
         }
       })
+      .then(() => {
+        // Device labels/ids are only populated after permission is granted —
+        // re-enumerate now so the camera-switcher dropdown can show them.
+        reader.listVideoInputDevices().then(setDevices).catch(() => {})
+      })
       .catch((e) => {
-        setError(e.message || 'Could not start camera.')
+        setError(describeCameraError(e))
         setScanning(false)
       })
 
@@ -60,14 +84,11 @@ export default function BarcodeScanner({ onDetected, onClose }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Camera selector */}
+      {/* Camera selector — populated after permission is granted */}
       {devices.length > 1 && (
         <select
           value={selectedDevice || ''}
-          onChange={(e) => {
-            readerRef.current?.reset()
-            setSelectedDevice(e.target.value)
-          }}
+          onChange={(e) => setSelectedDevice(e.target.value)}
           className="w-full rounded-lg border px-3 py-2 text-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white"
         >
           {devices.map((d) => (
@@ -80,7 +101,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
 
       {/* Video viewport */}
       <div className="relative overflow-hidden rounded-xl bg-black aspect-video w-full">
-        <video ref={videoRef} className="w-full h-full object-cover" />
+        <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
 
         {/* Aim overlay */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
