@@ -9,7 +9,7 @@ logger = logging.getLogger("armarium")
 
 BASE_URL = "https://musicbrainz.org/ws/2"
 HEADERS = {
-    "User-Agent": "Armarium/1.0 (media-catalogue)",
+    "User-Agent": "Armarium/1.0 (+https://github.com/craig530/Armarium)",
     "Accept": "application/json",
 }
 

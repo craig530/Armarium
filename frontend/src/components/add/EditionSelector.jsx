@@ -1,9 +1,11 @@
 import { ChevronRight } from 'lucide-react'
 import { MediaSubtypeBadge } from '../ui/Badge'
+import TMDBAttribution from '../ui/TMDBAttribution'
 import { categoryLabel } from '../../lib/categories'
 import Button from '../ui/Button'
 
 export default function EditionSelector({ candidates, onSelect, onBack }) {
+  const hasTmdbResults = candidates.some((c) => c.source === 'tmdb')
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
@@ -52,6 +54,8 @@ export default function EditionSelector({ candidates, onSelect, onBack }) {
           </button>
         ))}
       </div>
+
+      {hasTmdbResults && <TMDBAttribution />}
     </div>
   )
 }

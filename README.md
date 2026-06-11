@@ -343,6 +343,34 @@ armarium/
 └── .env.example               Template for your local configuration
 ```
 
+## Credits & Attribution
+
+Armarium relies on these free metadata services:
+
+- **[TMDB](https://www.themoviedb.org/)** — Films & TV metadata and artwork.
+  This product uses the TMDB API but is not endorsed or certified by TMDB.
+- **[MusicBrainz](https://musicbrainz.org/)** — music metadata, courtesy of
+  the [MetaBrainz Foundation](https://metabrainz.org/).
+- **[Open Library](https://openlibrary.org/)** — book metadata and cover art,
+  a project of the [Internet Archive](https://archive.org/).
+
+It's also built on [FastAPI](https://fastapi.tiangolo.com/),
+[SQLAlchemy](https://www.sqlalchemy.org/), [React](https://react.dev/),
+[Vite](https://vitejs.dev/), [Tailwind CSS](https://tailwindcss.com/) and many
+other open-source packages. Built-in location icons come from
+[Lucide](https://lucide.dev/), and built-in platform logos are extracted from
+[simple-icons](https://github.com/simple-icons/simple-icons).
+
+See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for the full list of
+dependencies, their licences, and attribution details for the services and
+brand assets above.
+
+> Armarium is an independent project and is **not affiliated with, endorsed
+> by, or sponsored by** TMDB, MusicBrainz/MetaBrainz, the Internet
+> Archive/Open Library, or any streaming, music or video platform it can
+> connect to (Plex, Netflix, Spotify, etc.). All product names, logos and
+> trademarks are the property of their respective owners.
+
 ## Contributing
 
 Contributions, bug reports and feature suggestions are very welcome — see
@@ -351,3 +379,6 @@ Contributions, bug reports and feature suggestions are very welcome — see
 ## License
 
 Armarium is released under the [MIT License](LICENSE).
+
+Third-party dependencies, fonts, icons, and external API attributions are
+listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

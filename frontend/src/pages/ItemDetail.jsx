@@ -13,6 +13,7 @@ import Input, { Textarea, Select } from '../components/ui/Input'
 import LocationPicker from '../components/locations/LocationPicker'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
+import TMDBAttribution from '../components/ui/TMDBAttribution'
 import { categoryLabel, supertypeLabel } from '../lib/categories'
 import toast from 'react-hot-toast'
 
@@ -416,6 +417,7 @@ export default function ItemDetail() {
                   </div>
                 ))}
             </dl>
+            {item.category === 'films_tv' && <TMDBAttribution className="mt-3" />}
           </div>
 
           {item.notes && (

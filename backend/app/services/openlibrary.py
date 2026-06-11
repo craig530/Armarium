@@ -9,7 +9,7 @@ logger = logging.getLogger("armarium")
 
 BASE_URL = "https://openlibrary.org"
 COVERS_URL = "https://covers.openlibrary.org"
-HEADERS = {"User-Agent": "Armarium/1.0 (media-catalogue)"}
+HEADERS = {"User-Agent": "Armarium/1.0 (+https://github.com/craig530/Armarium)"}
 
 
 async def lookup_by_isbn(isbn: str) -> List[LookupCandidate]:

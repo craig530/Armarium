@@ -159,6 +159,12 @@ export default function PlatformManager() {
           ))}
         </div>
       )}
+
+      <p className="text-xs text-gray-400 dark:text-gray-500 pt-2 border-t border-gray-100 dark:border-gray-800">
+        Platform logos are trademarks of their respective owners and are used here for identification purposes
+        only, to help you recognise where your items are kept. Armarium is not affiliated with, endorsed by, or
+        sponsored by any of these platforms.
+      </p>
     </div>
   )
 }
