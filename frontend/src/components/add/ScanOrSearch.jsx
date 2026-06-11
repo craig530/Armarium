@@ -1,34 +1,32 @@
 import { useState } from 'react'
 import { Scan, Search, Loader2 } from 'lucide-react'
 import Button from '../ui/Button'
-import Input, { Select } from '../ui/Input'
+import Input from '../ui/Input'
 import BarcodeScanner from '../scanner/BarcodeScanner'
 import { lookupApi } from '../../api/lookup'
 import toast from 'react-hot-toast'
 
-const TYPES = [
-  { value: 'cd', label: 'CD / Music' },
-  { value: 'dvd', label: 'DVD' },
-  { value: 'bluray', label: 'Blu-ray' },
-  { value: 'book', label: 'Book' },
-]
+const SEARCH_PLACEHOLDERS = {
+  music: 'Search by album or artist…',
+  films_tv: 'Search by film or TV title…',
+  books: 'Search by title or author…',
+}
 
-export default function ScanOrSearch({ onResults }) {
+export default function ScanOrSearch({ category, onResults }) {
   const [mode, setMode] = useState('search')   // 'search' | 'scan'
   const [query, setQuery] = useState('')
   const [manualBarcode, setManualBarcode] = useState('')
-  const [mediaType, setMediaType] = useState('book')
   const [loading, setLoading] = useState(false)
 
-  const doSearch = async (q, type) => {
+  const doSearch = async (q) => {
     if (!q.trim()) return
     setLoading(true)
     try {
-      const results = await lookupApi.search(q, type)
+      const results = await lookupApi.search(q, category)
       if (!results.length) {
         toast('No results found — try a different search term.', { icon: '🔍' })
       }
-      onResults(results, type)
+      onResults(results)
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -41,7 +39,7 @@ export default function ScanOrSearch({ onResults }) {
     setLoading(true)
     toast.success(`Barcode detected: ${barcode}`)
     try {
-      const results = await lookupApi.barcode(barcode, mediaType)
+      const results = await lookupApi.barcode(barcode, category)
       if (!results.length) {
         toast('No barcode match found — try a title search.', { icon: '📋' })
         setQuery(barcode)
@@ -51,7 +49,7 @@ export default function ScanOrSearch({ onResults }) {
           toast(`You already have ${count} ${count === 1 ? 'copy' : 'copies'} of this in your library.`, { icon: '📚' })
         }
       }
-      onResults(results, mediaType)
+      onResults(results)
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -78,36 +76,15 @@ export default function ScanOrSearch({ onResults }) {
         <p className="text-sm text-gray-500 dark:text-gray-400">Scan a barcode or search by title</p>
       </div>
 
-      {/* Media type selector */}
-      <div className="grid grid-cols-4 gap-2">
-        {TYPES.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setMediaType(t.value)}
-            className={`py-2 rounded-lg text-sm font-medium transition-colors ${
-              mediaType === t.value
-                ? 'bg-brand-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
       {/* Search input */}
       <form
-        onSubmit={(e) => { e.preventDefault(); doSearch(query, mediaType) }}
+        onSubmit={(e) => { e.preventDefault(); doSearch(query) }}
         className="flex gap-2"
       >
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={
-            mediaType === 'book' ? 'Search by title or author…'
-            : mediaType === 'cd' ? 'Search by album or artist…'
-            : 'Search by film or TV title…'
-          }
+          placeholder={SEARCH_PLACEHOLDERS[category]}
           className="flex-1"
         />
         <Button type="submit" loading={loading} size="icon">
@@ -146,7 +123,7 @@ export default function ScanOrSearch({ onResults }) {
       </form>
 
       <p className="text-xs text-gray-400 text-center">
-        Books use OpenLibrary · CDs use MusicBrainz · Films use TMDB (requires API key)
+        Books use OpenLibrary · Music uses MusicBrainz · Films & TV use TMDB (requires API key)
       </p>
     </div>
   )

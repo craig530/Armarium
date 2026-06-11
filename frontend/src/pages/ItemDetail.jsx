@@ -1,20 +1,98 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Pencil, Trash2, MapPin, Upload, Check, X } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { locationsApi } from '../api/locations'
-import { MediaTypeBadge } from '../components/ui/Badge'
+import { platformsApi } from '../api/platforms'
+import { mediaSubtypesApi } from '../api/mediaSubtypes'
+import { MediaSubtypeBadge, OwnershipBadge } from '../components/ui/Badge'
+import CoverImage from '../components/media/CoverImage'
+import LocationIcon from '../components/ui/LocationIcon'
+import PlatformLogo from '../components/ui/PlatformLogo'
 import Input, { Textarea, Select } from '../components/ui/Input'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
+import { categoryLabel, supertypeLabel } from '../lib/categories'
 import toast from 'react-hot-toast'
 
-const MEDIA_TYPES = [
-  { value: 'cd', label: 'CD' },
-  { value: 'dvd', label: 'DVD' },
-  { value: 'bluray', label: 'Blu-ray' },
-  { value: 'book', label: 'Book' },
-]
+function OwnershipEntry({ children, action }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3 min-w-0">{children}</div>
+      {action}
+    </div>
+  )
+}
+
+function LinkSearch({ item, onLinked, onCancel }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [linking, setLinking] = useState(false)
+  const oppositeSupertype = item.supertype === 'physical' ? 'digital' : 'physical'
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([])
+      return
+    }
+    setSearching(true)
+    const handle = setTimeout(() => {
+      mediaApi.list({ category: item.category, supertype: oppositeSupertype, q: query, per_page: 10 })
+        .then((r) => setResults(r.items.filter((i) => i.id !== item.id)))
+        .catch(() => {})
+        .finally(() => setSearching(false))
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [query, item.id, item.category, oppositeSupertype])
+
+  const handleLink = async (candidate) => {
+    setLinking(true)
+    try {
+      await mediaApi.link(item.id, candidate.id)
+      toast.success(`Linked to "${candidate.title}"`)
+      onLinked()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search your ${categoryLabel(item.category).toLowerCase()} ${oppositeSupertype} items…`}
+          className="flex-1"
+          autoFocus
+        />
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+      </div>
+      {searching && <p className="text-xs text-gray-400">Searching…</p>}
+      {!searching && query.trim() && results.length === 0 && (
+        <p className="text-xs text-gray-400">No matching {oppositeSupertype} items found</p>
+      )}
+      {results.length > 0 && (
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {results.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => handleLink(r)}
+              disabled={linking}
+              className="w-full flex items-center justify-between gap-2 p-2 rounded-lg text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+            >
+              <span className="truncate">{r.title}{r.year ? ` (${r.year})` : ''}</span>
+              <MediaSubtypeBadge subtype={r.media_subtype} className="shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function ItemDetail() {
   const { id } = useParams()
@@ -23,17 +101,30 @@ export default function ItemDetail() {
 
   const [item, setItem] = useState(null)
   const [locations, setLocations] = useState([])
+  const [platforms, setPlatforms] = useState([])
+  const [mediaSubtypes, setMediaSubtypes] = useState([])
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [showLinkSearch, setShowLinkSearch] = useState(false)
+
+  const load = () => {
+    return mediaApi.get(id).then((updated) => {
+      setItem(updated)
+      setForm(updated)
+      return updated
+    })
+  }
 
   useEffect(() => {
-    Promise.all([mediaApi.get(id), locationsApi.list()])
-      .then(([item, locs]) => {
+    Promise.all([mediaApi.get(id), locationsApi.list(), platformsApi.list(), mediaSubtypesApi.list()])
+      .then(([item, locs, plats, subtypes]) => {
         setItem(item)
         setForm(item)
         setLocations(locs)
+        setPlatforms(plats)
+        setMediaSubtypes(subtypes)
       })
       .catch(() => toast.error('Failed to load item'))
       .finally(() => setLoading(false))
@@ -50,10 +141,28 @@ export default function ItemDetail() {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
+  const subtypeOptions = item
+    ? mediaSubtypes
+        .filter((s) => s.category === item.category && s.supertype === item.supertype)
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+    : []
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      const updated = await mediaApi.update(id, form)
+      const payload = {
+        ...form,
+        media_subtype_id: Number(form.media_subtype_id),
+        year: form.year ? Number(form.year) : null,
+        track_count: form.track_count ? Number(form.track_count) : null,
+        runtime_minutes: form.runtime_minutes ? Number(form.runtime_minutes) : null,
+        episode_count: form.episode_count ? Number(form.episode_count) : null,
+        page_count: form.page_count ? Number(form.page_count) : null,
+        tmdb_id: form.tmdb_id ? Number(form.tmdb_id) : null,
+        location_id: form.location_id ? Number(form.location_id) : null,
+        platform_id: form.platform_id ? Number(form.platform_id) : null,
+      }
+      const updated = await mediaApi.update(id, payload)
       setItem(updated)
       setForm(updated)
       setEditing(false)
@@ -85,11 +194,27 @@ export default function ItemDetail() {
     }
   }
 
+  const handleUnlink = async () => {
+    if (!confirm('Unlink these items?')) return
+    try {
+      await mediaApi.unlink(id)
+      await load()
+      toast.success('Unlinked')
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleLinked = async () => {
+    await load()
+    setShowLinkSearch(false)
+  }
+
   if (loading) return <PageLoader />
   if (!item) return <div className="text-center py-20 text-gray-400">Item not found</div>
 
-  const type = editing ? form.media_type : item.media_type
   const creator = item.artist || item.director || item.author
+  const linked = item.linked_item
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -127,11 +252,9 @@ export default function ItemDetail() {
       <div className="flex gap-6 items-start">
         <div className="shrink-0 w-36 rounded-xl overflow-hidden shadow-lg bg-gray-100 dark:bg-gray-800">
           {item.cover_url ? (
-            <img src={item.cover_url} alt={item.title} className="w-full aspect-[2/3] object-cover" onError={(e) => { e.target.style.display='none' }} />
+            <img src={item.cover_url} alt={item.title} className="w-full aspect-[2/3] object-cover" onError={(e) => { e.target.style.display = 'none' }} />
           ) : (
-            <div className="w-full aspect-[2/3] flex items-center justify-center text-5xl">
-              {item.media_type === 'book' ? '📚' : item.media_type === 'cd' ? '💿' : '📀'}
-            </div>
+            <CoverImage category={item.category} title={item.title} size="full" className="aspect-[2/3]" />
           )}
         </div>
 
@@ -142,17 +265,12 @@ export default function ItemDetail() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{item.title}</h1>
           )}
           <div className="flex items-center gap-2 flex-wrap">
-            <MediaTypeBadge type={item.media_type} />
+            <MediaSubtypeBadge subtype={item.media_subtype} />
+            <OwnershipBadge ownership={item.ownership} />
             {item.year && <span className="text-sm text-gray-500">{item.year}</span>}
             {item.edition && <span className="text-sm px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{item.edition}</span>}
           </div>
           {creator && <p className="text-gray-600 dark:text-gray-300">{creator}</p>}
-          {item.location_path && (
-            <div className="flex items-center gap-1 text-sm text-gray-500">
-              <MapPin size={13} />
-              {item.location_path}
-            </div>
-          )}
           {item.genres && (
             <div className="flex flex-wrap gap-1">
               {item.genres.split(',').map((g) => (
@@ -165,40 +283,101 @@ export default function ItemDetail() {
         </div>
       </div>
 
+      {/* Ownership */}
+      <div className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ownership</h3>
+
+        <OwnershipEntry>
+          {item.supertype === 'physical' ? (
+            <LocationIcon location={{ icon_key: item.location_icon_key, icon_url: item.location_icon_url }} size={20} className="shrink-0 text-gray-400 dark:text-gray-500" />
+          ) : (
+            <PlatformLogo platform={item.platform} className="h-9 w-9 shrink-0" />
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+              {item.supertype === 'physical' ? (item.location_path || 'No location') : (item.platform?.name || 'No platform')}
+            </p>
+            <p className="text-xs text-gray-400">{supertypeLabel(item.supertype)} · {item.media_subtype?.name}</p>
+          </div>
+        </OwnershipEntry>
+
+        <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+          {linked ? (
+            <OwnershipEntry
+              action={
+                <Button variant="ghost" size="sm" onClick={handleUnlink}>
+                  <Unlink size={14} /> Unlink
+                </Button>
+              }
+            >
+              <button onClick={() => navigate(`/item/${linked.id}`)} className="flex items-center gap-3 min-w-0 text-left hover:opacity-80">
+                {linked.supertype === 'physical' ? (
+                  <LocationIcon location={{ icon_key: linked.location_icon_key, icon_url: linked.location_icon_url }} size={20} className="shrink-0 text-gray-400 dark:text-gray-500" />
+                ) : (
+                  <PlatformLogo platform={linked.platform} className="h-9 w-9 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{linked.title}</p>
+                  <p className="text-xs text-gray-400 truncate">
+                    {supertypeLabel(linked.supertype)} · {linked.media_subtype?.name} · {linked.supertype === 'physical' ? (linked.location_path || 'No location') : (linked.platform?.name || 'No platform')}
+                  </p>
+                </div>
+              </button>
+            </OwnershipEntry>
+          ) : showLinkSearch ? (
+            <LinkSearch item={item} onLinked={handleLinked} onCancel={() => setShowLinkSearch(false)} />
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setShowLinkSearch(true)}>
+              <Link2 size={14} /> Link {item.supertype === 'physical' ? 'digital' : 'physical'} copy
+            </Button>
+          )}
+        </div>
+      </div>
+
       {/* Edit form / Detail fields */}
       {editing ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-          <Select label="Type" value={form.media_type} onChange={(e) => set('media_type', e.target.value)}>
-            {MEDIA_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          <Select label="Type" value={form.media_subtype_id || ''} onChange={(e) => set('media_subtype_id', e.target.value)}>
+            {subtypeOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
           <Input label="Year" type="number" value={form.year || ''} onChange={(e) => set('year', e.target.value)} />
           <Input label="Genre(s)" value={form.genres || ''} onChange={(e) => set('genres', e.target.value)} />
           <Input label="Edition" value={form.edition || ''} onChange={(e) => set('edition', e.target.value)} />
 
-          {(type === 'cd') && <>
+          {item.category === 'music' && <>
             <Input label="Artist" value={form.artist || ''} onChange={(e) => set('artist', e.target.value)} />
             <Input label="Label" value={form.label || ''} onChange={(e) => set('label', e.target.value)} />
             <Input label="Track count" type="number" value={form.track_count || ''} onChange={(e) => set('track_count', e.target.value)} />
           </>}
-          {(type === 'dvd' || type === 'bluray') && <>
+          {item.category === 'films_tv' && <>
             <Input label="Director" value={form.director || ''} onChange={(e) => set('director', e.target.value)} />
             <Input label="Studio" value={form.studio || ''} onChange={(e) => set('studio', e.target.value)} />
             <Input label="Runtime (mins)" type="number" value={form.runtime_minutes || ''} onChange={(e) => set('runtime_minutes', e.target.value)} />
             <Input label="Rating" value={form.rating || ''} onChange={(e) => set('rating', e.target.value)} />
+            <Input label="Seasons owned" value={form.seasons_owned || ''} onChange={(e) => set('seasons_owned', e.target.value)} />
+            <Input label="Episode count" type="number" value={form.episode_count || ''} onChange={(e) => set('episode_count', e.target.value)} />
           </>}
-          {type === 'book' && <>
+          {item.category === 'books' && <>
             <Input label="Author" value={form.author || ''} onChange={(e) => set('author', e.target.value)} />
             <Input label="Publisher" value={form.publisher || ''} onChange={(e) => set('publisher', e.target.value)} />
             <Input label="ISBN" value={form.isbn || ''} onChange={(e) => set('isbn', e.target.value)} />
             <Input label="Pages" type="number" value={form.page_count || ''} onChange={(e) => set('page_count', e.target.value)} />
           </>}
 
-          <Select label="Location" value={form.location_id || ''} onChange={(e) => set('location_id', e.target.value || null)}>
-            <option value="">No location</option>
-            {flatLocations.map((loc) => (
-              <option key={loc.id} value={loc.id}>{'  '.repeat(loc.depth)}{loc.name}</option>
-            ))}
-          </Select>
+          {item.supertype === 'physical' ? (
+            <Select label="Location" value={form.location_id || ''} onChange={(e) => set('location_id', e.target.value)}>
+              <option value="">No location</option>
+              {flatLocations.map((loc) => (
+                <option key={loc.id} value={loc.id}>{'  '.repeat(loc.depth)}{loc.name}</option>
+              ))}
+            </Select>
+          ) : (
+            <Select label="Platform" value={form.platform_id || ''} onChange={(e) => set('platform_id', e.target.value)}>
+              <option value="">No platform</option>
+              {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
+          )}
+
           <Input label="Barcode" value={form.barcode || ''} onChange={(e) => set('barcode', e.target.value)} />
           <Input label="Cover URL" value={form.cover_image_url || ''} onChange={(e) => set('cover_image_url', e.target.value)} className="col-span-2" />
           <Textarea label="Description" value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={3} className="col-span-2" />
@@ -217,7 +396,7 @@ export default function ItemDetail() {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Details</h3>
             <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
               {[
-                ['Type', item.media_type?.toUpperCase()],
+                ['Type', item.media_subtype?.name],
                 ['Year', item.year],
                 ['Edition', item.edition],
                 ['Artist', item.artist],
@@ -227,6 +406,8 @@ export default function ItemDetail() {
                 ['Studio', item.studio],
                 ['Runtime', item.runtime_minutes && `${item.runtime_minutes} min`],
                 ['Rating', item.rating],
+                ['Seasons', item.seasons_owned],
+                ['Episodes', item.episode_count],
                 ['Author', item.author],
                 ['Publisher', item.publisher],
                 ['ISBN', item.isbn],

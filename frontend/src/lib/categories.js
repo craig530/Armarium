@@ -20,3 +20,7 @@ export const SUPERTYPES = [
   { value: 'physical', label: 'Physical' },
   { value: 'digital', label: 'Digital' },
 ]
+
+export function supertypeLabel(value) {
+  return SUPERTYPES.find((s) => s.value === value)?.label ?? value
+}

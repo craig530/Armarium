@@ -1,5 +1,6 @@
 import { ChevronRight } from 'lucide-react'
-import { MediaTypeBadge } from '../ui/Badge'
+import { MediaSubtypeBadge } from '../ui/Badge'
+import { categoryLabel } from '../../lib/categories'
 import Button from '../ui/Button'
 
 export default function EditionSelector({ candidates, onSelect, onBack }) {
@@ -35,7 +36,7 @@ export default function EditionSelector({ candidates, onSelect, onBack }) {
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-2 flex-wrap">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">{c.title}</p>
-                <MediaTypeBadge type={c.media_type} />
+                <MediaSubtypeBadge subtype={{ category: c.category, name: categoryLabel(c.category) }} />
               </div>
               {c.creator && <p className="text-xs text-gray-500 dark:text-gray-400">{c.creator}</p>}
               {c.year && <p className="text-xs text-gray-400">{c.year}</p>}
