@@ -150,7 +150,7 @@ export default function Admin() {
 
   const load = () => {
     setLoading(true)
-    client.get('/users').then((r) => setUsers(r.data)).catch(console.error).finally(() => setLoading(false))
+    client.get('/users').then((r) => setUsers(r.data)).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])

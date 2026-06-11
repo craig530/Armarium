@@ -43,6 +43,34 @@ async def run_additive_migrations(conn: AsyncConnection) -> None:
             logger.info("Added missing column %s.%s", table.name, column.name)
 
 
+# Columns that gained `index=True` after their tables already existed in the
+# wild. `create_all` only adds indexes for tables it creates, so existing
+# installs need these added explicitly. Safe to run on every startup —
+# `CREATE INDEX IF NOT EXISTS` is a no-op once the index is present, and the
+# names match SQLAlchemy's default `ix_<table>_<column>` convention so a
+# fresh database (where `create_all` already created them) is unaffected.
+_MISSING_INDEXES = [
+    ("media_items", "location_id"),
+    ("media_items", "musicbrainz_id"),
+    ("media_items", "tmdb_id"),
+    ("media_items", "openlibrary_id"),
+    ("media_items", "isbn"),
+    ("media_items", "media_subtype_id"),
+    ("media_items", "platform_id"),
+]
+
+
+async def create_missing_indexes(conn: AsyncConnection) -> None:
+    if conn.engine.dialect.name != "sqlite":
+        return
+
+    for table_name, column_name in _MISSING_INDEXES:
+        index_name = f"ix_{table_name}_{column_name}"
+        await conn.execute(
+            text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table_name}" ("{column_name}")')
+        )
+
+
 # Default media subtypes seeded on first run. Each tuple is
 # (name, category, supertype, sort_order).
 def _default_media_subtypes():

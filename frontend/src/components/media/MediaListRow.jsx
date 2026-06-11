@@ -31,11 +31,7 @@ export default function MediaListRow({ item, onDeleted }) {
     >
       {/* Cover thumbnail */}
       <div className="shrink-0 h-16 w-12 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">
-        {item.cover_url ? (
-          <img src={item.cover_url} alt={item.title} className="h-full w-full object-cover" />
-        ) : (
-          <CoverImage category={item.category} title={item.title} size="sm" className="h-full w-full" />
-        )}
+        <CoverImage src={item.cover_thumb_url} category={item.category} title={item.title} size="sm" className="h-full w-full" />
       </div>
 
       {/* Main info */}

@@ -8,6 +8,8 @@ export default defineConfig({
     proxy: {
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
       '/covers': { target: 'http://localhost:8000', changeOrigin: true },
+      '/location-icons': { target: 'http://localhost:8000', changeOrigin: true },
+      '/platform-logos': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
 })

@@ -33,6 +33,7 @@ export default function CoverImage({ src, category, title, className, size = 'md
     <img
       src={src}
       alt={title}
+      loading="lazy"
       onError={() => setError(true)}
       className={clsx('object-cover rounded-md', sizes[size], className)}
     />

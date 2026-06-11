@@ -18,7 +18,7 @@ export default function PlatformManager() {
   const [form, setForm] = useState(EMPTY_FORM)
 
   const load = () => {
-    platformsApi.list().then(setPlatforms).catch(console.error).finally(() => setLoading(false))
+    platformsApi.list().then(setPlatforms).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])

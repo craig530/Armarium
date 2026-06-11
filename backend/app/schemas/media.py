@@ -105,6 +105,7 @@ class LinkedItemSummary(BaseModel):
     id: int
     title: str
     cover_url: Optional[str] = None
+    cover_thumb_url: Optional[str] = None
     media_subtype: MediaSubtypeSummary
     category: MediaCategory
     supertype: Supertype
@@ -125,6 +126,7 @@ class MediaItemResponse(BaseModel):
     cover_image_path: Optional[str] = None
     cover_image_url: Optional[str] = None
     cover_url: Optional[str] = None       # computed: local path takes priority
+    cover_thumb_url: Optional[str] = None # computed: thumbnail (falls back to cover_url)
     barcode: Optional[str] = None
     edition: Optional[str] = None
     notes: Optional[str] = None

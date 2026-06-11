@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Scan, Search, Loader2 } from 'lucide-react'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
-import BarcodeScanner from '../scanner/BarcodeScanner'
+import LoadingSpinner from '../ui/LoadingSpinner'
 import { lookupApi } from '../../api/lookup'
 import toast from 'react-hot-toast'
+
+// The barcode scanner pulls in @zxing/library (~400KB) — only fetch it once
+// the user actually opts to scan, rather than on every Add Item page load.
+const BarcodeScanner = lazy(() => import('../scanner/BarcodeScanner'))
 
 const SEARCH_PLACEHOLDERS = {
   music: 'Search by album or artist…',
@@ -66,7 +70,11 @@ export default function ScanOrSearch({ category, onResults }) {
   }
 
   if (mode === 'scan') {
-    return <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setMode('search')} />
+    return (
+      <Suspense fallback={<LoadingSpinner size="lg" className="py-12" />}>
+        <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setMode('search')} />
+      </Suspense>
+    )
   }
 
   return (

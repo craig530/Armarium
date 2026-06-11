@@ -1,4 +1,5 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import StaticPool
 from pathlib import Path
@@ -25,6 +26,24 @@ if settings.database_url.endswith(":memory:"):
 
 engine = create_async_engine(settings.database_url, **engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+
+if "sqlite" in settings.database_url:
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, _record):
+        # WAL allows readers and writers to proceed concurrently instead of
+        # blocking on a single file lock — important once the catalogue and
+        # its background cover-fetch tasks are both hitting the DB.
+        # NORMAL is safe under WAL (only durability of the last commit after
+        # an OS crash is at risk, not corruption).
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        # SQLite ignores FK constraints (ON DELETE SET NULL/CASCADE, etc.) by
+        # default — without this, declared `ForeignKey(..., ondelete=...)`
+        # behaviour is purely documentation.
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 class Base(DeclarativeBase):

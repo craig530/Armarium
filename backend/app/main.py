@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
@@ -11,10 +12,12 @@ from .config import settings
 from .database import engine, Base, AsyncSessionLocal
 from .migrations import (
     run_additive_migrations,
+    create_missing_indexes,
     seed_media_subtypes,
     backfill_media_subtypes,
     drop_legacy_media_type_column,
 )
+from .services.search import setup_fts
 from .api.v1.router import router
 from . import models  # noqa: F401 — registers ORM classes before create_all
 
@@ -49,6 +52,8 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await run_additive_migrations(conn)
+        await create_missing_indexes(conn)
+        await setup_fts(conn)
 
     Path(settings.covers_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.backup_dir).mkdir(parents=True, exist_ok=True)
@@ -68,7 +73,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Armarium API",
-    description="Self-hosted media catalogue — CDs, DVDs, Blu-rays & Books",
+    description="Self-hosted media catalogue — Music, Films & TV and Books, physical or digital",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -84,6 +89,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Compresses JSON list/search responses, which dominate traffic for a
+# catalogue with thousands of items.
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 app.include_router(router)
 

@@ -13,6 +13,7 @@ from PIL import Image, UnidentifiedImageError
 from ..config import settings
 
 MAX_WIDTH = 500
+THUMB_WIDTH = 200
 JPEG_QUALITY = 85
 
 # Generous ceiling for cover art — blocks decompression-bomb style images
@@ -21,8 +22,8 @@ MAX_IMAGE_PIXELS = 40_000_000  # ~40MP
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 
-def _optimise(data: bytes) -> Optional[bytes]:
-    """Resize to MAX_WIDTH and re-encode as optimised progressive JPEG.
+def _optimise(data: bytes, max_width: int = MAX_WIDTH) -> Optional[bytes]:
+    """Resize to `max_width` and re-encode as optimised progressive JPEG.
 
     Returns None if the data isn't a valid, reasonably-sized image.
     """
@@ -43,12 +44,70 @@ def _optimise(data: bytes) -> Optional[bytes]:
         img = img.convert("RGB")
 
     w, h = img.size
-    if w > MAX_WIDTH:
-        img = img.resize((MAX_WIDTH, int(h * MAX_WIDTH / w)), Image.LANCZOS)
+    if w > max_width:
+        img = img.resize((max_width, int(h * max_width / w)), Image.LANCZOS)
 
     out = io.BytesIO()
     img.save(out, format="JPEG", quality=JPEG_QUALITY, optimize=True, progressive=True)
     return out.getvalue()
+
+
+def _item_subdir(item_id: int) -> str:
+    """Two-level hashed subdirectory for an item's cover files, so a
+    catalogue with tens of thousands of items doesn't end up with tens of
+    thousands of files in a single flat `covers/` directory."""
+    h = hashlib.md5(str(item_id).encode()).hexdigest()
+    return f"{h[:2]}/{h[2:4]}"
+
+
+def _save_sized(data: bytes, dest_dir: Path, stem: str) -> bool:
+    """Write `<stem>.jpg` (medium, MAX_WIDTH) and `<stem>_thumb.jpg`
+    (THUMB_WIDTH) for an image. Returns False if `data` isn't a valid image."""
+    medium = _optimise(data, MAX_WIDTH)
+    if medium is None:
+        return False
+    thumb = _optimise(data, THUMB_WIDTH) or medium
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    (dest_dir / f"{stem}.jpg").write_bytes(medium)
+    (dest_dir / f"{stem}_thumb.jpg").write_bytes(thumb)
+    return True
+
+
+def cover_urls(cover_image_path: Optional[str], cover_image_url: Optional[str]) -> tuple:
+    """Return `(cover_url, cover_thumb_url)` for an item.
+
+    `cover_image_path` is the value returned by `download_cover` /
+    `optimise_and_save` — already a `/covers/...` URL path. New-style paths
+    include a hashed subdirectory (`/covers/ab/cd/<stem>.jpg`) and have a
+    `<stem>_thumb.jpg` sibling; older rows are flat (`/covers/<stem>.jpg`)
+    with no thumbnail, so the thumb URL just falls back to the full image.
+    """
+    if not cover_image_path:
+        return cover_image_url, cover_image_url
+
+    parts = cover_image_path.split("/")
+    if len(parts) == 5:  # ['', 'covers', 'ab', 'cd', '<stem>.jpg']
+        stem, _, ext = parts[-1].rpartition(".")
+        thumb_url = "/".join(parts[:-1] + [f"{stem}_thumb.{ext}"])
+    else:
+        thumb_url = cover_image_path
+
+    return cover_image_path, thumb_url
+
+
+def delete_cover_files(cover_image_path: Optional[str]) -> None:
+    """Remove the medium image and (if present) thumbnail for a cover path
+    returned by `download_cover` / `optimise_and_save`."""
+    if not cover_image_path:
+        return
+
+    covers_dir = Path(settings.covers_dir)
+    cover_file = covers_dir / cover_image_path.removeprefix("/covers/")
+    cover_file.unlink(missing_ok=True)
+
+    thumb_file = cover_file.with_name(f"{cover_file.stem}_thumb{cover_file.suffix}")
+    thumb_file.unlink(missing_ok=True)
 
 
 async def _is_safe_url(url: str) -> bool:
@@ -83,7 +142,8 @@ async def _is_safe_url(url: str) -> bool:
 
 
 async def download_cover(url: str, item_id: int) -> Optional[str]:
-    """Download a cover image, optimise it, and return the local serve path."""
+    """Download a cover image, optimise it (medium + thumbnail), and return
+    the local serve path for the medium image."""
     if not url:
         return None
 
@@ -91,14 +151,15 @@ async def download_cover(url: str, item_id: int) -> Optional[str]:
         return None
 
     covers_dir = Path(settings.covers_dir)
-    covers_dir.mkdir(parents=True, exist_ok=True)
+    subdir = _item_subdir(item_id)
+    dest_dir = covers_dir / subdir
 
     url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
-    filename = f"{item_id}_{url_hash}.jpg"
-    filepath = covers_dir / filename
+    stem = f"{item_id}_{url_hash}"
+    rel_url = f"/covers/{subdir}/{stem}.jpg"
 
-    if filepath.exists():
-        return f"/covers/{filename}"
+    if (dest_dir / f"{stem}.jpg").exists():
+        return rel_url
 
     # Redirects are not followed: a "safe" URL could redirect to an internal
     # address, which would bypass the check above.
@@ -106,10 +167,8 @@ async def download_cover(url: str, item_id: int) -> Optional[str]:
         try:
             resp = await client.get(url)
             if resp.status_code == 200 and len(resp.content) > 500:
-                optimised = _optimise(resp.content)
-                if optimised is not None:
-                    filepath.write_bytes(optimised)
-                    return f"/covers/{filename}"
+                if _save_sized(resp.content, dest_dir, stem):
+                    return rel_url
         except httpx.HTTPError:
             pass
 
@@ -117,16 +176,15 @@ async def download_cover(url: str, item_id: int) -> Optional[str]:
 
 
 async def optimise_and_save(data: bytes, item_id: int, suffix: str = "upload") -> Optional[str]:
-    """Optimise raw image bytes and save locally. Returns local serve path, or
-    None if the data isn't a valid image."""
-    optimised = _optimise(data)
-    if optimised is None:
+    """Optimise raw image bytes (medium + thumbnail) and save locally.
+    Returns the local serve path for the medium image, or None if the data
+    isn't a valid image."""
+    covers_dir = Path(settings.covers_dir)
+    subdir = _item_subdir(item_id)
+    dest_dir = covers_dir / subdir
+    stem = f"{item_id}_{suffix}"
+
+    if not _save_sized(data, dest_dir, stem):
         return None
 
-    covers_dir = Path(settings.covers_dir)
-    covers_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = f"{item_id}_{suffix}.jpg"
-    filepath = covers_dir / filename
-    filepath.write_bytes(optimised)
-    return f"/covers/{filename}"
+    return f"/covers/{subdir}/{stem}.jpg"

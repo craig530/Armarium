@@ -2,6 +2,7 @@ import { useLibraryStore } from '../../store'
 import { SUPERTYPES } from '../../lib/categories'
 import { Select } from '../ui/Input'
 import Button from '../ui/Button'
+import LocationPicker from '../locations/LocationPicker'
 
 const SORT_OPTIONS = [
   { value: 'created_at', label: 'Date added' },
@@ -11,15 +12,6 @@ const SORT_OPTIONS = [
 
 export default function FilterPanel({ locations = [], mediaSubtypes = [], platforms = [], category }) {
   const { filters, setFilter, resetFilters } = useLibraryStore()
-
-  const flatLocations = []
-  const flatten = (locs, depth = 0) => {
-    for (const loc of locs) {
-      flatLocations.push({ ...loc, depth })
-      if (loc.children?.length) flatten(loc.children, depth + 1)
-    }
-  }
-  flatten(locations)
 
   const categorySubtypes = mediaSubtypes
     .filter((s) => s.category === category)
@@ -78,18 +70,13 @@ export default function FilterPanel({ locations = [], mediaSubtypes = [], platfo
         </Select>
       )}
 
-      <Select
+      <LocationPicker
+        locations={locations}
         value={filters.location_id}
-        onChange={(e) => setFilter('location_id', e.target.value)}
+        onChange={(value) => setFilter('location_id', value)}
+        placeholder="All locations"
         className="w-48"
-      >
-        <option value="">All locations</option>
-        {flatLocations.map((loc) => (
-          <option key={loc.id} value={loc.id}>
-            {'  '.repeat(loc.depth)}{loc.name}
-          </option>
-        ))}
-      </Select>
+      />
 
       <Select
         value={filters.sort}

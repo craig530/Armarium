@@ -6,7 +6,7 @@ from typing import List
 from ...database import get_db
 from ...models.user import User
 from ...schemas.user import UserCreate, UserUpdate, UserResponse
-from ...services.auth import hash_password, get_current_user, get_current_admin
+from ...services.auth import hash_password, get_current_admin
 
 router = APIRouter()
 

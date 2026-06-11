@@ -14,16 +14,13 @@ export default function MediaCard({ item }) {
     >
       {/* Cover */}
       <div className="relative overflow-hidden rounded-lg aspect-[2/3] bg-gray-100 dark:bg-gray-800 w-full">
-        {item.cover_url ? (
-          <img
-            src={item.cover_url}
-            alt={item.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={(e) => { e.target.style.display = 'none' }}
-          />
-        ) : (
-          <CoverImage category={item.category} title={item.title} size="full" />
-        )}
+        <CoverImage
+          src={item.cover_thumb_url}
+          category={item.category}
+          title={item.title}
+          size="full"
+          className="group-hover:scale-105 transition-transform duration-300"
+        />
         <div className="absolute top-2 left-2">
           <MediaSubtypeBadge subtype={item.media_subtype} />
         </div>

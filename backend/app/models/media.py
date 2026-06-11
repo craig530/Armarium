@@ -34,16 +34,16 @@ class MediaItem(Base):
     author = Column(String(300))
     publisher = Column(String(300))
     page_count = Column(Integer)
-    isbn = Column(String(20))
+    isbn = Column(String(20), index=True)
     language = Column(String(50))
 
     # External IDs
-    musicbrainz_id = Column(String(100))
-    tmdb_id = Column(Integer)
-    openlibrary_id = Column(String(50))
+    musicbrainz_id = Column(String(100), index=True)
+    tmdb_id = Column(Integer, index=True)
+    openlibrary_id = Column(String(50), index=True)
 
     # Location
-    location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)
+    location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True, index=True)
     location = relationship("Location", back_populates="items", lazy="selectin")
 
     # Media subtype (Physical/Digital x Music/Films & TV/Books)

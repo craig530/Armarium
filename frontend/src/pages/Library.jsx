@@ -51,6 +51,7 @@ export default function Library() {
   const [platforms, setPlatforms] = useState([])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [searchInput, setSearchInput] = useState(filters.q)
 
   const load = useCallback(async (p = 1) => {
     if (!category) return
@@ -81,6 +82,21 @@ export default function Library() {
   }, [category, filters])
 
   useEffect(() => { load(1) }, [load])
+
+  // Debounce the search box: keep the input snappy, but only push to the
+  // (URL/query-driving) filter store — and trigger a reload — after the
+  // user pauses typing.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchInput !== filters.q) setFilter('q', searchInput)
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [searchInput])
+
+  // Keep the input in sync if filters.q changes elsewhere (e.g. "Clear filters").
+  useEffect(() => {
+    setSearchInput(filters.q)
+  }, [filters.q])
 
   useEffect(() => {
     mediaApi.stats().then(setStats).catch(() => {})
@@ -139,8 +155,8 @@ export default function Library() {
           <input
             type="search"
             data-search
-            value={filters.q}
-            onChange={(e) => setFilter('q', e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search titles, authors, directors… (press /)"
             className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
           />

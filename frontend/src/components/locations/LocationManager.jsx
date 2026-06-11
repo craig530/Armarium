@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { locationsApi } from '../../api/locations'
-import Input, { Select } from '../ui/Input'
+import Input from '../ui/Input'
 import Button from '../ui/Button'
 import LocationIcon from '../ui/LocationIcon'
+import LocationPicker from './LocationPicker'
 import IconPicker from '../settings/IconPicker'
+import { flattenLocations } from '../../lib/locations'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', parent_id: '', icon_key: '', icon_url: null }
@@ -17,19 +19,12 @@ export default function LocationManager() {
   const [form, setForm] = useState(EMPTY_FORM)
 
   const load = () => {
-    locationsApi.list().then(setLocations).catch(console.error).finally(() => setLoading(false))
+    locationsApi.list().then(setLocations).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
 
-  const flatLocations = []
-  const flatten = (locs, depth = 0) => {
-    for (const loc of locs) {
-      flatLocations.push({ ...loc, depth })
-      if (loc.children?.length) flatten(loc.children, depth + 1)
-    }
-  }
-  flatten(locations)
+  const flatLocations = flattenLocations(locations)
 
   const handleSave = async () => {
     if (!form.name.trim()) return toast.error('Name required')
@@ -62,7 +57,10 @@ export default function LocationManager() {
   }
 
   const handleDelete = async (loc) => {
-    if (!confirm(`Delete "${loc.name}"? Items will be unassigned.`)) return
+    const warning = loc.item_count > 0
+      ? `Delete "${loc.name}"? ${loc.item_count} item${loc.item_count === 1 ? '' : 's'} will be unassigned.`
+      : `Delete "${loc.name}"?`
+    if (!confirm(warning)) return
     try {
       await locationsApi.delete(loc.id)
       toast.success('Location deleted')
@@ -107,20 +105,14 @@ export default function LocationManager() {
             placeholder="e.g. Bookshelf, Living Room"
             autoFocus
           />
-          <Select
+          <LocationPicker
             label="Parent location (optional)"
+            locations={locations}
             value={form.parent_id}
-            onChange={(e) => setForm((f) => ({ ...f, parent_id: e.target.value }))}
-          >
-            <option value="">— No parent (top level) —</option>
-            {flatLocations
-              .filter((l) => l.id !== editId)
-              .map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {'  '.repeat(loc.depth)}{loc.name}
-                </option>
-              ))}
-          </Select>
+            onChange={(value) => setForm((f) => ({ ...f, parent_id: value }))}
+            placeholder="— No parent (top level) —"
+            excludeId={editId}
+          />
           <IconPicker
             iconKey={form.icon_key || null}
             iconUrl={form.icon_url}

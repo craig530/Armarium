@@ -16,7 +16,7 @@ export default function MediaSubtypeManager() {
   const [form, setForm] = useState(EMPTY_FORM)
 
   const load = () => {
-    mediaSubtypesApi.list().then(setSubtypes).catch(console.error).finally(() => setLoading(false))
+    mediaSubtypesApi.list().then(setSubtypes).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])

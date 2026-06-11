@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, and_
+from sqlalchemy import select, func, or_, and_, update, table, column, text
 from sqlalchemy.orm import selectinload
 from typing import Optional
 import math
 from pathlib import Path
 
-from ...database import get_db
+from ...database import get_db, AsyncSessionLocal
 from ...models.media import MediaItem
 from ...models.location import Location
 from ...models.media_subtype import MediaSubtype
@@ -17,9 +17,9 @@ from ...schemas.media import (
     MediaItemCreate, MediaItemUpdate, MediaItemResponse, MediaListResponse, LibraryStats,
     MediaSubtypeSummary, PlatformSummary, LinkedItemSummary, ItemLinkCreate,
 )
-from ...services.cover_art import download_cover
+from ...services.cover_art import download_cover, cover_urls, delete_cover_files, optimise_and_save
 from ...services.auth import get_current_user
-from ...config import settings
+from ...services import search as search_service
 
 router = APIRouter()
 
@@ -34,16 +34,28 @@ _AUTO_LINK_FIELD = {
 }
 
 
-async def _location_path_map(db: AsyncSession) -> dict:
-    """Build a {location_id: "A → B → C"} breadcrumb map for every location.
+async def _location_maps(db: AsyncSession) -> tuple:
+    """Build a `({location_id: "A → B → C"}, {location_id: {icon_key, icon_url}})`
+    pair from a single flat (id, name, parent_id, icon_key, icon_path) query.
 
-    Built from a flat (id, name, parent_id) query rather than by walking the
-    ORM `Location.parent` relationship — that relationship isn't eagerly
-    loaded alongside `MediaItem.location`, and accessing it lazily outside an
-    AsyncSession call raises MissingGreenlet.
+    Built from a flat query rather than by walking the ORM `Location.parent`
+    relationship — that relationship isn't eagerly loaded alongside
+    `MediaItem.location`, and accessing it lazily outside an AsyncSession call
+    raises MissingGreenlet.
     """
-    rows = (await db.execute(select(Location.id, Location.name, Location.parent_id))).all()
+    rows = (
+        await db.execute(
+            select(Location.id, Location.name, Location.parent_id, Location.icon_key, Location.icon_path)
+        )
+    ).all()
     by_id = {row.id: (row.name, row.parent_id) for row in rows}
+    icon_map = {
+        row.id: {
+            "icon_key": row.icon_key,
+            "icon_url": f"/location-icons/{Path(row.icon_path).name}" if row.icon_path else None,
+        }
+        for row in rows
+    }
 
     paths: dict = {}
 
@@ -60,18 +72,7 @@ async def _location_path_map(db: AsyncSession) -> dict:
 
     for loc_id in by_id:
         build(loc_id, frozenset())
-    return paths
-
-
-async def _location_icon_map(db: AsyncSession) -> dict:
-    rows = (await db.execute(select(Location.id, Location.icon_key, Location.icon_path))).all()
-    return {
-        row.id: {
-            "icon_key": row.icon_key,
-            "icon_url": f"/location-icons/{Path(row.icon_path).name}" if row.icon_path else None,
-        }
-        for row in rows
-    }
+    return paths, icon_map
 
 
 async def _subtype_map(db: AsyncSession) -> dict:
@@ -143,16 +144,13 @@ async def _link_summaries(
 
         platform_info = platform_map.get(partner.platform_id)
         icon_info = icon_map.get(partner.location_id, {})
-        cover_url = (
-            f"/covers/{Path(partner.cover_image_path).name}"
-            if partner.cover_image_path
-            else partner.cover_image_url
-        )
+        cover_url, cover_thumb_url = cover_urls(partner.cover_image_path, partner.cover_image_url)
 
         summaries[item_id] = LinkedItemSummary(
             id=partner.id,
             title=partner.title,
             cover_url=cover_url,
+            cover_thumb_url=cover_thumb_url,
             media_subtype=MediaSubtypeSummary(**subtype_info),
             category=subtype_info["category"],
             supertype=subtype_info["supertype"],
@@ -174,11 +172,7 @@ def _item_to_response(
     icon_map: dict,
     link_summaries: dict,
 ) -> MediaItemResponse:
-    cover_url = (
-        f"/covers/{Path(item.cover_image_path).name}"
-        if item.cover_image_path
-        else item.cover_image_url
-    )
+    cover_url, cover_thumb_url = cover_urls(item.cover_image_path, item.cover_image_url)
 
     subtype_info = subtype_map.get(item.media_subtype_id)
     platform_info = platform_map.get(item.platform_id)
@@ -207,6 +201,7 @@ def _item_to_response(
             ]
         },
         cover_url=cover_url,
+        cover_thumb_url=cover_thumb_url,
         media_subtype=MediaSubtypeSummary(**subtype_info) if subtype_info else None,
         category=subtype_info["category"] if subtype_info else None,
         supertype=subtype_info["supertype"] if subtype_info else None,
@@ -221,10 +216,9 @@ def _item_to_response(
 
 
 async def _build_responses(db: AsyncSession, items: list) -> list:
-    path_map = await _location_path_map(db)
+    path_map, icon_map = await _location_maps(db)
     subtype_map = await _subtype_map(db)
     platform_map = await _platform_map(db)
-    icon_map = await _location_icon_map(db)
     item_ids = [i.id for i in items]
     link_summaries = await _link_summaries(db, item_ids, subtype_map, platform_map, path_map, icon_map)
     return [
@@ -275,17 +269,23 @@ async def list_media(
 
     filters = []
     if q:
-        term = f"%{q}%"
-        filters.append(
-            or_(
-                MediaItem.title.ilike(term),
-                MediaItem.artist.ilike(term),
-                MediaItem.author.ilike(term),
-                MediaItem.director.ilike(term),
-                MediaItem.genres.ilike(term),
-                MediaItem.description.ilike(term),
+        fts_query = search_service.build_match_query(q) if search_service.FTS5_ENABLED else None
+        if fts_query:
+            fts_table = table("media_items_fts", column("rowid"))
+            match_clause = text("media_items_fts MATCH :fts_q").bindparams(fts_q=fts_query)
+            filters.append(MediaItem.id.in_(select(fts_table.c.rowid).where(match_clause)))
+        else:
+            term = f"%{q}%"
+            filters.append(
+                or_(
+                    MediaItem.title.ilike(term),
+                    MediaItem.artist.ilike(term),
+                    MediaItem.author.ilike(term),
+                    MediaItem.director.ilike(term),
+                    MediaItem.genres.ilike(term),
+                    MediaItem.description.ilike(term),
+                )
             )
-        )
     if genre:
         filters.append(MediaItem.genres.ilike(f"%{genre}%"))
     if year:
@@ -408,9 +408,27 @@ async def _try_auto_link(db: AsyncSession, item: MediaItem, subtype: MediaSubtyp
         await db.commit()
 
 
+async def _fetch_cover_in_background(item_id: int, url: str) -> None:
+    """Download + optimise a cover image and attach it to the item.
+
+    Runs after the response has been sent (via `BackgroundTasks`) so cover
+    downloads never add latency to create/update requests. Uses its own
+    session since the request's session is closed by the time this runs.
+    Until this completes, `cover_url` falls back to the remote
+    `cover_image_url`.
+    """
+    local_path = await download_cover(url, item_id)
+    if not local_path:
+        return
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(MediaItem).where(MediaItem.id == item_id).values(cover_image_path=local_path))
+        await db.commit()
+
+
 @router.post("", response_model=MediaItemResponse, status_code=201)
 async def create_media(
     payload: MediaItemCreate,
+    background_tasks: BackgroundTasks,
     _=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -424,9 +442,7 @@ async def create_media(
     await db.flush()
 
     if item.cover_image_url:
-        local_path = await download_cover(item.cover_image_url, item.id)
-        if local_path:
-            item.cover_image_path = local_path
+        background_tasks.add_task(_fetch_cover_in_background, item.id, item.cover_image_url)
 
     await db.commit()
     await _try_auto_link(db, item, subtype)
@@ -540,6 +556,7 @@ async def get_media(item_id: int, _=Depends(get_current_user), db: AsyncSession 
 async def update_media(
     item_id: int,
     payload: MediaItemUpdate,
+    background_tasks: BackgroundTasks,
     _=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -567,9 +584,7 @@ async def update_media(
         setattr(item, field, value)
 
     if payload.cover_image_url and payload.cover_image_url != old_url:
-        local_path = await download_cover(payload.cover_image_url, item.id)
-        if local_path:
-            item.cover_image_path = local_path
+        background_tasks.add_task(_fetch_cover_in_background, item.id, payload.cover_image_url)
 
     await db.commit()
     item = await _reload_item(db, item.id)
@@ -591,9 +606,7 @@ async def delete_media(item_id: int, _=Depends(get_current_user), db: AsyncSessi
     for link in links:
         await db.delete(link)
 
-    if item.cover_image_path:
-        cover_file = Path(settings.covers_dir) / Path(item.cover_image_path).name
-        cover_file.unlink(missing_ok=True)
+    delete_cover_files(item.cover_image_path)
 
     await db.delete(item)
     await db.commit()
@@ -636,7 +649,6 @@ async def upload_cover(
     if len(data) > MAX_COVER_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Image too large (max 10 MB)")
 
-    from ...services.cover_art import optimise_and_save
     local_path = await optimise_and_save(data, item_id, "custom")
     if local_path is None:
         raise HTTPException(status_code=400, detail="File is not a valid image")

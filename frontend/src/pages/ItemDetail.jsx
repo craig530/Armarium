@@ -10,6 +10,7 @@ import CoverImage from '../components/media/CoverImage'
 import LocationIcon from '../components/ui/LocationIcon'
 import PlatformLogo from '../components/ui/PlatformLogo'
 import Input, { Textarea, Select } from '../components/ui/Input'
+import LocationPicker from '../components/locations/LocationPicker'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import { categoryLabel, supertypeLabel } from '../lib/categories'
@@ -130,15 +131,6 @@ export default function ItemDetail() {
       .finally(() => setLoading(false))
   }, [id])
 
-  const flatLocations = []
-  const flatten = (locs, depth = 0) => {
-    for (const loc of locs) {
-      flatLocations.push({ ...loc, depth })
-      if (loc.children?.length) flatten(loc.children, depth + 1)
-    }
-  }
-  flatten(locations)
-
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
   const subtypeOptions = item
@@ -148,6 +140,7 @@ export default function ItemDetail() {
     : []
 
   const handleSave = async () => {
+    if (!form.title?.trim()) return toast.error('Title is required')
     setSaving(true)
     try {
       const payload = {
@@ -365,12 +358,12 @@ export default function ItemDetail() {
           </>}
 
           {item.supertype === 'physical' ? (
-            <Select label="Location" value={form.location_id || ''} onChange={(e) => set('location_id', e.target.value)}>
-              <option value="">No location</option>
-              {flatLocations.map((loc) => (
-                <option key={loc.id} value={loc.id}>{'  '.repeat(loc.depth)}{loc.name}</option>
-              ))}
-            </Select>
+            <LocationPicker
+              label="Location"
+              locations={locations}
+              value={form.location_id || ''}
+              onChange={(value) => set('location_id', value)}
+            />
           ) : (
             <Select label="Platform" value={form.platform_id || ''} onChange={(e) => set('platform_id', e.target.value)}>
               <option value="">No platform</option>

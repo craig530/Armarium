@@ -55,7 +55,7 @@ export default function LogoPicker({ logoKey, logoUrl, onSelect, onUpload }) {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]

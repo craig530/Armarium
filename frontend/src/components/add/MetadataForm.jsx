@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ChevronRight, Plus } from 'lucide-react'
 import Input, { Textarea, Select } from '../ui/Input'
 import Button from '../ui/Button'
+import LocationPicker from '../locations/LocationPicker'
 import { mediaApi } from '../../api/media'
 import { locationsApi } from '../../api/locations'
 import { platformsApi } from '../../api/platforms'
@@ -76,15 +77,6 @@ export default function MetadataForm({ candidate, category, supertype, onBack, o
     const opts = mediaSubtypes.filter((s) => s.category === category && s.supertype === supertype)
     if (opts.length === 1) set('media_subtype_id', String(opts[0].id))
   }, [mediaSubtypes, category, supertype]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const flatLocations = []
-  const flatten = (locs, depth = 0) => {
-    for (const loc of locs) {
-      flatLocations.push({ ...loc, depth })
-      if (loc.children?.length) flatten(loc.children, depth + 1)
-    }
-  }
-  flatten(locations)
 
   const handlePlatformChange = (e) => {
     const value = e.target.value
@@ -202,14 +194,12 @@ export default function MetadataForm({ candidate, category, supertype, onBack, o
         <Input label="Barcode" value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
 
         {supertype === 'physical' && (
-          <Select label="Location" value={form.location_id} onChange={(e) => set('location_id', e.target.value)}>
-            <option value="">No location</option>
-            {flatLocations.map((loc) => (
-              <option key={loc.id} value={loc.id}>
-                {'  '.repeat(loc.depth)}{loc.name}
-              </option>
-            ))}
-          </Select>
+          <LocationPicker
+            label="Location"
+            locations={locations}
+            value={form.location_id}
+            onChange={(value) => set('location_id', value)}
+          />
         )}
 
         {supertype === 'digital' && (

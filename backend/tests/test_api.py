@@ -23,6 +23,10 @@ PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
 
+# SVG can carry an embedded <script>, so all icon/logo/cover uploads must
+# reject it regardless of the declared content-type.
+SVG_PAYLOAD = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+
 
 @pytest.fixture
 async def client():
@@ -34,13 +38,15 @@ async def client():
 
 
 @pytest.fixture(autouse=True)
-def _reset_login_rate_limit():
-    """The login rate limiter is an in-process global, so it persists across
-    tests within the same pytest run. Reset it before each test so the number
-    of tests doesn't accidentally trip the production rate limit."""
-    from app.api.v1.auth import _login_attempts
+def _reset_rate_limits():
+    """The login/lookup rate limiters are in-process globals, so they persist
+    across tests within the same pytest run. Reset them before each test so
+    the number of tests doesn't accidentally trip the production limits."""
+    from app.api.v1.auth import login_limiter
+    from app.api.v1.lookup import lookup_limiter
 
-    _login_attempts.clear()
+    login_limiter.reset()
+    lookup_limiter.reset()
     yield
 
 
@@ -555,6 +561,47 @@ async def test_delete_platform_in_use_rejected(client, auth_headers):
     assert resp.status_code == 204
 
 
+# ── Upload validation ────────────────────────────────────────────────────────
+
+async def test_cover_upload_rejects_svg(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+    resp = await client.post(
+        "/api/v1/media", json={"title": "Cover Upload Test", "media_subtype_id": cd_id}, headers=auth_headers
+    )
+    item_id = resp.json()["id"]
+
+    files = {"file": ("evil.svg", SVG_PAYLOAD, "image/svg+xml")}
+    resp = await client.post(f"/api/v1/media/{item_id}/cover", files=files, headers=auth_headers)
+    assert resp.status_code == 400
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_location_icon_upload_rejects_svg(client, auth_headers):
+    resp = await client.post("/api/v1/locations", json={"name": "Icon Upload Test Shelf"}, headers=auth_headers)
+    loc_id = resp.json()["id"]
+
+    files = {"file": ("evil.svg", SVG_PAYLOAD, "image/svg+xml")}
+    resp = await client.post(f"/api/v1/locations/{loc_id}/icon", files=files, headers=auth_headers)
+    assert resp.status_code == 400
+
+    resp = await client.delete(f"/api/v1/locations/{loc_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_platform_logo_upload_rejects_svg(client, auth_headers):
+    resp = await client.post("/api/v1/platforms", json={"name": "Logo Upload Test Platform"}, headers=auth_headers)
+    platform_id = resp.json()["id"]
+
+    files = {"file": ("evil.svg", SVG_PAYLOAD, "image/svg+xml")}
+    resp = await client.post(f"/api/v1/platforms/{platform_id}/logo", files=files, headers=auth_headers)
+    assert resp.status_code == 400
+
+    resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
 # ── Media filters ─────────────────────────────────────────────────────────────
 
 async def test_media_filters_by_category_supertype_subtype_platform(client, auth_headers):
@@ -682,6 +729,46 @@ async def test_manual_link_and_unlink(client, auth_headers):
     assert resp.status_code == 204
 
 
+async def test_delete_linked_item_clears_partner_link(client, auth_headers):
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+    digital_film_id = await _subtype_id(client, auth_headers, "Digital Film")
+
+    physical_resp = await client.post(
+        "/api/v1/media", json={"title": "Surviving Physical", "media_subtype_id": bluray_id}, headers=auth_headers
+    )
+    physical_id = physical_resp.json()["id"]
+
+    digital_resp = await client.post(
+        "/api/v1/media", json={"title": "Doomed Digital", "media_subtype_id": digital_film_id}, headers=auth_headers
+    )
+    digital_id = digital_resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/media/link",
+        json={"item_a_id": physical_id, "item_b_id": digital_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+
+    # Delete one half of the linked pair...
+    resp = await client.delete(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+    # ...the survivor should revert to a single-ownership item, not point at
+    # a now-deleted item.
+    resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["ownership"] == "physical"
+    assert resp.json()["linked_item"] is None
+
+    # And the link itself is gone, so unlinking again is a 404.
+    resp = await client.delete(f"/api/v1/media/{physical_id}/link", headers=auth_headers)
+    assert resp.status_code == 404
+
+    resp = await client.delete(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
 async def test_auto_link_on_matching_tmdb_id(client, auth_headers):
     bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
     digital_film_id = await _subtype_id(client, auth_headers, "Digital Film")
@@ -765,7 +852,7 @@ async def test_stats(client, auth_headers):
     assert "by_subtype" in body
 
 
-# ── Export ───────────────────────────────────────────────────────────────────
+# ── Export / Import ──────────────────────────────────────────────────────────
 
 async def test_export_json(client, auth_headers):
     resp = await client.get("/api/v1/library/export?format=json", headers=auth_headers)
@@ -777,3 +864,89 @@ async def test_export_csv(client, auth_headers):
     resp = await client.get("/api/v1/library/export?format=csv", headers=auth_headers)
     assert resp.status_code == 200
     assert b"title" in resp.content
+
+
+async def test_import_csv_validates_foreign_keys(client, auth_headers):
+    """Imported rows referencing locations/platforms/subtypes that don't
+    exist must not create dangling foreign keys — invalid location/platform
+    references are nulled, and rows with an unresolvable subtype are
+    skipped."""
+    import csv
+    import io
+    from app.api.v1.export_import import CSV_FIELDS
+
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+
+    rows = [
+        # Valid subtype, but location_id/platform_id point at rows that don't exist.
+        {"title": "Imported Orphaned CD", "media_subtype_id": cd_id, "location_id": 999999, "platform_id": 999999},
+        # media_subtype_id doesn't exist -> row is skipped entirely.
+        {"title": "Imported Unknown Subtype", "media_subtype_id": 999999},
+    ]
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=CSV_FIELDS, extrasaction="ignore")
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+
+    files = {"file": ("import.csv", output.getvalue().encode(), "text/csv")}
+    resp = await client.post("/api/v1/library/import?format=csv", files=files, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json() == {"imported": 1, "skipped": 1}
+
+    resp = await client.get("/api/v1/media?q=Imported+Orphaned+CD", headers=auth_headers)
+    items = resp.json()["items"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["location_id"] is None
+    assert item["platform_id"] is None
+
+    resp = await client.delete(f"/api/v1/media/{item['id']}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+# ── Performance ──────────────────────────────────────────────────────────────
+
+async def test_list_endpoint_stays_fast_with_large_catalogue(client, auth_headers):
+    """Seed 10,000 items directly (bypassing the API) and confirm the list
+    endpoint — including a filter on the media_subtype_id column added to
+    `_MISSING_INDEXES` — stays fast."""
+    import time
+    from sqlalchemy import insert, delete
+    from app.database import AsyncSessionLocal
+    from app.models.media import MediaItem
+
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+    item_count = 10_000
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            insert(MediaItem),
+            [
+                {"title": f"Perf Item {i}", "media_subtype_id": cd_id, "year": 2000 + (i % 25)}
+                for i in range(item_count)
+            ],
+        )
+        await db.commit()
+
+    try:
+        start = time.perf_counter()
+        resp = await client.get("/api/v1/media?per_page=24", headers=auth_headers)
+        elapsed = time.perf_counter() - start
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] >= item_count
+        assert len(body["items"]) == 24
+        assert elapsed < 2.0, f"List endpoint took {elapsed:.2f}s with {item_count}+ items"
+
+        start = time.perf_counter()
+        resp = await client.get(f"/api/v1/media?media_subtype_id={cd_id}&per_page=24", headers=auth_headers)
+        elapsed = time.perf_counter() - start
+        assert resp.status_code == 200
+        assert resp.json()["total"] >= item_count
+        assert elapsed < 2.0, f"Filtered list took {elapsed:.2f}s with {item_count}+ items"
+    finally:
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(MediaItem).where(MediaItem.title.like("Perf Item %")))
+            await db.commit()

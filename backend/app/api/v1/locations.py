@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
@@ -14,7 +14,7 @@ from ...config import settings
 
 router = APIRouter()
 
-ALLOWED_ICON_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml", "image/bmp"}
+ALLOWED_ICON_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
 MAX_ICON_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB
 
 
@@ -78,7 +78,8 @@ async def _count_map(db: AsyncSession) -> dict:
 
 
 @router.get("", response_model=List[LocationResponse])
-async def list_locations(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def list_locations(response: Response, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    response.headers["Cache-Control"] = "private, max-age=60"
     count_map = await _count_map(db)
     rows = await _location_rows(db)
     roots, _by_id = _build_tree(rows, count_map)
@@ -209,7 +210,7 @@ async def upload_location_icon(
         raise HTTPException(status_code=404, detail="Location not found")
 
     if file.content_type not in ALLOWED_ICON_TYPES:
-        raise HTTPException(status_code=400, detail="Unsupported image type. Use JPEG, PNG, WebP, GIF, SVG or BMP.")
+        raise HTTPException(status_code=400, detail="Unsupported image type. Use JPEG, PNG, WebP, GIF or BMP.")
 
     data = await file.read()
     if len(data) > MAX_ICON_UPLOAD_BYTES:

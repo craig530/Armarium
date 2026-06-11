@@ -1,17 +1,20 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import Layout from './components/layout/Layout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
-import Login from './pages/Login'
-import Library from './pages/Library'
-import AddItem from './pages/AddItem'
-import ItemDetail from './pages/ItemDetail'
-import Admin from './pages/Admin'
-import SettingsLayout from './pages/Settings/SettingsLayout'
-import SettingsLocations from './pages/Settings/SettingsLocations'
-import SettingsPlatforms from './pages/Settings/SettingsPlatforms'
-import SettingsMediaSubtypes from './pages/Settings/SettingsMediaSubtypes'
+import { PageLoader } from './components/ui/LoadingSpinner'
 import { DEFAULT_CATEGORY_SLUG } from './lib/categories'
+
+const Login = lazy(() => import('./pages/Login'))
+const Library = lazy(() => import('./pages/Library'))
+const AddItem = lazy(() => import('./pages/AddItem'))
+const ItemDetail = lazy(() => import('./pages/ItemDetail'))
+const Admin = lazy(() => import('./pages/Admin'))
+const SettingsLayout = lazy(() => import('./pages/Settings/SettingsLayout'))
+const SettingsLocations = lazy(() => import('./pages/Settings/SettingsLocations'))
+const SettingsPlatforms = lazy(() => import('./pages/Settings/SettingsPlatforms'))
+const SettingsMediaSubtypes = lazy(() => import('./pages/Settings/SettingsMediaSubtypes'))
 
 export default function App() {
   return (
@@ -23,38 +26,40 @@ export default function App() {
           duration: 3500,
         }}
       />
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
-          <Route path="library" element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
-          <Route path="library/:category" element={<Library />} />
-          <Route path="add" element={<AddItem />} />
-          <Route path="item/:id" element={<ItemDetail />} />
-          <Route path="locations" element={<Navigate to="/settings/locations" replace />} />
-          <Route path="settings" element={<SettingsLayout />}>
-            <Route index element={<Navigate to="/settings/locations" replace />} />
-            <Route path="locations" element={<SettingsLocations />} />
-            <Route path="platforms" element={<SettingsPlatforms />} />
-            <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
-          </Route>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
           <Route
-            path="admin"
+            path="/"
             element={
-              <ProtectedRoute requireAdmin>
-                <Admin />
+              <ProtectedRoute>
+                <Layout />
               </ProtectedRoute>
             }
-          />
-        </Route>
-      </Routes>
+          >
+            <Route index element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
+            <Route path="library" element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
+            <Route path="library/:category" element={<Library />} />
+            <Route path="add" element={<AddItem />} />
+            <Route path="item/:id" element={<ItemDetail />} />
+            <Route path="locations" element={<Navigate to="/settings/locations" replace />} />
+            <Route path="settings" element={<SettingsLayout />}>
+              <Route index element={<Navigate to="/settings/locations" replace />} />
+              <Route path="locations" element={<SettingsLocations />} />
+              <Route path="platforms" element={<SettingsPlatforms />} />
+              <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
+            </Route>
+            <Route
+              path="admin"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Admin />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

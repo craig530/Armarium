@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List
@@ -48,7 +48,8 @@ async def _check_unique(db: AsyncSession, category, supertype, name: str, exclud
 
 
 @router.get("", response_model=List[MediaSubtypeResponse])
-async def list_media_subtypes(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def list_media_subtypes(response: Response, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    response.headers["Cache-Control"] = "private, max-age=60"
     rows = (
         await db.execute(
             select(MediaSubtype).order_by(

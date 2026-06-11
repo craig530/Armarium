@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from typing import Optional
 import csv
 import io
@@ -13,6 +12,10 @@ import shutil
 
 from ...database import get_db
 from ...models.media import MediaItem
+from ...models.location import Location
+from ...models.media_subtype import MediaSubtype
+from ...models.platform import Platform
+from ...models.enums import Supertype
 from ...schemas.media import MediaItemCreate
 from ...services.auth import get_current_user, get_current_admin
 from ...config import settings
@@ -21,8 +24,10 @@ router = APIRouter()
 
 CSV_FIELDS = [
     "title", "media_subtype_id", "year", "genres", "edition", "barcode",
+    "location_id", "platform_id",
     "artist", "label", "track_count",
-    "director", "studio", "runtime_minutes", "rating",
+    "director", "studio", "runtime_minutes", "rating", "cast_list",
+    "seasons_owned", "episode_count",
     "author", "publisher", "page_count", "isbn", "language",
     "description", "notes",
     "musicbrainz_id", "tmdb_id", "openlibrary_id",
@@ -37,7 +42,7 @@ def _item_to_row(item: MediaItem) -> dict:
 def _row_to_create(row: dict) -> Optional[MediaItemCreate]:
     try:
         # Type coerce numeric strings
-        for int_field in ("year", "track_count", "runtime_minutes", "page_count", "tmdb_id", "media_subtype_id", "episode_count"):
+        for int_field in ("year", "track_count", "runtime_minutes", "page_count", "tmdb_id", "media_subtype_id", "episode_count", "location_id", "platform_id"):
             if row.get(int_field):
                 row[int_field] = int(row[int_field]) if str(row[int_field]).strip() else None
             else:
@@ -112,12 +117,31 @@ async def import_library(
         reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
         rows = list(reader)
 
+    # Validate foreign keys against what actually exists, rather than letting
+    # stale/foreign ids from an old export create dangling references.
+    subtype_supertypes = dict(
+        (await db.execute(select(MediaSubtype.id, MediaSubtype.supertype))).all()
+    )
+    valid_locations = set((await db.execute(select(Location.id))).scalars().all())
+    valid_platforms = set((await db.execute(select(Platform.id))).scalars().all())
+
     created, skipped = 0, 0
     for row in rows:
         item_create = _row_to_create(dict(row))
         if item_create is None:
             skipped += 1
             continue
+
+        supertype = subtype_supertypes.get(item_create.media_subtype_id)
+        if supertype is None:
+            skipped += 1
+            continue
+
+        if supertype != Supertype.PHYSICAL or item_create.location_id not in valid_locations:
+            item_create.location_id = None
+        if supertype != Supertype.DIGITAL or item_create.platform_id not in valid_platforms:
+            item_create.platform_id = None
+
         db.add(MediaItem(**item_create.model_dump()))
         created += 1
 

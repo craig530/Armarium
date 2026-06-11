@@ -7,14 +7,27 @@ from ...database import get_db
 from ...models.media import MediaItem
 from ...models.enums import MediaCategory
 from ...schemas.media import LookupCandidate
+from ...models.user import User
 from ...services import openlibrary, musicbrainz, tmdb
 from ...services.cache import lookup_cache
 from ...services.auth import get_current_user
+from ...services.rate_limit import SlidingWindowRateLimiter
 from ...config import settings
 
 router = APIRouter()
 
 _ISBN_PREFIXES = {"978", "979"}
+
+# External lookup providers (TMDB/MusicBrainz/OpenLibrary) have their own,
+# much stricter rate limits — this just stops a single user from hammering
+# them (and the shared `lookup_cache`) badly enough to get this server's IP
+# throttled or banned upstream.
+lookup_limiter = SlidingWindowRateLimiter(max_attempts=30, window_seconds=60)
+
+
+async def _rate_limited_user(current_user: User = Depends(get_current_user)) -> User:
+    lookup_limiter.check(current_user.username, "Too many lookup requests. Please wait a moment and try again.")
+    return current_user
 
 
 def _guess_category(barcode: str) -> MediaCategory:
@@ -38,7 +51,7 @@ async def _library_count(db: AsyncSession, barcode: str) -> int:
 async def lookup_barcode(
     barcode: str,
     category: Optional[MediaCategory] = Query(None),
-    _=Depends(get_current_user),
+    _=Depends(_rate_limited_user),
     db: AsyncSession = Depends(get_db),
 ):
     cache_key = f"barcode:{barcode}:{category}"
@@ -73,7 +86,7 @@ async def search_lookup(
     q: str = Query(..., min_length=1),
     category: MediaCategory = Query(...),
     limit: int = Query(10, ge=1, le=20),
-    _=Depends(get_current_user),
+    _=Depends(_rate_limited_user),
 ):
     cache_key = f"search:{q}:{category}:{limit}"
     cached = lookup_cache.get(cache_key, ttl=3600)
@@ -102,7 +115,7 @@ async def search_lookup(
 @router.get("/tmdb/{tmdb_id}", response_model=LookupCandidate)
 async def get_tmdb_details(
     tmdb_id: int,
-    _=Depends(get_current_user),
+    _=Depends(_rate_limited_user),
 ):
     if not settings.tmdb_api_key:
         raise HTTPException(status_code=503, detail="TMDB_API_KEY not configured")
