@@ -216,7 +216,7 @@ async def test_create_media_rejects_unknown_subtype(client, auth_headers):
 
 async def test_ownership_field_validation(client, auth_headers):
     cd_id = await _subtype_id(client, auth_headers, "CD")
-    digital_music_id = await _subtype_id(client, auth_headers, "Digital Music")
+    digital_music_id = await _subtype_id(client, auth_headers, "Music")
 
     resp = await client.post("/api/v1/platforms", json={"name": "Validation Platform"}, headers=auth_headers)
     assert resp.status_code == 201
@@ -436,7 +436,7 @@ async def test_media_subtype_seed_and_crud(client, auth_headers):
     assert resp.status_code == 200
     subtypes = resp.json()
     names = {s["name"] for s in subtypes}
-    assert {"CD", "Blu-ray", "Book", "Digital Music", "Streaming TV"}.issubset(names)
+    assert {"CD", "Blu-ray", "Book", "Music", "TV Series", "eBook"}.issubset(names)
 
     # Create
     resp = await client.post(
@@ -539,7 +539,7 @@ async def test_delete_platform_in_use_rejected(client, auth_headers):
     assert resp.status_code == 201
     platform_id = resp.json()["id"]
 
-    digital_music_id = await _subtype_id(client, auth_headers, "Digital Music")
+    digital_music_id = await _subtype_id(client, auth_headers, "Music")
 
     resp = await client.post(
         "/api/v1/media",
@@ -607,7 +607,7 @@ async def test_platform_logo_upload_rejects_svg(client, auth_headers):
 async def test_media_filters_by_category_supertype_subtype_platform(client, auth_headers):
     cd_id = await _subtype_id(client, auth_headers, "CD")
     book_id = await _subtype_id(client, auth_headers, "Book")
-    digital_music_id = await _subtype_id(client, auth_headers, "Digital Music")
+    digital_music_id = await _subtype_id(client, auth_headers, "Music")
 
     resp = await client.post("/api/v1/platforms", json={"name": "Filter Platform"}, headers=auth_headers)
     platform_id = resp.json()["id"]
@@ -666,7 +666,7 @@ async def test_media_filters_by_category_supertype_subtype_platform(client, auth
 
 async def test_manual_link_and_unlink(client, auth_headers):
     bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
-    digital_film_id = await _subtype_id(client, auth_headers, "Digital Film")
+    digital_film_id = await _subtype_id(client, auth_headers, "Film")
 
     physical_resp = await client.post(
         "/api/v1/media", json={"title": "Physical Film", "media_subtype_id": bluray_id}, headers=auth_headers
@@ -731,7 +731,7 @@ async def test_manual_link_and_unlink(client, auth_headers):
 
 async def test_delete_linked_item_clears_partner_link(client, auth_headers):
     bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
-    digital_film_id = await _subtype_id(client, auth_headers, "Digital Film")
+    digital_film_id = await _subtype_id(client, auth_headers, "Film")
 
     physical_resp = await client.post(
         "/api/v1/media", json={"title": "Surviving Physical", "media_subtype_id": bluray_id}, headers=auth_headers
@@ -771,7 +771,7 @@ async def test_delete_linked_item_clears_partner_link(client, auth_headers):
 
 async def test_auto_link_on_matching_tmdb_id(client, auth_headers):
     bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
-    digital_film_id = await _subtype_id(client, auth_headers, "Digital Film")
+    digital_film_id = await _subtype_id(client, auth_headers, "Film")
 
     physical_resp = await client.post(
         "/api/v1/media",

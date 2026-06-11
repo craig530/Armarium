@@ -15,6 +15,10 @@ from .migrations import (
     create_missing_indexes,
     seed_media_subtypes,
     backfill_media_subtypes,
+    remove_unused_default_subtypes,
+    rename_default_subtypes,
+    add_books_digital_subtypes,
+    seed_default_platforms,
     drop_legacy_media_type_column,
 )
 from .services.search import setup_fts
@@ -63,6 +67,10 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         await seed_media_subtypes(db)
         await backfill_media_subtypes(db)
+        await remove_unused_default_subtypes(db)
+        await rename_default_subtypes(db)
+        await add_books_digital_subtypes(db)
+        await seed_default_platforms(db)
 
     async with engine.begin() as conn:
         await drop_legacy_media_type_column(conn)

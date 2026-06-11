@@ -195,7 +195,8 @@ Built-in platform logos (`frontend/src/assets/icons/platforms/*.svg`) are
 extracted at build time from [simple-icons](https://github.com/simple-icons/simple-icons)
 (`frontend/scripts/extract-platform-logos.mjs`), currently covering: Plex,
 Netflix, Apple TV, Spotify, Apple Music, YouTube Music, Tidal, MUBI, NOW,
-Paramount+, HBO Max/Max, and Crunchyroll.
+Paramount+, HBO Max/Max, Crunchyroll, Audible, Google Play, YouTube, Bandcamp,
+SoundCloud, Deezer, iTunes, Sky, and Rakuten TV.
 
 The simple-icons **package** (the SVG path data and code that ships it) is
 released under **CC0-1.0** (public domain). However, **the brand marks
@@ -216,14 +217,18 @@ platforms whose logos may appear:
 
 > Plex, Netflix, Amazon Prime Video, Apple TV, Disney+, Spotify, Apple Music,
 > YouTube Music, Tidal, Qobuz, MUBI, BFI Player, NOW (NOW TV), Paramount+,
-> Peacock, HBO Max (Max), and Crunchyroll are trademarks of their respective
-> owners. References to these services in Armarium are for identification
-> purposes only.
+> Peacock, HBO Max (Max), Crunchyroll, Audible, Kindle, Google Play, YouTube,
+> Bandcamp, SoundCloud, Deezer, iTunes, Sky, Rakuten TV, and Curzon Home
+> Cinema are trademarks of their respective owners. References to these
+> services in Armarium are for identification purposes only.
 
 A handful of platforms in `frontend/src/lib/platformLogos.js`
-(**Amazon Prime Video, Disney+, Qobuz, BFI Player, Peacock**) have no
-official entry in simple-icons and currently fall back to a generic icon — no
-third-party brand asset is bundled for these.
+(**Amazon Prime Video, Disney+, Qobuz, BFI Player, Peacock, Kindle, Curzon
+Home Cinema**) have no official entry in simple-icons and have no bundled
+brand asset. These fall back to a generated letter-mark badge (the
+platform's initials on a deterministic accent colour, see
+`frontend/src/components/ui/PlatformLogo.jsx`) rather than any third-party
+logo.
 
 > **Maintenance note:** "HBO Max" was rebranded to "Max" in 2023. The
 > `simple-icons` entry used here (`siHbomax`) reflects the version of

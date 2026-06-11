@@ -80,17 +80,15 @@ def _default_media_subtypes():
     P, D = Supertype.PHYSICAL, Supertype.DIGITAL
     return [
         ("CD", M, P, 0),
-        ("Digital Music", M, D, 0),
-        ("Streaming Music", M, D, 1),
+        ("Music", M, D, 0),
         ("DVD", F, P, 0),
         ("Blu-ray", F, P, 1),
-        ("4K Blu-ray", F, P, 2),
-        ("Digital Film", F, D, 0),
-        ("Digital TV Series", F, D, 1),
-        ("Streaming Film", F, D, 2),
-        ("Streaming TV", F, D, 3),
+        ("Film", F, D, 0),
+        ("TV Series", F, D, 1),
         ("Book", B, P, 0),
         ("Graphic Novel", B, P, 1),
+        ("eBook", B, D, 0),
+        ("Audiobook", B, D, 1),
     ]
 
 
@@ -159,6 +157,127 @@ async def backfill_media_subtypes(session: AsyncSession) -> None:
     if updated:
         await session.commit()
         logger.info("Backfilled media_subtype_id for %d item(s)", updated)
+
+
+# Default subtypes that are no longer seeded for fresh installs (replaced by
+# the platform-based "Digital" subtypes). Removed from existing databases only
+# if no media item still references them — existing data always wins.
+_REMOVABLE_DEFAULT_SUBTYPES = ["Streaming Music", "Streaming Film", "Streaming TV", "4K Blu-ray"]
+
+
+async def remove_unused_default_subtypes(session: AsyncSession) -> None:
+    """Drop legacy default subtypes that have no items, on existing databases."""
+    from .models.media import MediaItem
+    from .models.media_subtype import MediaSubtype
+
+    removed = 0
+    for name in _REMOVABLE_DEFAULT_SUBTYPES:
+        subtype = (await session.execute(
+            select(MediaSubtype).where(MediaSubtype.name == name)
+        )).scalar_one_or_none()
+        if subtype is None:
+            continue
+        in_use = (await session.execute(
+            select(MediaItem.id).where(MediaItem.media_subtype_id == subtype.id).limit(1)
+        )).first()
+        if in_use is not None:
+            continue
+        await session.delete(subtype)
+        removed += 1
+
+    if removed:
+        await session.commit()
+        logger.info("Removed %d unused legacy default media subtype(s)", removed)
+
+
+# (old name, new name) — renamed on existing databases to match the new
+# default seed list, unless the new name already exists for that
+# category/supertype (existing data wins).
+_SUBTYPE_RENAMES = [
+    ("Digital Music", "Music"),
+    ("Digital Film", "Film"),
+    ("Digital TV Series", "TV Series"),
+]
+
+
+async def rename_default_subtypes(session: AsyncSession) -> None:
+    """Rename legacy default subtypes to their new names, on existing databases."""
+    from .models.media_subtype import MediaSubtype
+
+    renamed = 0
+    for old_name, new_name in _SUBTYPE_RENAMES:
+        subtype = (await session.execute(
+            select(MediaSubtype).where(MediaSubtype.name == old_name)
+        )).scalar_one_or_none()
+        if subtype is None:
+            continue
+        clash = (await session.execute(
+            select(MediaSubtype.id).where(
+                MediaSubtype.category == subtype.category,
+                MediaSubtype.supertype == subtype.supertype,
+                MediaSubtype.name == new_name,
+            )
+        )).first()
+        if clash is not None:
+            continue
+        subtype.name = new_name
+        renamed += 1
+
+    if renamed:
+        await session.commit()
+        logger.info("Renamed %d legacy default media subtype(s)", renamed)
+
+
+async def add_books_digital_subtypes(session: AsyncSession) -> None:
+    """Add the Books/Digital eBook and Audiobook subtypes if missing.
+
+    Fresh installs get these from `_default_media_subtypes()`; this covers
+    existing databases seeded before they were added.
+    """
+    from .models.enums import MediaCategory, Supertype
+    from .models.media_subtype import MediaSubtype
+
+    added = 0
+    for name, sort_order in [("eBook", 0), ("Audiobook", 1)]:
+        existing = (await session.execute(
+            select(MediaSubtype.id).where(
+                MediaSubtype.category == MediaCategory.BOOKS,
+                MediaSubtype.supertype == Supertype.DIGITAL,
+                MediaSubtype.name == name,
+            )
+        )).first()
+        if existing is not None:
+            continue
+        session.add(MediaSubtype(name=name, category=MediaCategory.BOOKS, supertype=Supertype.DIGITAL, sort_order=sort_order))
+        added += 1
+
+    if added:
+        await session.commit()
+        logger.info("Added %d Books/Digital media subtype(s)", added)
+
+
+# Default platforms seeded for digital Books items (Kindle eBooks, Audible
+# audiobooks). Idempotent insert-if-missing-by-name.
+_DEFAULT_PLATFORMS = [
+    ("Kindle", "kindle"),
+    ("Audible", "audible"),
+]
+
+
+async def seed_default_platforms(session: AsyncSession) -> None:
+    from .models.platform import Platform
+
+    added = 0
+    for name, logo_key in _DEFAULT_PLATFORMS:
+        existing = (await session.execute(select(Platform.id).where(Platform.name == name))).first()
+        if existing is not None:
+            continue
+        session.add(Platform(name=name, logo_key=logo_key))
+        added += 1
+
+    if added:
+        await session.commit()
+        logger.info("Seeded %d default platform(s)", added)
 
 
 async def drop_legacy_media_type_column(conn: AsyncConnection) -> None:

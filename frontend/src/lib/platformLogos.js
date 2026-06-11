@@ -19,6 +19,15 @@ import nowtv from '../assets/icons/platforms/nowtv.svg'
 import paramountplus from '../assets/icons/platforms/paramountplus.svg'
 import hbomax from '../assets/icons/platforms/hbomax.svg'
 import crunchyroll from '../assets/icons/platforms/crunchyroll.svg'
+import audible from '../assets/icons/platforms/audible.svg'
+import googleplay from '../assets/icons/platforms/googleplay.svg'
+import youtube from '../assets/icons/platforms/youtube.svg'
+import bandcamp from '../assets/icons/platforms/bandcamp.svg'
+import soundcloud from '../assets/icons/platforms/soundcloud.svg'
+import deezer from '../assets/icons/platforms/deezer.svg'
+import itunes from '../assets/icons/platforms/itunes.svg'
+import sky from '../assets/icons/platforms/sky.svg'
+import rakutentv from '../assets/icons/platforms/rakutentv.svg'
 
 export const PLATFORM_LOGOS = {
   plex: { label: 'Plex', logoUrl: plex, aliases: [] },
@@ -38,6 +47,18 @@ export const PLATFORM_LOGOS = {
   peacock: { label: 'Peacock', logoUrl: null, aliases: [] },
   hbomax: { label: 'HBO Max', logoUrl: hbomax, aliases: ['max', 'hbo'] },
   crunchyroll: { label: 'Crunchyroll', logoUrl: crunchyroll, aliases: [] },
+  audible: { label: 'Audible', logoUrl: audible, aliases: [] },
+  kindle: { label: 'Kindle', logoUrl: null, aliases: [] },
+  google_play_movies: { label: 'Google Play Movies & TV', logoUrl: googleplay, aliases: ['google play movies', 'google play video'] },
+  google_play_music: { label: 'Google Play Music', logoUrl: googleplay, aliases: [] },
+  youtube: { label: 'YouTube', logoUrl: youtube, aliases: [] },
+  bandcamp: { label: 'Bandcamp', logoUrl: bandcamp, aliases: [] },
+  soundcloud: { label: 'SoundCloud', logoUrl: soundcloud, aliases: ['sound cloud'] },
+  deezer: { label: 'Deezer', logoUrl: deezer, aliases: [] },
+  itunes: { label: 'iTunes', logoUrl: itunes, aliases: [] },
+  sky: { label: 'Sky', logoUrl: sky, aliases: ['sky store', 'sky go'] },
+  rakutentv: { label: 'Rakuten TV', logoUrl: rakutentv, aliases: ['rakuten'] },
+  curzon: { label: 'Curzon Home Cinema', logoUrl: null, aliases: ['curzon'] },
 }
 
 /** Find a built-in logo key matching a user-entered platform name (case-insensitive, exact or alias match). */

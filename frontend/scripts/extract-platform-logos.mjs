@@ -27,6 +27,15 @@ export const PLATFORM_ICON_SOURCES = {
   paramountplus: 'siParamountplus',
   hbomax: 'siHbomax',
   crunchyroll: 'siCrunchyroll',
+  audible: 'siAudible',
+  googleplay: 'siGoogleplay',
+  youtube: 'siYoutube',
+  bandcamp: 'siBandcamp',
+  soundcloud: 'siSoundcloud',
+  deezer: 'siDeezer',
+  itunes: 'siItunes',
+  sky: 'siSky',
+  rakutentv: 'siRakuten',
 }
 
 for (const [key, importName] of Object.entries(PLATFORM_ICON_SOURCES)) {
