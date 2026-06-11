@@ -1,21 +1,40 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { MapPin, Tv, Tags } from 'lucide-react'
 import clsx from 'clsx'
 
 const TABS = [
-  { to: '/settings/locations', label: 'Locations', icon: MapPin },
-  { to: '/settings/platforms', label: 'Platforms', icon: Tv },
-  { to: '/settings/media-subtypes', label: 'Media Types', icon: Tags },
+  {
+    to: '/settings/locations',
+    label: 'Locations',
+    icon: MapPin,
+    title: 'Manage Locations',
+    description: 'Where your physical media lives — rooms, shelves, boxes and more.',
+  },
+  {
+    to: '/settings/platforms',
+    label: 'Platforms',
+    icon: Tv,
+    title: 'Manage Platforms',
+    description: 'Streaming and digital services for your library, e.g. Netflix, Plex, Spotify.',
+  },
+  {
+    to: '/settings/media-subtypes',
+    label: 'Media Types',
+    icon: Tags,
+    title: 'Manage Media Types',
+    description: 'Subtypes within each category and format, e.g. CD, Blu-ray, Streaming Film.',
+  },
 ]
 
 export default function SettingsLayout() {
+  const location = useLocation()
+  const activeTab = TABS.find((t) => location.pathname.startsWith(t.to)) || TABS[0]
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Manage locations, platforms and media types used across your collection.
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{activeTab.title}</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{activeTab.description}</p>
       </div>
 
       <nav className="flex gap-1 border-b border-gray-200 dark:border-gray-800">

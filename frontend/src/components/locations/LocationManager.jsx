@@ -85,8 +85,7 @@ export default function LocationManager() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-white">Manage locations</h2>
+      <div className="flex items-center justify-end">
         <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true) }}>
           <Plus size={15} /> New location
         </Button>

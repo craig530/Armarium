@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Sun, Moon, Plus, LayoutGrid, Music, Clapperboard, BookOpen, Settings, ShieldCheck, LogOut, User, Download } from 'lucide-react'
+import { Sun, Moon, Plus, LayoutGrid, Music, Clapperboard, BookOpen, Settings, ShieldCheck, LogOut, User, Download, ChevronDown, MapPin, Tv, Tags } from 'lucide-react'
 import { useThemeStore, useAuthStore } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -23,11 +23,18 @@ const navItems = [
   })),
 ]
 
+const MANAGE_LINKS = [
+  { to: '/settings/locations', label: 'Manage Locations', icon: MapPin },
+  { to: '/settings/platforms', label: 'Manage Platforms', icon: Tv },
+  { to: '/settings/media-subtypes', label: 'Manage Media Types', icon: Tags },
+]
+
 export default function Navbar({ stats }) {
   const { dark, toggle } = useThemeStore()
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [manageMenuOpen, setManageMenuOpen] = useState(false)
 
   const handleExport = async (format) => {
     try {
@@ -82,6 +89,49 @@ export default function Navbar({ stats }) {
             )
           })}
         </nav>
+
+        {/* Manage menu */}
+        <div className="relative">
+          <button
+            onClick={() => setManageMenuOpen((o) => !o)}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+              manageMenuOpen
+                ? 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300'
+                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+            )}
+          >
+            <Settings size={15} />
+            <span className="hidden sm:flex items-center gap-1">
+              Manage <ChevronDown size={14} />
+            </span>
+          </button>
+
+          {manageMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setManageMenuOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-20 w-52 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 py-1 overflow-hidden">
+                {MANAGE_LINKS.map(({ to, label, icon: Icon }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    onClick={() => setManageMenuOpen(false)}
+                    className={({ isActive }) =>
+                      clsx(
+                        'flex items-center gap-2 px-3 py-2 text-sm',
+                        isActive
+                          ? 'text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-950'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      )
+                    }
+                  >
+                    <Icon size={14} /> {label}
+                  </NavLink>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
         <div className="ml-auto flex items-center gap-2">
           {/* Keyboard hint */}

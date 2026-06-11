@@ -75,16 +75,11 @@ export default function MediaSubtypeManager() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-white">Manage media types</h2>
+      <div className="flex items-center justify-end">
         <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true) }}>
           <Plus size={15} /> New type
         </Button>
       </div>
-
-      <p className="text-sm text-gray-500 dark:text-gray-400 -mt-4">
-        Subtypes within each category and format, e.g. CD, Blu-ray, Streaming Film.
-      </p>
 
       {/* Add/Edit form */}
       {showForm && (
