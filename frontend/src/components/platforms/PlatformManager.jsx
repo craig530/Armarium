@@ -1,30 +1,21 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Check, X, Tv } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import { platformsApi } from '../../api/platforms'
-import { platformLogoUrl, matchPlatformLogo, PLATFORM_LOGOS } from '../../lib/platformLogos'
+import { matchPlatformLogo, PLATFORM_LOGOS } from '../../lib/platformLogos'
 import Input from '../ui/Input'
 import Button from '../ui/Button'
+import PlatformLogo from '../ui/PlatformLogo'
+import LogoPicker from '../settings/LogoPicker'
 import toast from 'react-hot-toast'
 
-function PlatformLogo({ platform, className = 'h-8 w-8' }) {
-  const url = platformLogoUrl(platform)
-  return (
-    <div className={`shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden p-1 ${className}`}>
-      {url ? (
-        <img src={url} alt="" className="h-full w-full object-contain" />
-      ) : (
-        <Tv size={16} className="text-gray-400" />
-      )}
-    </div>
-  )
-}
+const EMPTY_FORM = { name: '', logo_key: '', logo_url: null }
 
 export default function PlatformManager() {
   const [platforms, setPlatforms] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState({ name: '' })
+  const [form, setForm] = useState(EMPTY_FORM)
 
   const load = () => {
     platformsApi.list().then(setPlatforms).catch(console.error).finally(() => setLoading(false))
@@ -35,17 +26,17 @@ export default function PlatformManager() {
   const handleSave = async () => {
     if (!form.name.trim()) return toast.error('Name required')
     try {
+      const payload = { name: form.name, logo_key: form.logo_key || null }
       if (editId) {
-        await platformsApi.update(editId, { name: form.name })
+        await platformsApi.update(editId, payload)
         toast.success('Platform updated')
       } else {
-        const matched = matchPlatformLogo(form.name)
-        await platformsApi.create({ name: form.name, logo_key: matched })
+        await platformsApi.create(payload)
         toast.success('Platform created')
       }
       setShowForm(false)
       setEditId(null)
-      setForm({ name: '' })
+      setForm(EMPTY_FORM)
       load()
     } catch (err) {
       toast.error(err.message)
@@ -54,7 +45,7 @@ export default function PlatformManager() {
 
   const handleEdit = (platform) => {
     setEditId(platform.id)
-    setForm({ name: platform.name })
+    setForm({ name: platform.name, logo_key: platform.logo_key || '', logo_url: platform.logo_url || null })
     setShowForm(true)
   }
 
@@ -69,12 +60,24 @@ export default function PlatformManager() {
     }
   }
 
+  const handleLogoUpload = async (file) => {
+    if (!editId) return
+    try {
+      const updated = await platformsApi.uploadLogo(editId, file)
+      setForm((f) => ({ ...f, logo_url: updated.logo_url }))
+      toast.success('Logo uploaded')
+      load()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">Manage platforms</h2>
-        <Button size="sm" onClick={() => { setEditId(null); setForm({ name: '' }); setShowForm(true) }}>
+        <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true) }}>
           <Plus size={15} /> New platform
         </Button>
       </div>
@@ -92,7 +95,14 @@ export default function PlatformManager() {
           <Input
             label="Name"
             value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            onChange={(e) => {
+              const name = e.target.value
+              setForm((f) => ({
+                ...f,
+                name,
+                logo_key: !editId && !f.logo_key ? (matchPlatformLogo(name) || '') : f.logo_key,
+              }))
+            }}
             placeholder="e.g. Netflix, Plex, Spotify"
             autoFocus
             list="platform-suggestions"
@@ -102,6 +112,12 @@ export default function PlatformManager() {
               <option key={p.label} value={p.label} />
             ))}
           </datalist>
+          <LogoPicker
+            logoKey={form.logo_key || null}
+            logoUrl={form.logo_url}
+            onSelect={(key) => setForm((f) => ({ ...f, logo_key: key || '' }))}
+            onUpload={editId ? handleLogoUpload : undefined}
+          />
           <div className="flex gap-2">
             <Button size="sm" onClick={handleSave}>
               <Check size={14} /> Save
