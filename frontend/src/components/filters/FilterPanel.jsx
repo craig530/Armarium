@@ -9,7 +9,7 @@ const SORT_OPTIONS = [
   { value: 'year', label: 'Year' },
 ]
 
-export default function FilterPanel({ locations = [] }) {
+export default function FilterPanel({ locations = [], mediaSubtypes = [], platforms = [], category }) {
   const { filters, setFilter, resetFilters } = useLibraryStore()
 
   const flatLocations = []
@@ -20,6 +20,13 @@ export default function FilterPanel({ locations = [] }) {
     }
   }
   flatten(locations)
+
+  const categorySubtypes = mediaSubtypes
+    .filter((s) => s.category === category)
+    .filter((s) => !filters.supertype || s.supertype === filters.supertype)
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+  const physicalSubtypes = categorySubtypes.filter((s) => s.supertype === 'physical')
+  const digitalSubtypes = categorySubtypes.filter((s) => s.supertype === 'digital')
 
   const hasActiveFilters = filters.q || filters.supertype || filters.media_subtype_id || filters.platform_id || filters.genre || filters.year || filters.location_id
 
@@ -35,6 +42,41 @@ export default function FilterPanel({ locations = [] }) {
           <option key={t.value} value={t.value}>{t.label}</option>
         ))}
       </Select>
+
+      <Select
+        value={filters.media_subtype_id}
+        onChange={(e) => setFilter('media_subtype_id', e.target.value)}
+        className="w-40"
+      >
+        <option value="">All types</option>
+        {physicalSubtypes.length > 0 && (
+          <optgroup label="Physical">
+            {physicalSubtypes.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </optgroup>
+        )}
+        {digitalSubtypes.length > 0 && (
+          <optgroup label="Digital">
+            {digitalSubtypes.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </optgroup>
+        )}
+      </Select>
+
+      {platforms.length > 0 && (
+        <Select
+          value={filters.platform_id}
+          onChange={(e) => setFilter('platform_id', e.target.value)}
+          className="w-40"
+        >
+          <option value="">All platforms</option>
+          {platforms.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </Select>
+      )}
 
       <Select
         value={filters.location_id}

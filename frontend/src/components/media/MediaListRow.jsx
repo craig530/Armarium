@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
-import { MapPin, MoreVertical } from 'lucide-react'
-import { MediaTypeBadge } from '../ui/Badge'
+import { MoreVertical } from 'lucide-react'
+import { MediaSubtypeBadge, OwnershipBadge } from '../ui/Badge'
 import CoverImage from './CoverImage'
+import OwnershipRow from './OwnershipRow'
 import { useState } from 'react'
 import { mediaApi } from '../../api/media'
 import toast from 'react-hot-toast'
@@ -33,15 +34,16 @@ export default function MediaListRow({ item, onDeleted }) {
         {item.cover_url ? (
           <img src={item.cover_url} alt={item.title} className="h-full w-full object-cover" />
         ) : (
-          <CoverImage type={item.media_type} title={item.title} size="sm" className="h-full w-full" />
+          <CoverImage category={item.category} title={item.title} size="sm" className="h-full w-full" />
         )}
       </div>
 
       {/* Main info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-2 flex-wrap">
           <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</p>
-          <MediaTypeBadge type={item.media_type} className="shrink-0" />
+          <MediaSubtypeBadge subtype={item.media_subtype} className="shrink-0" />
+          <OwnershipBadge ownership={item.ownership} className="shrink-0" />
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
           {[creator, item.year].filter(Boolean).join(' · ')}
@@ -49,13 +51,10 @@ export default function MediaListRow({ item, onDeleted }) {
         {item.edition && <p className="text-xs text-gray-400">{item.edition}</p>}
       </div>
 
-      {/* Location */}
-      {item.location_path && (
-        <div className="hidden md:flex items-center gap-1 shrink-0 max-w-[180px]">
-          <MapPin size={12} className="text-gray-400 shrink-0" />
-          <span className="text-xs text-gray-400 truncate">{item.location_path}</span>
-        </div>
-      )}
+      {/* Ownership */}
+      <div className="hidden md:block shrink-0 max-w-[220px]">
+        <OwnershipRow item={item} />
+      </div>
 
       {/* Actions */}
       <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>

@@ -1,18 +1,31 @@
 import clsx from 'clsx'
 
-const TYPE_COLORS = {
-  cd: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  dvd: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  bluray: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
-  book: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+const CATEGORY_COLORS = {
+  music: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  films_tv: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+  books: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
 }
 
-const TYPE_LABELS = { cd: 'CD', dvd: 'DVD', bluray: 'Blu-ray', book: 'Book' }
-
-export function MediaTypeBadge({ type, className }) {
+export function MediaSubtypeBadge({ subtype, className }) {
+  if (!subtype) return null
   return (
-    <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', TYPE_COLORS[type], className)}>
-      {TYPE_LABELS[type] || type}
+    <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', CATEGORY_COLORS[subtype.category], className)}>
+      {subtype.name}
+    </span>
+  )
+}
+
+const OWNERSHIP_LABELS = { physical: 'Physical Only', digital: 'Digital Only', both: 'Both' }
+const OWNERSHIP_COLORS = {
+  physical: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+  digital: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+  both: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+}
+
+export function OwnershipBadge({ ownership, className }) {
+  return (
+    <span className={clsx('inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium', OWNERSHIP_COLORS[ownership], className)}>
+      {OWNERSHIP_LABELS[ownership] || ownership}
     </span>
   )
 }

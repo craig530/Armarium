@@ -3,6 +3,8 @@ import { useNavigate, useParams, Navigate } from 'react-router-dom'
 import { LayoutGrid, List, Plus, Search } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { locationsApi } from '../api/locations'
+import { mediaSubtypesApi } from '../api/mediaSubtypes'
+import { platformsApi } from '../api/platforms'
 import { useLibraryStore } from '../store'
 import { CATEGORIES, DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/categories'
 import MediaCard from '../components/media/MediaCard'
@@ -11,6 +13,22 @@ import FilterPanel from '../components/filters/FilterPanel'
 import Button from '../components/ui/Button'
 import { SkeletonCard, SkeletonListRow } from '../components/ui/Skeleton'
 import toast from 'react-hot-toast'
+
+/**
+ * Merge linked physical/digital pairs into a single card. Both items in a
+ * pair carry a `linked_item` cross-reference (bidirectional), so once one
+ * side is rendered, its partner is skipped if it also appears on this page.
+ */
+function dedupeLinkedItems(items) {
+  const consumed = new Set()
+  const result = []
+  for (const item of items) {
+    if (consumed.has(item.id)) continue
+    if (item.linked_item) consumed.add(item.linked_item.id)
+    result.push(item)
+  }
+  return result
+}
 
 const SKELETON_COUNT = 12
 
@@ -29,6 +47,8 @@ export default function Library() {
   const [data, setData] = useState(null)
   const [stats, setStats] = useState(null)
   const [locations, setLocations] = useState([])
+  const [mediaSubtypes, setMediaSubtypes] = useState([])
+  const [platforms, setPlatforms] = useState([])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
 
@@ -65,7 +85,15 @@ export default function Library() {
   useEffect(() => {
     mediaApi.stats().then(setStats).catch(() => {})
     locationsApi.list().then(setLocations).catch(() => {})
+    mediaSubtypesApi.list().then(setMediaSubtypes).catch(() => {})
+    platformsApi.list().then(setPlatforms).catch(() => {})
   }, [])
+
+  // Subtype ids are category-specific — drop a stale subtype filter when the
+  // user switches Music/Films & TV/Books via the top nav.
+  useEffect(() => {
+    if (filters.media_subtype_id) setFilter('media_subtype_id', '')
+  }, [category])
 
   if (!category) {
     return <Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />
@@ -140,7 +168,7 @@ export default function Library() {
       </div>
 
       {/* Filters */}
-      <FilterPanel locations={locations} category={category} />
+      <FilterPanel locations={locations} mediaSubtypes={mediaSubtypes} platforms={platforms} category={category} />
 
       {/* Empty library */}
       {isEmpty && (
@@ -183,11 +211,11 @@ export default function Library() {
         <>
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-              {data.items.map((item) => <MediaCard key={item.id} item={item} />)}
+              {dedupeLinkedItems(data.items).map((item) => <MediaCard key={item.id} item={item} />)}
             </div>
           ) : (
             <div className="space-y-1">
-              {data.items.map((item) => (
+              {dedupeLinkedItems(data.items).map((item) => (
                 <MediaListRow key={item.id} item={item} onDeleted={handleDeleted} />
               ))}
             </div>

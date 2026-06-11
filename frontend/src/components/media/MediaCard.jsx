@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
-import { MapPin } from 'lucide-react'
-import { MediaTypeBadge } from '../ui/Badge'
+import { MediaSubtypeBadge, OwnershipBadge } from '../ui/Badge'
 import CoverImage from './CoverImage'
+import OwnershipRow from './OwnershipRow'
 
 export default function MediaCard({ item }) {
   const navigate = useNavigate()
@@ -22,10 +22,13 @@ export default function MediaCard({ item }) {
             onError={(e) => { e.target.style.display = 'none' }}
           />
         ) : (
-          <CoverImage type={item.media_type} title={item.title} size="full" />
+          <CoverImage category={item.category} title={item.title} size="full" />
         )}
         <div className="absolute top-2 left-2">
-          <MediaTypeBadge type={item.media_type} />
+          <MediaSubtypeBadge subtype={item.media_subtype} />
+        </div>
+        <div className="absolute top-2 right-2">
+          <OwnershipBadge ownership={item.ownership} />
         </div>
       </div>
 
@@ -34,12 +37,7 @@ export default function MediaCard({ item }) {
         <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</p>
         {creator && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{creator}</p>}
         {item.year && <p className="text-xs text-gray-400">{item.year}</p>}
-        {item.location_path && (
-          <div className="flex items-center gap-1 mt-1">
-            <MapPin size={10} className="text-gray-400 shrink-0" />
-            <span className="text-xs text-gray-400 truncate">{item.location_path}</span>
-          </div>
-        )}
+        <OwnershipRow item={item} className="mt-1" />
       </div>
     </button>
   )
