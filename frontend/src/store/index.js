@@ -66,22 +66,23 @@ export const useAuthStore = create((set) => ({
 
 // ── Library UI ───────────────────────────────────────────────────────────────
 
+const DEFAULT_FILTERS = {
+  q: '',
+  supertype: '',
+  media_subtype_id: '',
+  platform_id: '',
+  genre: '',
+  year: '',
+  location_id: '',
+  sort: 'created_at',
+  order: 'desc',
+}
+
 export const useLibraryStore = create((set) => ({
   viewMode: 'grid',
-  filters: {
-    q: '',
-    media_type: '',
-    genre: '',
-    year: '',
-    location_id: '',
-    sort: 'created_at',
-    order: 'desc',
-  },
+  filters: { ...DEFAULT_FILTERS },
   setViewMode: (mode) => set({ viewMode: mode }),
   setFilter: (key, value) =>
     set((s) => ({ filters: { ...s.filters, [key]: value } })),
-  resetFilters: () =>
-    set({
-      filters: { q: '', media_type: '', genre: '', year: '', location_id: '', sort: 'created_at', order: 'desc' },
-    }),
+  resetFilters: () => set({ filters: { ...DEFAULT_FILTERS } }),
 }))

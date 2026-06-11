@@ -1,15 +1,23 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Sun, Moon, Plus, MapPin, Library, ShieldCheck, LogOut, User, Download } from 'lucide-react'
+import { Sun, Moon, Plus, Music, Clapperboard, BookOpen, Settings, ShieldCheck, LogOut, User, Download } from 'lucide-react'
 import { useThemeStore, useAuthStore } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
 import client from '../../api/client'
 import toast from 'react-hot-toast'
+import { CATEGORIES } from '../../lib/categories'
 
-const navItems = [
-  { to: '/library', label: 'Library', icon: Library },
-  { to: '/locations', label: 'Locations', icon: MapPin },
-]
+const CATEGORY_ICONS = {
+  music: Music,
+  films_tv: Clapperboard,
+  books: BookOpen,
+}
+
+const navItems = CATEGORIES.map((c) => ({
+  to: `/library/${c.slug}`,
+  label: c.label,
+  icon: CATEGORY_ICONS[c.value],
+}))
 
 export default function Navbar() {
   const { dark, toggle } = useThemeStore()
@@ -71,6 +79,22 @@ export default function Navbar() {
             <span className="mx-1">·</span>
             <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">n</kbd> add
           </span>
+
+          {/* Settings */}
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              clsx(
+                'p-2 rounded-lg transition-colors',
+                isActive
+                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300'
+                  : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
+              )
+            }
+            aria-label="Settings"
+          >
+            <Settings size={18} />
+          </NavLink>
 
           {/* Dark mode toggle */}
           <button

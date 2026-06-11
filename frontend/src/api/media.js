@@ -14,4 +14,6 @@ export const mediaApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }).then((r) => r.data)
   },
+  link: (itemAId, itemBId) => client.post('/media/link', { item_a_id: itemAId, item_b_id: itemBId }).then((r) => r.data),
+  unlink: (id) => client.delete(`/media/${id}/link`),
 }

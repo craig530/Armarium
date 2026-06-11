@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams, Navigate } from 'react-router-dom'
 import { LayoutGrid, List, Plus, Search } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { locationsApi } from '../api/locations'
 import { useLibraryStore } from '../store'
+import { CATEGORIES, DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/categories'
 import MediaCard from '../components/media/MediaCard'
 import MediaListRow from '../components/media/MediaListRow'
 import FilterPanel from '../components/filters/FilterPanel'
@@ -13,8 +14,16 @@ import toast from 'react-hot-toast'
 
 const SKELETON_COUNT = 12
 
+const EMPTY_COPY = {
+  music: 'Start cataloguing your CDs, vinyl and digital or streaming music. Scan a barcode or search by title to get started.',
+  films_tv: 'Start cataloguing your DVDs, Blu-rays, and digital or streaming films & TV. Scan a barcode or search by title to get started.',
+  books: 'Start cataloguing your books and graphic novels. Scan a barcode or search by title to get started.',
+}
+
 export default function Library() {
   const navigate = useNavigate()
+  const { category: categorySlug } = useParams()
+  const category = categoryFromSlug(categorySlug)
   const { viewMode, setViewMode, filters, setFilter } = useLibraryStore()
 
   const [data, setData] = useState(null)
@@ -24,15 +33,19 @@ export default function Library() {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async (p = 1) => {
+    if (!category) return
     setLoading(true)
     try {
       const params = {
         page: p,
         per_page: 24,
+        category,
         sort: filters.sort,
         order: filters.order,
         ...(filters.q && { q: filters.q }),
-        ...(filters.media_type && { media_type: filters.media_type }),
+        ...(filters.supertype && { supertype: filters.supertype }),
+        ...(filters.media_subtype_id && { media_subtype_id: filters.media_subtype_id }),
+        ...(filters.platform_id && { platform_id: filters.platform_id }),
         ...(filters.genre && { genre: filters.genre }),
         ...(filters.year && { year: filters.year }),
         ...(filters.location_id && { location_id: filters.location_id }),
@@ -45,7 +58,7 @@ export default function Library() {
     } finally {
       setLoading(false)
     }
-  }, [filters])
+  }, [category, filters])
 
   useEffect(() => { load(1) }, [load])
 
@@ -53,6 +66,10 @@ export default function Library() {
     mediaApi.stats().then(setStats).catch(() => {})
     locationsApi.list().then(setLocations).catch(() => {})
   }, [])
+
+  if (!category) {
+    return <Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />
+  }
 
   const handleDeleted = (id) => {
     setData((d) => d ? { ...d, items: d.items.filter((i) => i.id !== id), total: d.total - 1 } : d)
@@ -66,14 +83,18 @@ export default function Library() {
 
   return (
     <div className="space-y-5">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{categoryLabel(category)}</h1>
+
       {/* Stats bar */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: 'Total', count: stats.total, color: 'text-gray-900 dark:text-white' },
-            { label: 'Books', count: stats.by_type?.book || 0, color: 'text-amber-600 dark:text-amber-400' },
-            { label: 'CDs', count: stats.by_type?.cd || 0, color: 'text-purple-600 dark:text-purple-400' },
-            { label: 'Films', count: (stats.by_type?.dvd || 0) + (stats.by_type?.bluray || 0), color: 'text-blue-600 dark:text-blue-400' },
+            ...CATEGORIES.map((c) => ({
+              label: c.label,
+              count: stats.by_category?.[c.value] || 0,
+              color: c.value === category ? 'text-brand-600 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300',
+            })),
           ].map(({ label, count, color }) => (
             <div key={label} className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3">
               <p className={`text-2xl font-bold ${color}`}>{count}</p>
@@ -119,15 +140,15 @@ export default function Library() {
       </div>
 
       {/* Filters */}
-      <FilterPanel locations={locations} />
+      <FilterPanel locations={locations} category={category} />
 
       {/* Empty library */}
       {isEmpty && (
         <div className="text-center py-24 space-y-4">
           <div className="text-6xl">📦</div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Your collection is empty</h2>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">No {categoryLabel(category).toLowerCase()} yet</h2>
           <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-            Start cataloguing your CDs, DVDs, Blu-rays, and books. Scan a barcode or search by title to get started.
+            {EMPTY_COPY[category]}
           </p>
           <Button onClick={() => navigate('/add')} className="mx-auto">
             <Plus size={16} /> Add your first item

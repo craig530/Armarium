@@ -1,14 +1,7 @@
 import { useLibraryStore } from '../../store'
+import { SUPERTYPES } from '../../lib/categories'
 import { Select } from '../ui/Input'
 import Button from '../ui/Button'
-
-const MEDIA_TYPES = [
-  { value: '', label: 'All types' },
-  { value: 'cd', label: 'CD' },
-  { value: 'dvd', label: 'DVD' },
-  { value: 'bluray', label: 'Blu-ray' },
-  { value: 'book', label: 'Book' },
-]
 
 const SORT_OPTIONS = [
   { value: 'created_at', label: 'Date added' },
@@ -28,16 +21,17 @@ export default function FilterPanel({ locations = [] }) {
   }
   flatten(locations)
 
-  const hasActiveFilters = filters.q || filters.media_type || filters.genre || filters.year || filters.location_id
+  const hasActiveFilters = filters.q || filters.supertype || filters.media_subtype_id || filters.platform_id || filters.genre || filters.year || filters.location_id
 
   return (
     <div className="flex flex-wrap gap-3 items-end">
       <Select
-        value={filters.media_type}
-        onChange={(e) => setFilter('media_type', e.target.value)}
+        value={filters.supertype}
+        onChange={(e) => setFilter('supertype', e.target.value)}
         className="w-36"
       >
-        {MEDIA_TYPES.map((t) => (
+        <option value="">Physical & digital</option>
+        {SUPERTYPES.map((t) => (
           <option key={t.value} value={t.value}>{t.label}</option>
         ))}
       </Select>

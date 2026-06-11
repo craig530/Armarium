@@ -6,4 +6,11 @@ export const locationsApi = {
   create: (data) => client.post('/locations', data).then((r) => r.data),
   update: (id, data) => client.put(`/locations/${id}`, data).then((r) => r.data),
   delete: (id) => client.delete(`/locations/${id}`),
+  uploadIcon: (id, file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return client.post(`/locations/${id}/icon`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data)
+  },
 }

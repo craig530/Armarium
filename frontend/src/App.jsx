@@ -6,8 +6,12 @@ import Login from './pages/Login'
 import Library from './pages/Library'
 import AddItem from './pages/AddItem'
 import ItemDetail from './pages/ItemDetail'
-import Locations from './pages/Locations'
 import Admin from './pages/Admin'
+import SettingsLayout from './pages/Settings/SettingsLayout'
+import SettingsLocations from './pages/Settings/SettingsLocations'
+import SettingsPlatforms from './pages/Settings/SettingsPlatforms'
+import SettingsMediaSubtypes from './pages/Settings/SettingsMediaSubtypes'
+import { DEFAULT_CATEGORY_SLUG } from './lib/categories'
 
 export default function App() {
   return (
@@ -29,11 +33,18 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/library" replace />} />
-          <Route path="library" element={<Library />} />
+          <Route index element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
+          <Route path="library" element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
+          <Route path="library/:category" element={<Library />} />
           <Route path="add" element={<AddItem />} />
           <Route path="item/:id" element={<ItemDetail />} />
-          <Route path="locations" element={<Locations />} />
+          <Route path="locations" element={<Navigate to="/settings/locations" replace />} />
+          <Route path="settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="/settings/locations" replace />} />
+            <Route path="locations" element={<SettingsLocations />} />
+            <Route path="platforms" element={<SettingsPlatforms />} />
+            <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
+          </Route>
           <Route
             path="admin"
             element={
