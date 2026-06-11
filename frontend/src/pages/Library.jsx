@@ -6,29 +6,14 @@ import { locationsApi } from '../api/locations'
 import { mediaSubtypesApi } from '../api/mediaSubtypes'
 import { platformsApi } from '../api/platforms'
 import { useLibraryStore } from '../store'
-import { CATEGORIES, DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/categories'
+import { DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/categories'
+import { dedupeLinkedItems } from '../lib/media'
 import MediaCard from '../components/media/MediaCard'
 import MediaListRow from '../components/media/MediaListRow'
 import FilterPanel from '../components/filters/FilterPanel'
 import Button from '../components/ui/Button'
 import { SkeletonCard, SkeletonListRow } from '../components/ui/Skeleton'
 import toast from 'react-hot-toast'
-
-/**
- * Merge linked physical/digital pairs into a single card. Both items in a
- * pair carry a `linked_item` cross-reference (bidirectional), so once one
- * side is rendered, its partner is skipped if it also appears on this page.
- */
-function dedupeLinkedItems(items) {
-  const consumed = new Set()
-  const result = []
-  for (const item of items) {
-    if (consumed.has(item.id)) continue
-    if (item.linked_item) consumed.add(item.linked_item.id)
-    result.push(item)
-  }
-  return result
-}
 
 const SKELETON_COUNT = 12
 
@@ -45,7 +30,6 @@ export default function Library() {
   const { viewMode, setViewMode, filters, setFilter } = useLibraryStore()
 
   const [data, setData] = useState(null)
-  const [stats, setStats] = useState(null)
   const [locations, setLocations] = useState([])
   const [mediaSubtypes, setMediaSubtypes] = useState([])
   const [platforms, setPlatforms] = useState([])
@@ -99,7 +83,6 @@ export default function Library() {
   }, [filters.q])
 
   useEffect(() => {
-    mediaApi.stats().then(setStats).catch(() => {})
     locationsApi.list().then(setLocations).catch(() => {})
     mediaSubtypesApi.list().then(setMediaSubtypes).catch(() => {})
     platformsApi.list().then(setPlatforms).catch(() => {})
@@ -128,25 +111,6 @@ export default function Library() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{categoryLabel(category)}</h1>
-
-      {/* Stats bar */}
-      {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Total', count: stats.total, color: 'text-gray-900 dark:text-white' },
-            ...CATEGORIES.map((c) => ({
-              label: c.label,
-              count: stats.by_category?.[c.value] || 0,
-              color: c.value === category ? 'text-brand-600 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300',
-            })),
-          ].map(({ label, count, color }) => (
-            <div key={label} className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3">
-              <p className={`text-2xl font-bold ${color}`}>{count}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Search + view controls */}
       <div className="flex flex-col sm:flex-row gap-3">

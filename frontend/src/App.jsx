@@ -7,6 +7,7 @@ import { PageLoader } from './components/ui/LoadingSpinner'
 import { DEFAULT_CATEGORY_SLUG } from './lib/categories'
 
 const Login = lazy(() => import('./pages/Login'))
+const Home = lazy(() => import('./pages/Home'))
 const Library = lazy(() => import('./pages/Library'))
 const AddItem = lazy(() => import('./pages/AddItem'))
 const ItemDetail = lazy(() => import('./pages/ItemDetail'))
@@ -37,7 +38,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
+            <Route index element={<Home />} />
             <Route path="library" element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
             <Route path="library/:category" element={<Library />} />
             <Route path="add" element={<AddItem />} />
