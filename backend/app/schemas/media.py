@@ -194,6 +194,7 @@ class LookupCandidate(BaseModel):
     edition: Optional[str] = None
     creator: Optional[str] = None
     cover_url: Optional[str] = None
+    media_kind: Optional[str] = None
     metadata: dict = {}
 
 

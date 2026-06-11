@@ -86,9 +86,10 @@ async def search_lookup(
     q: str = Query(..., min_length=1),
     category: MediaCategory = Query(...),
     limit: int = Query(10, ge=1, le=20),
+    media_kind: Optional[str] = Query(None, pattern="^(movie|tv)$"),
     _=Depends(_rate_limited_user),
 ):
-    cache_key = f"search:{q}:{category}:{limit}"
+    cache_key = f"search:{q}:{category}:{limit}:{media_kind}"
     cached = lookup_cache.get(cache_key, ttl=3600)
     if cached is not None:
         return cached
@@ -103,7 +104,7 @@ async def search_lookup(
                 status_code=503,
                 detail="TMDB_API_KEY is not configured. Add it to your .env file to enable film/TV lookup.",
             )
-        results = await tmdb.search_titles(q, limit)
+        results = await tmdb.search_titles(q, limit, media_kind=media_kind)
     else:
         results = []
 
@@ -115,17 +116,21 @@ async def search_lookup(
 @router.get("/tmdb/{tmdb_id}", response_model=LookupCandidate)
 async def get_tmdb_details(
     tmdb_id: int,
+    media_kind: str = Query("movie", pattern="^(movie|tv)$"),
     _=Depends(_rate_limited_user),
 ):
     if not settings.tmdb_api_key:
         raise HTTPException(status_code=503, detail="TMDB_API_KEY not configured")
 
-    cache_key = f"tmdb:{tmdb_id}"
+    cache_key = f"tmdb:{tmdb_id}:{media_kind}"
     cached = lookup_cache.get(cache_key, ttl=7200)
     if cached is not None:
         return cached
 
-    details = await tmdb.get_movie_details(tmdb_id)
+    if media_kind == "tv":
+        details = await tmdb.get_tv_details(tmdb_id)
+    else:
+        details = await tmdb.get_movie_details(tmdb_id)
     if not details:
         raise HTTPException(status_code=404, detail="TMDB item not found")
 
@@ -137,6 +142,7 @@ async def get_tmdb_details(
         category=MediaCategory.FILMS_TV,
         creator=details.get("director"),
         cover_url=details.get("cover_image_url"),
+        media_kind=media_kind,
         metadata=details,
     )
     lookup_cache.set(cache_key, result)

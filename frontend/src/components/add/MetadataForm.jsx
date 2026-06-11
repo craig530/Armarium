@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronRight, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import Input, { Textarea, Select } from '../ui/Input'
 import Button from '../ui/Button'
 import LocationPicker from '../locations/LocationPicker'
@@ -12,7 +12,7 @@ import toast from 'react-hot-toast'
 
 const NEW_PLATFORM = '__new__'
 
-export default function MetadataForm({ candidate, category, supertype, onBack, onSaved }) {
+export default function MetadataForm({ candidate, category, supertype, locationId, platformId, onBack, onSaved }) {
   const [form, setForm] = useState(() => {
     const m = candidate?.metadata || {}
     return {
@@ -47,8 +47,8 @@ export default function MetadataForm({ candidate, category, supertype, onBack, o
       tmdb_id: m.tmdb_id || '',
       openlibrary_id: m.openlibrary_id || '',
       // Ownership
-      location_id: '',
-      platform_id: '',
+      location_id: locationId || '',
+      platform_id: platformId || '',
     }
   })
 
@@ -134,14 +134,9 @@ export default function MetadataForm({ candidate, category, supertype, onBack, o
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ChevronRight size={18} className="rotate-180" />
-        </Button>
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm details</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Review and edit before saving</p>
-        </div>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm details</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Review and edit before saving</p>
       </div>
 
       {/* Cover preview */}

@@ -2,20 +2,14 @@ import { ChevronRight } from 'lucide-react'
 import { MediaSubtypeBadge } from '../ui/Badge'
 import TMDBAttribution from '../ui/TMDBAttribution'
 import { categoryLabel } from '../../lib/categories'
-import Button from '../ui/Button'
 
-export default function EditionSelector({ candidates, onSelect, onBack }) {
+export default function EditionSelector({ candidates, onSelect }) {
   const hasTmdbResults = candidates.some((c) => c.source === 'tmdb')
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ChevronRight size={18} className="rotate-180" />
-        </Button>
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Select edition</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{candidates.length} result{candidates.length !== 1 ? 's' : ''} found</p>
-        </div>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Select edition</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{candidates.length} result{candidates.length !== 1 ? 's' : ''} found</p>
       </div>
 
       <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
