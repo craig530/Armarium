@@ -38,6 +38,12 @@ const RESET_GUIDANCE_THRESHOLD = 5
 // Minimum time between invalid-format flash/vibrate feedback for the same
 // decoded text, so a held-up unsupported barcode doesn't flash every frame.
 const INVALID_FLASH_COOLDOWN_MS = 1500
+// Number of consecutive identical, checksum-valid decodes required before
+// accepting a result. A single-frame misread that happens to pass the shape
+// and checksum checks is extremely unlikely to repeat identically on the
+// very next frame, while a real, steadily-held barcode decodes the same way
+// many times per second.
+const CONFIRM_MATCHES = 2
 
 const GUIDANCE_TEXT = {
   default: 'Point your camera at a barcode',
@@ -56,67 +62,24 @@ function looksLikeRecognizedBarcode(text) {
   return len === 8 || len === 12 || len === 13
 }
 
-// Maps the on-screen aim box onto the camera's source-pixel coordinates, so
-// the decoder can crop to it. `object-cover` means whichever axis of the
-// video is "wider" than the element gets cropped at render time — work out
-// that visible region first, then map the aim box's rect into it.
-function computeCropRegion(video, box) {
-  const vw = video.videoWidth
-  const vh = video.videoHeight
-  const videoRect = video.getBoundingClientRect()
-  const boxRect = box.getBoundingClientRect()
-  if (!vw || !vh || !videoRect.width || !videoRect.height || !boxRect.width || !boxRect.height) {
-    return null
+// Validates the EAN-8/UPC-A/EAN-13 check digit (ISBN-13 uses the EAN-13
+// algorithm). A misread that happens to have a recognised barcode *shape*
+// — e.g. CODE_128 misclassifying part of an EAN-13 — will almost always
+// fail this, so it catches "random number" false positives that @zxing's
+// own per-format checksum (which only runs for the format it thinks it
+// decoded) doesn't.
+function hasValidCheckDigit(cleaned) {
+  const digits = cleaned.length === 18 ? cleaned.slice(0, 13) : cleaned
+  if (digits.length === 8) {
+    let sum = 0
+    for (let i = 0; i < 7; i++) sum += Number(digits[i]) * (i % 2 === 0 ? 3 : 1)
+    return (10 - (sum % 10)) % 10 === Number(digits[7])
   }
-
-  const videoAspect = vw / vh
-  const elAspect = videoRect.width / videoRect.height
-  let visX = 0, visY = 0, visW = vw, visH = vh
-  if (videoAspect > elAspect) {
-    visW = vh * elAspect
-    visX = (vw - visW) / 2
-  } else if (videoAspect < elAspect) {
-    visH = vw / elAspect
-    visY = (vh - visH) / 2
-  }
-
-  const scaleX = visW / videoRect.width
-  const scaleY = visH / videoRect.height
-
-  const sx = Math.max(0, visX + (boxRect.left - videoRect.left) * scaleX)
-  const sy = Math.max(0, visY + (boxRect.top - videoRect.top) * scaleY)
-  const sWidth = Math.min(boxRect.width * scaleX, vw - sx)
-  const sHeight = Math.min(boxRect.height * scaleY, vh - sy)
-  if (sWidth <= 0 || sHeight <= 0) return null
-
-  return { sx, sy, sWidth, sHeight }
-}
-
-// Decoding the full camera frame wastes most of its resolution on whatever
-// is outside the aim box. Cropping to the aim box and upscaling it to fill
-// the decode canvas acts as a digital zoom, giving the decoder far more
-// effective resolution on small/distant barcodes (e.g. paperback ISBNs on a
-// desktop webcam) without requiring a higher-resolution camera stream.
-// Nearest-neighbour scaling (imageSmoothingEnabled = false) keeps bar/space
-// edges sharp rather than blurring them together.
-class ZoomingMultiFormatReader extends BrowserMultiFormatReader {
-  cropRegion = null
-
-  drawFrameOnCanvas(srcElement, dimensions, canvasElementContext) {
-    const ctx = canvasElementContext || this.captureCanvasContext
-    if (!dimensions && this.cropRegion && ctx) {
-      ctx.imageSmoothingEnabled = false
-      super.drawFrameOnCanvas(srcElement, {
-        ...this.cropRegion,
-        dx: 0,
-        dy: 0,
-        dWidth: srcElement.videoWidth,
-        dHeight: srcElement.videoHeight,
-      }, ctx)
-      return
-    }
-    super.drawFrameOnCanvas(srcElement, dimensions, canvasElementContext)
-  }
+  const ean13 = digits.length === 12 ? `0${digits}` : digits
+  if (ean13.length !== 13) return true
+  let sum = 0
+  for (let i = 0; i < 12; i++) sum += Number(ean13[i]) * (i % 2 === 0 ? 1 : 3)
+  return (10 - (sum % 10)) % 10 === Number(ean13[12])
 }
 
 function isCameraSupported() {
@@ -152,11 +115,10 @@ function describeCameraError(err) {
 
 export default function BarcodeScanner({ onDetected, onClose, restartSignal, loading }) {
   const videoRef = useRef(null)
-  const aimBoxRef = useRef(null)
   const readerRef = useRef(null)
-  const cropCleanupRef = useRef(null)
   const missStreakRef = useRef({ notFound: 0, holdSteady: 0 })
   const lastInvalidRef = useRef({ text: null, time: 0 })
+  const lastMatchRef = useRef({ text: null, count: 0 })
   const flashTimeoutRef = useRef(null)
   const [devices, setDevices] = useState([])
   const [selectedDevice, setSelectedDevice] = useState(null)
@@ -171,9 +133,6 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
     const reader = readerRef.current
     if (!reader) return
 
-    cropCleanupRef.current?.()
-    cropCleanupRef.current = null
-
     setScanning(true)
     setError(null)
     setFlash(false)
@@ -182,6 +141,7 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
     setTorchOn(false)
     missStreakRef.current = { notFound: 0, holdSteady: 0 }
     lastInvalidRef.current = { text: null, time: 0 }
+    lastMatchRef.current = { text: null, count: 0 }
 
     const flashInvalid = () => {
       setFlash(true)
@@ -207,13 +167,36 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
         if (result) {
           const text = result.getText()
           if (looksLikeRecognizedBarcode(text)) {
-            // Pause the stream and hand off to the caller for a lookup.
-            // A miss/error resumes scanning automatically via `restartSignal`
-            // — there's no confirmation step, so a bad read just gets
-            // silently rejected and scanning continues.
-            reader.reset()
-            setScanning(false)
-            onDetected(text)
+            const cleaned = text.replace(/[\s-]/g, '')
+            if (!hasValidCheckDigit(cleaned)) {
+              // Right shape, wrong check digit — almost certainly a misread
+              // (e.g. CODE_128 misclassifying part of an EAN-13). Treat as a
+              // normal miss and keep scanning rather than surfacing it as an
+              // "unsupported format".
+              missStreakRef.current.notFound = 0
+              missStreakRef.current.holdSteady += 1
+              if (missStreakRef.current.holdSteady >= HOLD_STEADY_THRESHOLD) setGuidance('holdSteady')
+              return
+            }
+            // Require the same checksum-valid code to decode on (at least)
+            // two consecutive frames before accepting it — filters out the
+            // rare misread that happens to pass the checksum by chance,
+            // without a confirmation step for genuine reads.
+            const match = lastMatchRef.current
+            lastMatchRef.current = match.text === cleaned
+              ? { text: cleaned, count: match.count + 1 }
+              : { text: cleaned, count: 1 }
+            if (lastMatchRef.current.count >= CONFIRM_MATCHES) {
+              // Pause the stream and hand off to the caller for a lookup.
+              // A miss/error resumes scanning automatically via
+              // `restartSignal` — there's no confirmation step, so a bad
+              // read just gets silently rejected and scanning continues.
+              reader.reset()
+              setScanning(false)
+              onDetected(text)
+              return
+            }
+            setGuidance('holdSteady')
             return
           }
           // Barcode-shaped but not a format we can look up — flag it and
@@ -267,17 +250,13 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
         const capabilities = track?.getCapabilities?.()
         setTorchSupported(!!capabilities?.torch)
 
-        // Compute the digital-zoom crop region once the stream's intrinsic
-        // resolution is known, and keep it in sync with the aim box's
-        // on-screen size (e.g. desktop window resize/orientation change).
-        const updateCrop = () => {
-          if (videoRef.current && aimBoxRef.current) {
-            reader.cropRegion = computeCropRegion(videoRef.current, aimBoxRef.current)
-          }
+        // Some cameras (especially webcams) default to a single-shot
+        // autofocus that doesn't refocus once the stream starts, which
+        // makes it hard to read a barcode held close to the lens. Ask for
+        // continuous autofocus where supported.
+        if (capabilities?.focusMode?.includes('continuous')) {
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
         }
-        updateCrop()
-        window.addEventListener('resize', updateCrop)
-        cropCleanupRef.current = () => window.removeEventListener('resize', updateCrop)
       })
       .catch((e) => {
         setError(describeCameraError(e))
@@ -291,13 +270,11 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
       return
     }
 
-    const reader = readerRef.current ?? (readerRef.current = new ZoomingMultiFormatReader(HINTS))
+    const reader = readerRef.current ?? (readerRef.current = new BrowserMultiFormatReader(HINTS))
     startScanning()
 
     return () => {
       reader.reset()
-      cropCleanupRef.current?.()
-      cropCleanupRef.current = null
       clearTimeout(flashTimeoutRef.current)
     }
   }, [selectedDevice]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -347,7 +324,7 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
 
         {/* Aim overlay */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div ref={aimBoxRef} className="relative w-48 h-32">
+          <div className="relative w-48 h-32">
             {/* Corner brackets */}
             {[
               'top-0 left-0 border-t-4 border-l-4 rounded-tl-lg',
