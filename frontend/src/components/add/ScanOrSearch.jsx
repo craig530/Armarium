@@ -34,13 +34,13 @@ function looksLikeBarcode(value) {
   return [8, 10, 12, 13, 18].includes(cleaned.length)
 }
 
-export default function ScanOrSearch({ category, onResults, batchMode }) {
+export default function ScanOrSearch({ category, onResults, batchMode, query, onQueryChange, mediaKind, onMediaKindChange }) {
   // In batch mode, default straight to the camera — that's the whole point
   // of rapid scanning — and each fresh mount (after a save returns here)
   // starts scanning again automatically.
   const [mode, setMode] = useState(batchMode ? 'scan' : 'search')   // 'search' | 'scan'
-  const [query, setQuery] = useState('')
-  const [mediaKind, setMediaKind] = useState('movie')
+  const setQuery = onQueryChange
+  const setMediaKind = onMediaKindChange
   const [loading, setLoading] = useState(false)
   // Bumped to tell BarcodeScanner to resume scanning without remounting, when
   // a detected code is a miss/error and batch mode is staying on this screen.

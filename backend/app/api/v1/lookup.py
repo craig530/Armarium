@@ -1,6 +1,7 @@
 import io
 
-from fastapi import APIRouter, Query, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, Query, HTTPException, Depends, Request, UploadFile, File
+from fastapi.responses import Response
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from ...models.user import User
 from ...services import openlibrary, musicbrainz, tmdb
 from ...services.barcode import process_barcode
 from ...services.cache import lookup_cache
+from ...services.cover_art import fetch_remote_image
 from ...services.auth import get_current_user
 from ...services.rate_limit import SlidingWindowRateLimiter
 from ...config import settings
@@ -30,6 +32,12 @@ lookup_limiter = SlidingWindowRateLimiter(max_attempts=30, window_seconds=60)
 # frequent than the external-API lookups above, but still bounded so a
 # misbehaving client can't peg the server decoding images indefinitely.
 scan_limiter = SlidingWindowRateLimiter(max_attempts=300, window_seconds=60)
+
+# Cover thumbnails for a single search's results all load at once (up to 20),
+# and the browser may re-request on re-renders before caching kicks in.
+# Unauthenticated (an <img> tag can't send the Authorization header), so this
+# is keyed by client IP rather than username.
+cover_proxy_limiter = SlidingWindowRateLimiter(max_attempts=180, window_seconds=60)
 
 ALLOWED_SCAN_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_SCAN_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -86,6 +94,33 @@ async def scan_barcode_image(
 
     barcodes = zxingcpp.read_barcodes(image)
     return {"results": [{"text": b.text, "format": str(b.format)} for b in barcodes]}
+
+
+@router.get("/cover-proxy")
+async def cover_proxy(request: Request, url: str = Query(..., min_length=1)):
+    """Proxy an external cover-art image (TMDB/Cover Art Archive/Open
+    Library) for display in lookup search results, before an item is saved.
+
+    Saved items get their cover downloaded server-side and served from
+    `/covers/...`, but search-result thumbnails point straight at the
+    third-party host — on setups where the client's network/DNS can't reach
+    that host (even though the server, with its own DNS, can), those
+    thumbnails fail to load. Routing them through here keeps the request on
+    the server's network path.
+
+    No auth required — an `<img>` tag can't send the Authorization header,
+    and this only proxies publicly-readable image URLs (same risk profile as
+    the unauthenticated `/covers/` static mount).
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    cover_proxy_limiter.check(client_ip, "Too many image requests. Please wait a moment and try again.")
+
+    result = await fetch_remote_image(url)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Image not available")
+
+    data, content_type = result
+    return Response(content=data, media_type=content_type, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/barcode/{barcode}", response_model=List[LookupCandidate])

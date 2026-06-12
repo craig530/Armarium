@@ -14,6 +14,7 @@ import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import TMDBAttribution from '../components/ui/TMDBAttribution'
 import { CATEGORIES, categoryLabel, supertypeLabel } from '../lib/categories'
+import { useConfirm } from '../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
 function OwnershipEntry({ children, action }) {
@@ -129,6 +130,7 @@ export default function ItemDetail() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showLinkSearch, setShowLinkSearch] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
 
   const load = () => {
     return mediaApi.get(id).then((updated) => {
@@ -186,7 +188,7 @@ export default function ItemDetail() {
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Delete "${item.title}"?`)) return
+    if (!await confirm(`Delete "${item.title}"?`)) return
     await mediaApi.delete(id)
     toast.success('Deleted')
     const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
@@ -207,7 +209,7 @@ export default function ItemDetail() {
   }
 
   const handleUnlink = async () => {
-    if (!confirm('Unlink these items?')) return
+    if (!await confirm('Unlink these items?')) return
     try {
       await mediaApi.unlink(id)
       await load()
@@ -446,6 +448,8 @@ export default function ItemDetail() {
           )}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   )
 }

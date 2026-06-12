@@ -8,6 +8,7 @@ import LocationPicker from './LocationPicker'
 import IconPicker from '../settings/IconPicker'
 import { flattenLocations } from '../../lib/locations'
 import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
+import { useConfirm } from '../../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', parent_id: '', icon_key: '', icon_url: null }
@@ -33,6 +34,7 @@ export default function LocationManager() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [confirm, confirmDialog] = useConfirm()
 
   const load = () => {
     locationsApi.list().then(setLocations).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
@@ -77,7 +79,7 @@ export default function LocationManager() {
     const warning = loc.item_count > 0
       ? `Delete "${loc.name}"? ${loc.item_count} item${loc.item_count === 1 ? '' : 's'} will be unassigned.`
       : `Delete "${loc.name}"?`
-    if (!confirm(warning)) return
+    if (!await confirm(warning)) return
     try {
       await locationsApi.delete(loc.id)
       toast.success('Location deleted')
@@ -88,16 +90,23 @@ export default function LocationManager() {
     }
   }
 
+  // Re-sequences the sibling group to 0..N-1 in the new (swapped) order,
+  // rather than just swapping the two `sort_order` values directly — new
+  // locations all default to `sort_order: 0`, so a same-value swap between
+  // tied siblings would otherwise be a no-op. Only siblings whose target
+  // index differs from their current `sort_order` are written.
   const move = async (loc, direction) => {
     const siblings = findSiblings(locations, loc.parent_id) || []
     const idx = siblings.findIndex((s) => s.id === loc.id)
-    const swapWith = siblings[idx + direction]
-    if (!swapWith) return
+    const swapIdx = idx + direction
+    if (swapIdx < 0 || swapIdx >= siblings.length) return
+    const reordered = [...siblings]
+    ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
+    const updates = reordered
+      .map((s, i) => ({ id: s.id, sort_order: i, changed: s.sort_order !== i }))
+      .filter((u) => u.changed)
     try {
-      await Promise.all([
-        locationsApi.update(loc.id, { sort_order: swapWith.sort_order }),
-        locationsApi.update(swapWith.id, { sort_order: loc.sort_order }),
-      ])
+      await Promise.all(updates.map((u) => locationsApi.update(u.id, { sort_order: u.sort_order })))
       load()
       useReferenceDataStore.getState().invalidate()
     } catch (err) {
@@ -231,6 +240,8 @@ export default function LocationManager() {
           )}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   )
 }

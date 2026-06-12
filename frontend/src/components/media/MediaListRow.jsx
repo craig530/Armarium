@@ -5,16 +5,18 @@ import CoverImage from './CoverImage'
 import OwnershipRow from './OwnershipRow'
 import { useState } from 'react'
 import { mediaApi } from '../../api/media'
+import { useConfirm } from '../../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
 export default function MediaListRow({ item, onDeleted }) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
   const creator = item.artist || item.director || item.author
 
   const handleDelete = async (e) => {
     e.stopPropagation()
-    if (!confirm(`Delete "${item.title}"?`)) return
+    if (!await confirm(`Delete "${item.title}"?`)) return
     try {
       await mediaApi.delete(item.id)
       toast.success('Item deleted')
@@ -80,6 +82,8 @@ export default function MediaListRow({ item, onDeleted }) {
           </>
         )}
       </div>
+
+      {confirmDialog}
     </div>
   )
 }

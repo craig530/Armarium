@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams, Navigate } from 'react-router-dom'
 import axios from 'axios'
-import { LayoutGrid, List, Plus } from 'lucide-react'
+import clsx from 'clsx'
+import { LayoutGrid, List, Plus, SlidersHorizontal } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { useLibraryStore, useReferenceDataStore } from '../store'
 import { DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/categories'
@@ -33,6 +34,7 @@ export default function Library() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [searchInput, setSearchInput] = useState(filters.q)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const abortRef = useRef(null)
 
   const load = useCallback(async (p = 1) => {
@@ -119,6 +121,20 @@ export default function Library() {
           className="flex-1"
         />
 
+        {/* Filters toggle — filters are always visible from sm: up, so this
+            button (and its expanded panel below) only render on mobile. */}
+        <Button
+          variant="outline"
+          onClick={() => setFiltersOpen((o) => !o)}
+          className="sm:hidden relative justify-center"
+        >
+          <SlidersHorizontal size={16} />
+          Filters
+          {hasActiveFilters && (
+            <span className="absolute top-1.5 right-2.5 h-2 w-2 rounded-full bg-brand-600" />
+          )}
+        </Button>
+
         <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           {[
             { mode: 'grid', Icon: LayoutGrid },
@@ -140,8 +156,10 @@ export default function Library() {
         </div>
       </div>
 
-      {/* Filters */}
-      <FilterPanel locations={locations} mediaSubtypes={mediaSubtypes} platforms={platforms} category={category} />
+      {/* Filters — collapsed by default on mobile (toggled above), always visible from sm: up */}
+      <div className={clsx(!filtersOpen && 'hidden sm:block')}>
+        <FilterPanel locations={locations} mediaSubtypes={mediaSubtypes} platforms={platforms} category={category} />
+      </div>
 
       {/* Empty library */}
       {isEmpty && (

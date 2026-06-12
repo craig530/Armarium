@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react'
 import { MediaSubtypeBadge } from '../ui/Badge'
 import TMDBAttribution from '../ui/TMDBAttribution'
 import { categoryLabel } from '../../lib/categories'
+import { coverProxyUrl } from '../../api/lookup'
 
 export default function EditionSelector({ candidates, onSelect }) {
   const hasTmdbResults = candidates.some((c) => c.source === 'tmdb')
@@ -22,7 +23,7 @@ export default function EditionSelector({ candidates, onSelect }) {
             {/* Cover thumbnail */}
             <div className="shrink-0 h-20 w-14 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">
               {c.cover_url ? (
-                <img src={c.cover_url} alt={c.title} className="h-full w-full object-cover" onError={(e) => { e.target.style.display='none' }} />
+                <img src={coverProxyUrl(c.cover_url)} alt={c.title} className="h-full w-full object-cover" onError={(e) => { e.target.style.display='none' }} />
               ) : (
                 <div className="h-full w-full flex items-center justify-center text-gray-400 text-2xl">?</div>
               )}

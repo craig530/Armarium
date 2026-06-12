@@ -1,5 +1,15 @@
 import client from './client'
 
+// Lookup-result cover thumbnails point straight at a third-party host
+// (TMDB/Cover Art Archive/Open Library) — route them through the backend's
+// cover-proxy so they load even when the client's network/DNS can't reach
+// that host directly. Local/relative paths (e.g. already-saved `/covers/...`
+// images) are left untouched.
+export function coverProxyUrl(url) {
+  if (!url || !/^https?:\/\//i.test(url)) return url
+  return `/api/v1/lookup/cover-proxy?url=${encodeURIComponent(url)}`
+}
+
 export const lookupApi = {
   barcode: (barcode, category) =>
     client.get(`/lookup/barcode/${barcode}`, { params: category ? { category } : {} }).then((r) => r.data),

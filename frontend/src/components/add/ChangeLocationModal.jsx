@@ -42,14 +42,22 @@ export default function ChangeLocationModal({ supertype, locationId, platformId,
         await ensureLoaded()
         toast.success(`Location "${created.name}" created`)
         onChangeLocation(String(created.id))
+        // Stay open and select the new location as the parent for the next
+        // create — lets the user build out a hierarchy (e.g. Office > Shelf
+        // > Top) in one go, instead of being dropped back to the item form
+        // after every single location.
+        setCreating(false)
+        setNewName('')
+        setNewParentId(String(created.id))
+        setNewIconKey(null)
       } else {
         const created = await platformsApi.create({ name, logo_key: matchPlatformLogo(name) })
         invalidate()
         await ensureLoaded()
         toast.success(`Platform "${created.name}" created`)
         onChangePlatform(String(created.id))
+        onClose()
       }
-      onClose()
     } catch (err) {
       toast.error(err.message)
     } finally {

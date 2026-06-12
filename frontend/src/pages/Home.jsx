@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { Plus } from 'lucide-react'
+import clsx from 'clsx'
+import { Plus, SlidersHorizontal } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { useReferenceDataStore } from '../store'
 import { CATEGORIES } from '../lib/categories'
@@ -44,6 +45,7 @@ export default function Home() {
   const [data, setData] = useState(null)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const abortRef = useRef(null)
 
   const setFilter = (key, value) => setFiltersState((f) => ({ ...f, [key]: value }))
@@ -128,23 +130,42 @@ export default function Home() {
     <div className="space-y-5">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">All</h1>
 
-      {/* Search */}
-      <SearchInput
-        value={searchInput}
-        onChange={(e) => setSearchInput(e.target.value)}
-        placeholder="Search titles, authors, directors… (press /)"
-      />
+      {/* Search + filters toggle */}
+      <div className="flex gap-3">
+        <SearchInput
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search titles, authors, directors… (press /)"
+          className="flex-1"
+        />
 
-      {/* Filters */}
-      <FilterPanel
-        showCategory
-        locations={locations}
-        mediaSubtypes={mediaSubtypes}
-        platforms={platforms}
-        filters={filters}
-        setFilter={setFilter}
-        resetFilters={resetFilters}
-      />
+        {/* Filters toggle — filters are always visible from sm: up, so this
+            button (and its expanded panel below) only render on mobile. */}
+        <Button
+          variant="outline"
+          onClick={() => setFiltersOpen((o) => !o)}
+          className="sm:hidden relative justify-center"
+        >
+          <SlidersHorizontal size={16} />
+          Filters
+          {hasActiveFilters && (
+            <span className="absolute top-1.5 right-2.5 h-2 w-2 rounded-full bg-brand-600" />
+          )}
+        </Button>
+      </div>
+
+      {/* Filters — collapsed by default on mobile (toggled above), always visible from sm: up */}
+      <div className={clsx(!filtersOpen && 'hidden sm:block')}>
+        <FilterPanel
+          showCategory
+          locations={locations}
+          mediaSubtypes={mediaSubtypes}
+          platforms={platforms}
+          filters={filters}
+          setFilter={setFilter}
+          resetFilters={resetFilters}
+        />
+      </div>
 
       {!hasActiveFilters && isEmpty && (
         <div className="text-center py-24 space-y-4">

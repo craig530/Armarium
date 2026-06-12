@@ -6,7 +6,7 @@ import socket
 import httpx
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from PIL import Image, UnidentifiedImageError
 
@@ -20,6 +20,9 @@ JPEG_QUALITY = 85
 # (e.g. a 1x1 PNG that decodes to gigapixels) while allowing real artwork.
 MAX_IMAGE_PIXELS = 40_000_000  # ~40MP
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+
+PROXY_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_PROXY_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 def _optimise(data: bytes, max_width: int = MAX_WIDTH) -> Optional[bytes]:
@@ -171,6 +174,51 @@ async def download_cover(url: str, item_id: int) -> Optional[str]:
                     return rel_url
         except httpx.HTTPError:
             pass
+
+    return None
+
+
+async def fetch_remote_image(url: str) -> Optional[tuple]:
+    """Fetch an external image for the lookup cover-proxy and return
+    `(content_bytes, content_type)`, or None.
+
+    Used to display cover art for search results that haven't been saved
+    (and thus haven't gone through `download_cover`) yet, so the browser
+    never makes a direct request to a third-party host — some self-hosted
+    setups have client-side DNS/network rules that block hosts like
+    `image.tmdb.org` even though the server (with its own DNS) can reach them.
+
+    Nothing is written to disk. At most one redirect hop is followed (e.g.
+    Cover Art Archive's `front-250` 307s to an archive.org mirror), with the
+    redirect target re-validated the same way as the original URL.
+    """
+    if not await _is_safe_url(url):
+        return None
+
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+        for _ in range(2):
+            try:
+                resp = await client.get(url)
+            except httpx.HTTPError:
+                return None
+
+            if resp.is_redirect:
+                location = resp.headers.get("location")
+                if not location:
+                    return None
+                url = urljoin(url, location)
+                if not await _is_safe_url(url):
+                    return None
+                continue
+
+            content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+            if (
+                resp.status_code == 200
+                and content_type in PROXY_CONTENT_TYPES
+                and len(resp.content) <= MAX_PROXY_IMAGE_BYTES
+            ):
+                return resp.content, content_type
+            return None
 
     return None
 

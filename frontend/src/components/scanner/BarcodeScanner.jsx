@@ -127,6 +127,13 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
 
   const [devices, setDevices] = useState([])
   const [selectedDevice, setSelectedDevice] = useState(null)
+  // The device actually in use, read back from the stream's track settings —
+  // distinct from `selectedDevice` (the user's explicit choice, which stays
+  // null until they pick one). Without this, the dropdown's `value` (null)
+  // matches no <option>, so the browser falls back to showing whichever
+  // device enumerates first — on iPhone that's often "Front Camera" even
+  // though `facingMode: 'environment'` correctly started the rear camera.
+  const [activeDeviceId, setActiveDeviceId] = useState(null)
   const [error, setError] = useState(null)
   const [scanning, setScanning] = useState(false)
   const [guidance, setGuidance] = useState('default')
@@ -242,8 +249,12 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
         .then((all) => setDevices(all.filter((d) => d.kind === 'videoinput')))
         .catch(() => {})
 
-      // Torch is only available on some mobile rear cameras.
+      // Record which device is actually running, for the camera-switcher
+      // dropdown (see `activeDeviceId` declaration above).
       const track = stream.getVideoTracks()[0]
+      setActiveDeviceId(track?.getSettings?.().deviceId || null)
+
+      // Torch is only available on some mobile rear cameras.
       const capabilities = track?.getCapabilities?.()
       setTorchSupported(!!capabilities?.torch)
 
@@ -302,7 +313,7 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
       {/* Camera selector — populated after permission is granted */}
       {devices.length > 1 && (
         <select
-          value={selectedDevice || ''}
+          value={selectedDevice || activeDeviceId || ''}
           onChange={(e) => setSelectedDevice(e.target.value)}
           className="w-full rounded-lg border px-3 py-2 text-sm bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white"
         >

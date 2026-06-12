@@ -4,6 +4,7 @@ import client from '../api/client'
 import { useAuthStore } from '../store'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import { useConfirm } from '../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,50}$/
@@ -63,6 +64,7 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
   const [editing, setEditing] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
 
   const isSelf = user.id === currentUserId
   const isLastAdmin = user.is_admin && adminCount <= 1
@@ -112,7 +114,7 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Delete user "${user.username}"? This cannot be undone.`)) return
+    if (!await confirm(`Delete user "${user.username}"? This cannot be undone.`)) return
     try {
       await client.delete(`/users/${user.id}`)
       toast.success('User deleted')
@@ -245,6 +247,8 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
           ))}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   )
 }

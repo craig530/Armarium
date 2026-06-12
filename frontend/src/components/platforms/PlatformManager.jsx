@@ -7,6 +7,7 @@ import Button from '../ui/Button'
 import PlatformLogo from '../ui/PlatformLogo'
 import LogoPicker from '../settings/LogoPicker'
 import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
+import { useConfirm } from '../../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', logo_key: '', logo_url: null }
@@ -19,6 +20,7 @@ export default function PlatformManager() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [confirm, confirmDialog] = useConfirm()
 
   const load = () => {
     platformsApi.list().then(setPlatforms).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
@@ -54,7 +56,7 @@ export default function PlatformManager() {
   }
 
   const handleDelete = async (platform) => {
-    if (!confirm(`Delete "${platform.name}"?`)) return
+    if (!await confirm(`Delete "${platform.name}"?`)) return
     try {
       await platformsApi.delete(platform.id)
       toast.success('Platform deleted')
@@ -172,6 +174,8 @@ export default function PlatformManager() {
         only, to help you recognise where your items are kept. Armarium is not affiliated with, endorsed by, or
         sponsored by any of these platforms.
       </p>
+
+      {confirmDialog}
     </div>
   )
 }

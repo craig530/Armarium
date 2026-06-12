@@ -1014,6 +1014,55 @@ async def test_lookup_barcode_isbn_queries_open_library(client, auth_headers):
     mock_lookup.assert_awaited_once_with("9780134685991")
 
 
+# ── Cover proxy ──────────────────────────────────────────────────────────────
+
+async def test_cover_proxy_streams_remote_image(client):
+    fake_bytes = b"\xff\xd8\xfake-jpeg-data"
+    with patch("app.api.v1.lookup.fetch_remote_image", new=AsyncMock(return_value=(fake_bytes, "image/jpeg"))) as mock_fetch:
+        resp = await client.get(
+            "/api/v1/lookup/cover-proxy",
+            params={"url": "https://image.tmdb.org/t/p/w500/poster.jpg"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.content == fake_bytes
+    assert resp.headers["content-type"] == "image/jpeg"
+    mock_fetch.assert_awaited_once_with("https://image.tmdb.org/t/p/w500/poster.jpg")
+
+
+async def test_cover_proxy_404_when_unavailable(client):
+    with patch("app.api.v1.lookup.fetch_remote_image", new=AsyncMock(return_value=None)):
+        resp = await client.get(
+            "/api/v1/lookup/cover-proxy",
+            params={"url": "https://image.tmdb.org/t/p/w500/missing.jpg"},
+        )
+
+    assert resp.status_code == 404
+
+
+async def test_cover_proxy_does_not_require_auth(client):
+    # <img> tags can't send the Authorization header, so this endpoint must
+    # be reachable without auth_headers.
+    with patch("app.api.v1.lookup.fetch_remote_image", new=AsyncMock(return_value=(b"data", "image/png"))):
+        resp = await client.get(
+            "/api/v1/lookup/cover-proxy",
+            params={"url": "https://covers.openlibrary.org/b/id/12345-L.jpg"},
+        )
+
+    assert resp.status_code == 200
+
+
+async def test_cover_proxy_rejects_private_addresses(client):
+    # The same SSRF guard used by download_cover applies here — a
+    # loopback/link-local target must be rejected before any request is made,
+    # without needing to mock httpx (resolves instantly, no network access).
+    resp = await client.get("/api/v1/lookup/cover-proxy", params={"url": "http://127.0.0.1/secret.jpg"})
+    assert resp.status_code == 404
+
+    resp = await client.get("/api/v1/lookup/cover-proxy", params={"url": "http://169.254.169.254/latest/meta-data/"})
+    assert resp.status_code == 404
+
+
 # ── Barcode image scan ───────────────────────────────────────────────────────
 
 # EAN-13 module width tables, used to render a real decodable barcode image

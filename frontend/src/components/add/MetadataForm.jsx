@@ -5,6 +5,7 @@ import Button from '../ui/Button'
 import LocationPicker from '../locations/LocationPicker'
 import { mediaApi } from '../../api/media'
 import { platformsApi } from '../../api/platforms'
+import { coverProxyUrl } from '../../api/lookup'
 import { useReferenceDataStore } from '../../store'
 import { matchPlatformLogo } from '../../lib/platformLogos'
 import toast from 'react-hot-toast'
@@ -217,7 +218,7 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
       {previewSrc && (
         <div className="flex justify-center">
           <img
-            src={previewSrc}
+            src={coverProxyUrl(previewSrc)}
             alt={form.title}
             className="h-40 rounded-xl object-cover shadow-lg"
             onError={(e) => { e.target.style.display = 'none' }}

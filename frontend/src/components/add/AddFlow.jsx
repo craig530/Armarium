@@ -72,6 +72,11 @@ export default function AddFlow({ onSaved }) {
   const [candidates, setCandidates] = useState([])
   const [selected, setSelected] = useState(null)
   const [enriching, setEnriching] = useState(false)
+  // Lifted out of ScanOrSearch/DigitalSearch so the search term and Film/TV
+  // toggle survive a `back()` from edition/form back to the search step
+  // (those components would otherwise remount with empty state).
+  const [searchQuery, setSearchQuery] = useState('')
+  const [mediaKind, setMediaKind] = useState('movie')
 
   const { locations, platforms, ensureLoaded } = useReferenceDataStore()
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
@@ -99,12 +104,15 @@ export default function AddFlow({ onSaved }) {
 
   const loadRecentItems = useCallback(async () => {
     try {
-      const resp = await mediaApi.list({ sort: 'created_at', order: 'desc', per_page: 10, page: 1 })
+      const resp = await mediaApi.list({
+        sort: 'created_at', order: 'desc', per_page: 10, page: 1,
+        category, supertype,
+      })
       setRecentItems(resp.items)
     } catch {
       // Best-effort — the "Recently added" panel just stays empty.
     }
-  }, [])
+  }, [category, supertype])
 
   useEffect(() => {
     if (!batchMode && (step === 'search' || step === 'digitalSearch')) loadRecentItems()
@@ -180,6 +188,7 @@ export default function AddFlow({ onSaved }) {
       setStepStack([supertype === 'physical' ? 'search' : 'digitalSearch'])
       setSelected(null)
       setCandidates([])
+      setSearchQuery('')
       navigator.vibrate?.(50)
     } else {
       onSaved(item)
@@ -289,7 +298,15 @@ export default function AddFlow({ onSaved }) {
 
       {!enriching && step === 'search' && (
         <div className="flex flex-col gap-4">
-          <ScanOrSearch category={category} onResults={handleResults} batchMode={batchMode} />
+          <ScanOrSearch
+            category={category}
+            onResults={handleResults}
+            batchMode={batchMode}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            mediaKind={mediaKind}
+            onMediaKindChange={setMediaKind}
+          />
           <button
             onClick={handleManualAdd}
             className="text-sm text-center text-brand-600 dark:text-brand-400 hover:underline"
@@ -302,7 +319,14 @@ export default function AddFlow({ onSaved }) {
 
       {!enriching && step === 'digitalSearch' && (
         <div className="flex flex-col gap-4">
-          <DigitalSearch category={category} onResults={handleResults} />
+          <DigitalSearch
+            category={category}
+            onResults={handleResults}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            mediaKind={mediaKind}
+            onMediaKindChange={setMediaKind}
+          />
           <button
             onClick={handleManualAdd}
             className="text-sm text-center text-brand-600 dark:text-brand-400 hover:underline"

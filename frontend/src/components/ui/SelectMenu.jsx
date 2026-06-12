@@ -46,7 +46,11 @@ export default function SelectMenu({ groups, value, onChange, label, placeholder
             'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent'
           )}
         >
-          <span className={clsx('truncate', !selected && 'text-gray-400 dark:text-gray-600')}>
+          {/* Muted when the "All ..." option (value === '') is selected,
+              matching LocationPicker's placeholder styling — `!selected`
+              would never be true here since that option is itself part of
+              `flat`. */}
+          <span className={clsx('truncate', !value && 'text-gray-400 dark:text-gray-600')}>
             {selected ? selected.label : placeholder}
           </span>
           <ChevronDown size={14} className="shrink-0 text-gray-400" />

@@ -21,9 +21,9 @@ const MEDIA_KINDS = [
 // counterpart to ScanOrSearch (which remains physical-only). Films & TV adds
 // a Film/TV toggle that's passed through to TMDB as `media_kind` so results
 // don't mix movies and TV shows together.
-export default function DigitalSearch({ category, onResults }) {
-  const [query, setQuery] = useState('')
-  const [mediaKind, setMediaKind] = useState('movie')
+export default function DigitalSearch({ category, onResults, query, onQueryChange, mediaKind, onMediaKindChange }) {
+  const setQuery = onQueryChange
+  const setMediaKind = onMediaKindChange
   const [loading, setLoading] = useState(false)
 
   const doSearch = async (q) => {

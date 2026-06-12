@@ -52,16 +52,20 @@ export default function LocationOrPlatformStep({
         await ensureLoaded()
         toast.success(`Location "${created.name}" created`)
         onLocationCreated(String(created.id))
+        // Pre-fill the new location as the parent for the next create, so
+        // building out a hierarchy (Office > Shelf > Top) doesn't require
+        // re-selecting the parent each time.
+        setNewParentId(String(created.id))
       } else {
         const created = await platformsApi.create({ name, logo_key: matchPlatformLogo(name) })
         invalidate()
         await ensureLoaded()
         toast.success(`Platform "${created.name}" created`)
         onPlatformCreated(String(created.id))
+        setNewParentId('')
       }
       setCreating(false)
       setNewName('')
-      setNewParentId('')
     } catch (err) {
       toast.error(err.message)
     } finally {

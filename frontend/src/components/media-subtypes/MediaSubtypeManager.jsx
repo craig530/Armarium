@@ -5,6 +5,7 @@ import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
 import Input, { Select } from '../ui/Input'
 import Button from '../ui/Button'
 import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
+import { useConfirm } from '../../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', category: CATEGORIES[0].value, supertype: SUPERTYPES[0].value }
@@ -17,6 +18,7 @@ export default function MediaSubtypeManager() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [confirm, confirmDialog] = useConfirm()
 
   const load = () => {
     mediaSubtypesApi.list().then(setSubtypes).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
@@ -51,7 +53,7 @@ export default function MediaSubtypeManager() {
   }
 
   const handleDelete = async (subtype) => {
-    if (!confirm(`Delete "${subtype.name}"?`)) return
+    if (!await confirm(`Delete "${subtype.name}"?`)) return
     try {
       await mediaSubtypesApi.delete(subtype.id)
       toast.success('Media type deleted')
@@ -62,15 +64,22 @@ export default function MediaSubtypeManager() {
     }
   }
 
+  // Re-sequences the group to 0..N-1 in the new (swapped) order, rather than
+  // just swapping the two `sort_order` values directly — new subtypes all
+  // default to `sort_order: 0`, so a same-value swap between tied entries
+  // would otherwise be a no-op. Only entries whose target index differs from
+  // their current `sort_order` are written.
   const move = async (subtype, direction, group) => {
     const idx = group.findIndex((s) => s.id === subtype.id)
-    const swapWith = group[idx + direction]
-    if (!swapWith) return
+    const swapIdx = idx + direction
+    if (swapIdx < 0 || swapIdx >= group.length) return
+    const reordered = [...group]
+    ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
+    const updates = reordered
+      .map((s, i) => ({ id: s.id, sort_order: i, changed: s.sort_order !== i }))
+      .filter((u) => u.changed)
     try {
-      await Promise.all([
-        mediaSubtypesApi.update(subtype.id, { sort_order: swapWith.sort_order }),
-        mediaSubtypesApi.update(swapWith.id, { sort_order: subtype.sort_order }),
-      ])
+      await Promise.all(updates.map((u) => mediaSubtypesApi.update(u.id, { sort_order: u.sort_order })))
       load()
       useReferenceDataStore.getState().invalidate()
     } catch (err) {
@@ -202,6 +211,8 @@ export default function MediaSubtypeManager() {
           })}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   )
 }
