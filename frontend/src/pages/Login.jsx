@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore, useThemeStore } from '../store'
 import { Eye, EyeOff, Sun, Moon } from 'lucide-react'
 import toast from 'react-hot-toast'
+import Logo from '../components/ui/Logo'
 
 export default function Login() {
   const { isAuthenticated, login } = useAuthStore()
@@ -44,7 +45,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Branding */}
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3">📦</div>
+          <Logo size={64} className="mb-3 [&>img]:rounded-2xl justify-center" />
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Armarium</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">Your personal media catalogue</p>
         </div>

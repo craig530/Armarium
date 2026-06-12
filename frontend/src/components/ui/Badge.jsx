@@ -1,9 +1,10 @@
 import clsx from 'clsx'
 
+// "Archive ledger" hues: wine for Music, deep emerald for Films & TV, brass for Books.
 const CATEGORY_COLORS = {
-  music: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  films_tv: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
-  books: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  music: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+  films_tv: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  books: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
 }
 
 export function MediaSubtypeBadge({ subtype, className }) {

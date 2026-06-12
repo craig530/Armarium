@@ -172,6 +172,7 @@ npx license-checker --production
 | Font | Licence | Source |
 |---|---|---|
 | [Inter](https://rsms.me/inter/) | [SIL Open Font License 1.1](https://spdx.org/licenses/OFL-1.1.html) | Loaded from [Google Fonts](https://fonts.google.com/specimen/Inter) via `<link>` tags in `frontend/index.html` |
+| [Fraunces](https://github.com/undercasetype/Fraunces) | [SIL Open Font License 1.1](https://spdx.org/licenses/OFL-1.1.html) | Loaded from [Google Fonts](https://fonts.google.com/specimen/Fraunces) via `<link>` tags in `frontend/index.html`; used for headings and the wordmark |
 
 The SIL OFL does not require attribution in the application itself, but it is
 listed here for transparency. No font files are bundled in this repository —
@@ -180,6 +181,14 @@ they are fetched from Google Fonts at runtime.
 ---
 
 ## Icons & Brand Assets
+
+### Armarium logo
+
+The Armarium logo and wordmark (`frontend/src/assets/brand/armarium-logo.svg`,
+plus its generated favicon and PWA icon variants — `favicon.svg`,
+`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) are original artwork
+created for this project and are covered by the project's MIT licence, not by
+any third-party licence.
 
 ### Location icons
 

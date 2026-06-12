@@ -2,10 +2,10 @@
   "name": "Armarium",
   "short_name": "Armarium",
   "description": "Your personal media catalogue",
-  "start_url": "/library",
+  "start_url": "/",
   "display": "standalone",
-  "background_color": "#030712",
-  "theme_color": "#4f5eff",
+  "background_color": "#15100C",
+  "theme_color": "#7B4A2E",
   "orientation": "portrait-primary",
   "icons": [
     {

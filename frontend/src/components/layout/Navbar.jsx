@@ -6,6 +6,7 @@ import clsx from 'clsx'
 import client from '../../api/client'
 import toast from 'react-hot-toast'
 import { CATEGORIES } from '../../lib/categories'
+import Logo from '../ui/Logo'
 
 const CATEGORY_ICONS = {
   music: Music,
@@ -57,9 +58,8 @@ export default function Navbar({ stats }) {
     <header className="sticky top-0 z-40 border-b bg-white/90 dark:bg-gray-950/90 backdrop-blur-md border-gray-200 dark:border-gray-800">
       <div className="mx-auto max-w-7xl px-4 h-14 flex items-center gap-4">
         {/* Logo */}
-        <NavLink to="/" end className="flex items-center gap-2 shrink-0">
-          <span className="text-xl">📦</span>
-          <span className="font-bold text-gray-900 dark:text-white tracking-tight hidden sm:block">Armarium</span>
+        <NavLink to="/" end className="flex items-center shrink-0">
+          <Logo size={28} withWordmark wordmarkClassName="hidden sm:inline-flex" />
         </NavLink>
 
         {/* Nav links */}
