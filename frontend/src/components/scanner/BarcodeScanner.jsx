@@ -64,6 +64,13 @@ function isCameraSupported() {
   )
 }
 
+// Phones/tablets default to the rear-facing camera (better for barcodes);
+// desktops/laptops have no "environment" camera, so default to whichever
+// camera the browser picks first (typically the built-in/primary webcam).
+function isMobileDevice() {
+  return typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+}
+
 function describeCameraError(err) {
   switch (err?.name) {
     case 'NotAllowedError':
@@ -94,16 +101,18 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   const [flash, setFlash] = useState(false)
   const [torchSupported, setTorchSupported] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
+  // A successfully-decoded, recognised barcode awaiting user confirmation.
+  // Scanning is paused while this is set — the camera only resumes lookup
+  // once the user taps Confirm (or Scan Again to keep looking).
+  const [pendingCode, setPendingCode] = useState(null)
 
-  useEffect(() => {
-    if (!isCameraSupported()) {
-      setError(SECURE_CONTEXT_ERROR)
-      return
-    }
+  const startScanning = () => {
+    const reader = readerRef.current
+    if (!reader) return
 
-    const reader = readerRef.current ?? (readerRef.current = new BrowserMultiFormatReader(HINTS))
     setScanning(true)
     setError(null)
+    setFlash(false)
     setGuidance('default')
     setTorchSupported(false)
     setTorchOn(false)
@@ -125,7 +134,9 @@ export default function BarcodeScanner({ onDetected, onClose }) {
     // continuous-scanning behaviour.
     const videoConstraints = selectedDevice
       ? { deviceId: { exact: selectedDevice }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-      : { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+      : isMobileDevice()
+        ? { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+        : { width: { ideal: 1920 }, height: { ideal: 1080 } }
 
     reader
       .decodeFromConstraints({ video: videoConstraints }, videoRef.current, (result, err) => {
@@ -134,7 +145,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           if (looksLikeRecognizedBarcode(text)) {
             reader.reset()
             setScanning(false)
-            onDetected(text)
+            setPendingCode(text)
             return
           }
           // Barcode-shaped but not a format we can look up — flag it and
@@ -192,12 +203,34 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         setError(describeCameraError(e))
         setScanning(false)
       })
+  }
+
+  useEffect(() => {
+    if (!isCameraSupported()) {
+      setError(SECURE_CONTEXT_ERROR)
+      return
+    }
+
+    const reader = readerRef.current ?? (readerRef.current = new BrowserMultiFormatReader(HINTS))
+    setPendingCode(null)
+    startScanning()
 
     return () => {
       reader.reset()
       clearTimeout(flashTimeoutRef.current)
     }
   }, [selectedDevice]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleScanAgain = () => {
+    setPendingCode(null)
+    startScanning()
+  }
+
+  const handleConfirm = () => {
+    const code = pendingCode
+    setPendingCode(null)
+    onDetected(code)
+  }
 
   const toggleTorch = async () => {
     const track = readerRef.current?.stream?.getVideoTracks?.()[0]
@@ -273,6 +306,27 @@ export default function BarcodeScanner({ onDetected, onClose }) {
             <div className="text-center p-4">
               <CameraOff className="mx-auto mb-2 text-red-400" size={32} />
               <p className="text-white text-sm">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Confirmation step — pause on a recognised barcode and let the
+            user verify it before it's used for a lookup, so a spurious
+            decode (e.g. a different barcode in frame) doesn't waste an
+            API call. */}
+        {pendingCode && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/85 p-4 text-center">
+            <p className="text-sm text-gray-300">Barcode detected — does this look right?</p>
+            <p className="text-3xl sm:text-4xl font-bold tracking-widest text-white font-mono break-all">
+              {pendingCode}
+            </p>
+            <div className="flex gap-3 w-full max-w-xs">
+              <Button type="button" variant="outline" onClick={handleScanAgain} className="flex-1">
+                Scan again
+              </Button>
+              <Button type="button" onClick={handleConfirm} className="flex-1">
+                Confirm
+              </Button>
             </div>
           </div>
         )}

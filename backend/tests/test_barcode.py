@@ -69,6 +69,19 @@ def test_valid_ean13_cd_barcode():
     assert result["lookups"]["ean13_from_upc"] is None
 
 
+def test_ean13_not_starting_with_isbn_prefix_has_no_book_lookup():
+    # 13-digit EAN-13 (e.g. a French CD barcode) that doesn't start with
+    # 978/979 — valid as a generic product barcode, but must never produce
+    # an ISBN/Open Library lookup value.
+    result = process_barcode("3916681812733")
+
+    assert result["valid"] is True
+    assert result["media_hint"] == "unknown"
+    assert result["lookups"]["ean13"] == "3916681812733"
+    assert result["lookups"]["isbn13"] is None
+    assert result["lookups"]["open_library"] is None
+
+
 def test_upc_a_with_leading_zero_already_present():
     result = process_barcode("012345678905")
 

@@ -54,18 +54,30 @@ async def lookup_barcode(
         raise HTTPException(status_code=400, detail=processed["error"])
 
     lookups = processed["lookups"]
+    is_book = category == MediaCategory.BOOKS or (category is None and processed["media_hint"] == "book")
+
+    # A book lookup needs an ISBN-13 (prefix 978/979) — a barcode that's
+    # merely the right length but doesn't start with that prefix (e.g. a
+    # foreign/CD EAN-13) must be rejected here, before any external API call.
+    if is_book and not lookups["isbn13"]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"'{processed['raw_cleaned']}' is not a valid ISBN — book barcodes must "
+                f"start with 978 or 979."
+            ),
+        )
+
     cache_key = f"barcode:{processed['raw_cleaned']}:{category}"
     candidates = lookup_cache.get(cache_key, ttl=3600)
 
     if candidates is None:
-        is_book = category == MediaCategory.BOOKS or (category is None and processed["media_hint"] == "book")
-        candidates = []
-
         if is_book:
-            if lookups["open_library"]:
-                candidates = await openlibrary.lookup_by_isbn(lookups["open_library"])
+            candidates = await openlibrary.lookup_by_isbn(lookups["open_library"])
         elif lookups["musicbrainz"]:
             candidates = await musicbrainz.lookup_by_barcode(lookups["musicbrainz"])
+        else:
+            candidates = []
 
         if candidates:
             lookup_cache.set(cache_key, candidates)

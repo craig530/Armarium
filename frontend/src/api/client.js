@@ -34,6 +34,13 @@ function formatErrorDetail(detail) {
 client.interceptors.response.use(
   (res) => res,
   (err) => {
+    // Pass cancelled requests through unchanged — wrapping them in a plain
+    // Error below would strip the `__CANCEL__` flag that `axios.isCancel()`
+    // relies on, causing callers' "ignore cancelled requests" checks to miss
+    // and surface a "canceled" toast on fast navigation.
+    if (axios.isCancel(err)) {
+      return Promise.reject(err)
+    }
     if (err.response?.status === 401) {
       localStorage.removeItem('armarium-token')
       localStorage.removeItem('armarium-user')

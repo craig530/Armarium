@@ -848,6 +848,19 @@ async def test_lookup_barcode_rejects_invalid_barcode(client, auth_headers):
     assert "barcode" in resp.json()["detail"].lower()
 
 
+async def test_lookup_barcode_rejects_non_isbn_for_books_category(client, auth_headers):
+    # 13-digit EAN-13 that doesn't start with 978/979 — not a valid ISBN, so
+    # a category=books lookup must reject it before calling Open Library.
+    with patch("app.services.openlibrary.lookup_by_isbn", new=AsyncMock(return_value=[])) as mock_lookup:
+        resp = await client.get(
+            "/api/v1/lookup/barcode/3916681812733?category=books", headers=auth_headers
+        )
+
+    assert resp.status_code == 400
+    assert "isbn" in resp.json()["detail"].lower()
+    mock_lookup.assert_not_awaited()
+
+
 async def test_lookup_barcode_cd_queries_musicbrainz_with_ean13_from_upc(client, auth_headers):
     with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_lookup:
         resp = await client.get("/api/v1/lookup/barcode/075678563598", headers=auth_headers)
