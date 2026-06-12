@@ -2,6 +2,14 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    # Some hosts (e.g. a freshly-installed Ubuntu server using
+    # systemd-resolved) leave containers with a /etc/resolv.conf pointing at
+    # 127.0.0.53, which isn't reachable from inside the container's network
+    # namespace — breaking lookups to TMDB/MusicBrainz/Open Library. Pin
+    # public resolvers so outbound lookups work regardless of host DNS setup.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:///./data/armarium.db}
       COVERS_DIR: ./data/covers
