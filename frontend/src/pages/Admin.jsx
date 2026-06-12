@@ -6,10 +6,66 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import toast from 'react-hot-toast'
 
-function UserRow({ user, currentUserId, onUpdated, onDeleted }) {
+const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,50}$/
+
+const PERMISSION_FLAGS = [
+  { key: 'can_add_items', label: 'Add items' },
+  { key: 'can_manage_locations', label: 'Manage locations' },
+  { key: 'can_manage_platforms', label: 'Manage platforms' },
+  { key: 'can_manage_media_types', label: 'Manage media types' },
+]
+
+const EMPTY_FORM = {
+  username: '',
+  password: '',
+  is_admin: false,
+  is_read_only: false,
+  can_add_items: true,
+  can_manage_locations: true,
+  can_manage_platforms: true,
+  can_manage_media_types: false,
+}
+
+function PermissionToggles({ value, onChange }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={value.is_read_only}
+          onChange={(e) => onChange('is_read_only', e.target.checked)}
+          className="rounded"
+        />
+        Read only (overrides all permissions below)
+      </label>
+      {PERMISSION_FLAGS.map(({ key, label }) => (
+        <label
+          key={key}
+          className={`flex items-center gap-2 text-sm cursor-pointer ${
+            value.is_read_only ? 'text-gray-400 dark:text-gray-600' : 'text-gray-700 dark:text-gray-300'
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={value[key]}
+            disabled={value.is_read_only}
+            onChange={(e) => onChange(key, e.target.checked)}
+            className="rounded"
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
   const [editing, setEditing] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const isSelf = user.id === currentUserId
+  const isLastAdmin = user.is_admin && adminCount <= 1
 
   const handleToggleAdmin = async () => {
     try {
@@ -25,6 +81,15 @@ function UserRow({ user, currentUserId, onUpdated, onDeleted }) {
     try {
       await client.put(`/users/${user.id}`, { is_active: !user.is_active })
       toast.success(user.is_active ? 'User deactivated' : 'User activated')
+      onUpdated()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleTogglePermission = async (key, checked) => {
+    try {
+      await client.put(`/users/${user.id}`, { [key]: checked })
       onUpdated()
     } catch (err) {
       toast.error(err.message)
@@ -57,83 +122,127 @@ function UserRow({ user, currentUserId, onUpdated, onDeleted }) {
     }
   }
 
-  const isSelf = user.id === currentUserId
-
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900 dark:text-white">{user.username}</span>
-          {user.is_admin && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-              Admin
-            </span>
-          )}
-          {!user.is_active && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/40">
-              Inactive
-            </span>
-          )}
-          {isSelf && (
-            <span className="text-xs text-gray-400">(you)</span>
-          )}
+    <div className="py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-gray-900 dark:text-white">{user.username}</span>
+            {user.is_admin && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                Admin
+              </span>
+            )}
+            {!user.is_active && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/40">
+                Inactive
+              </span>
+            )}
+            {isSelf && (
+              <span className="text-xs text-gray-400">(you)</span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Added {new Date(user.created_at).toLocaleDateString()}
+          </p>
         </div>
-        <p className="text-xs text-gray-400 mt-0.5">
-          Added {new Date(user.created_at).toLocaleDateString()}
-        </p>
+
+        {/* Password reset inline */}
+        {editing ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New password"
+              className="w-36 text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              autoFocus
+            />
+            <button onClick={handlePasswordReset} disabled={saving} className="p-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">
+              <Check size={14} />
+            </button>
+            <button onClick={() => { setEditing(false); setNewPassword('') }} className="p-1 rounded text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setEditing(true)}
+              title="Reset password"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <RefreshCw size={14} />
+            </button>
+            <button
+              onClick={handleToggleAdmin}
+              disabled={isSelf || isLastAdmin}
+              title={
+                isSelf ? 'Cannot change your own admin role'
+                  : isLastAdmin ? 'Cannot remove the last administrator'
+                    : user.is_admin ? 'Remove admin' : 'Grant admin'
+              }
+              className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30"
+            >
+              {user.is_admin ? <ShieldOff size={14} /> : <Shield size={14} />}
+            </button>
+            <button
+              onClick={handleToggleActive}
+              disabled={isSelf || (isLastAdmin && user.is_active)}
+              title={
+                isSelf ? 'Cannot deactivate your own account'
+                  : (isLastAdmin && user.is_active) ? 'Cannot deactivate the last administrator'
+                    : user.is_active ? 'Deactivate' : 'Activate'
+              }
+              className="p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-30"
+            >
+              {user.is_active ? <X size={14} /> : <Check size={14} />}
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={isSelf || isLastAdmin}
+              title={
+                isSelf ? 'Cannot delete your own account'
+                  : isLastAdmin ? 'Cannot delete the last administrator'
+                    : 'Delete user'
+              }
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-30"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Password reset inline */}
-      {editing ? (
-        <div className="flex items-center gap-2">
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="New password"
-            className="w-36 text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            autoFocus
-          />
-          <button onClick={handlePasswordReset} disabled={saving} className="p-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">
-            <Check size={14} />
-          </button>
-          <button onClick={() => { setEditing(false); setNewPassword('') }} className="p-1 rounded text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <X size={14} />
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setEditing(true)}
-            title="Reset password"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            <RefreshCw size={14} />
-          </button>
-          <button
-            onClick={handleToggleAdmin}
-            disabled={isSelf}
-            title={user.is_admin ? 'Remove admin' : 'Grant admin'}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30"
-          >
-            {user.is_admin ? <ShieldOff size={14} /> : <Shield size={14} />}
-          </button>
-          <button
-            onClick={handleToggleActive}
-            disabled={isSelf}
-            title={user.is_active ? 'Deactivate' : 'Activate'}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-30"
-          >
-            {user.is_active ? <X size={14} /> : <Check size={14} />}
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={isSelf}
-            title="Delete user"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-30"
-          >
-            <Trash2 size={14} />
-          </button>
+      {/* Permission flags (admins always have full access) */}
+      {!user.is_admin && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={user.is_read_only}
+              onChange={(e) => handleTogglePermission('is_read_only', e.target.checked)}
+              className="rounded"
+            />
+            Read only
+          </label>
+          {PERMISSION_FLAGS.map(({ key, label }) => (
+            <label
+              key={key}
+              className={`flex items-center gap-1.5 text-xs cursor-pointer ${
+                user.is_read_only ? 'text-gray-400 dark:text-gray-600' : 'text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={user[key]}
+                disabled={user.is_read_only}
+                onChange={(e) => handleTogglePermission(key, e.target.checked)}
+                className="rounded"
+              />
+              {label}
+            </label>
+          ))}
         </div>
       )}
     </div>
@@ -145,7 +254,8 @@ export default function Admin() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ username: '', password: '', is_admin: false })
+  const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [formErrors, setFormErrors] = useState({})
   const [creating, setCreating] = useState(false)
 
   const load = () => {
@@ -157,13 +267,24 @@ export default function Admin() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    if (!form.username || !form.password) return
+
+    const errors = {}
+    if (!USERNAME_PATTERN.test(form.username)) {
+      errors.username = 'Use 3-50 characters: letters, numbers, underscores or hyphens only'
+    }
+    if (form.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters'
+    }
+    setFormErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
     setCreating(true)
     try {
       await client.post('/users', form)
       toast.success(`User "${form.username}" created`)
       setShowForm(false)
-      setForm({ username: '', password: '', is_admin: false })
+      setForm({ ...EMPTY_FORM })
+      setFormErrors({})
       load()
     } catch (err) {
       toast.error(err.message)
@@ -174,6 +295,7 @@ export default function Admin() {
 
   // Find current user's ID from the list (we need the DB id, not from the token)
   const currentDbUser = users.find((u) => u.username === currentUser?.username)
+  const adminCount = users.filter((u) => u.is_admin).length
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -198,6 +320,7 @@ export default function Admin() {
               label="Username"
               value={form.username}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+              error={formErrors.username}
               autoFocus
             />
             <Input
@@ -205,6 +328,7 @@ export default function Admin() {
               type="password"
               value={form.password}
               onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              error={formErrors.password}
             />
             <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
               <input
@@ -215,9 +339,15 @@ export default function Admin() {
               />
               Grant admin role
             </label>
+            {!form.is_admin && (
+              <PermissionToggles
+                value={form}
+                onChange={(key, checked) => setForm((f) => ({ ...f, [key]: checked }))}
+              />
+            )}
             <div className="flex gap-2">
               <Button size="sm" type="submit" loading={creating}>Create</Button>
-              <Button size="sm" variant="ghost" type="button" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button size="sm" variant="ghost" type="button" onClick={() => { setShowForm(false); setFormErrors({}) }}>Cancel</Button>
             </div>
           </form>
         )}
@@ -231,6 +361,7 @@ export default function Admin() {
                 key={user.id}
                 user={user}
                 currentUserId={currentDbUser?.id}
+                adminCount={adminCount}
                 onUpdated={load}
                 onDeleted={(id) => setUsers((us) => us.filter((u) => u.id !== id))}
               />

@@ -7,11 +7,14 @@ import LocationIcon from '../ui/LocationIcon'
 import LocationPicker from './LocationPicker'
 import IconPicker from '../settings/IconPicker'
 import { flattenLocations } from '../../lib/locations'
+import { useAuthStore, hasPermission } from '../../store'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', parent_id: '', icon_key: '', icon_url: null }
 
 export default function LocationManager() {
+  const { user } = useAuthStore()
+  const canManage = hasPermission(user, 'can_manage_locations')
   const [locations, setLocations] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -85,14 +88,16 @@ export default function LocationManager() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-end">
-        <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true) }}>
-          <Plus size={15} /> New location
-        </Button>
-      </div>
+      {canManage && (
+        <div className="flex items-center justify-end">
+          <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true) }}>
+            <Plus size={15} /> New location
+          </Button>
+        </div>
+      )}
 
       {/* Add/Edit form */}
-      {showForm && (
+      {canManage && showForm && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3 bg-gray-50 dark:bg-gray-900">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
             {editId ? 'Edit location' : 'New location'}
@@ -150,18 +155,22 @@ export default function LocationManager() {
                 {loc.item_count > 0 && (
                   <span className="text-xs text-gray-400">{loc.item_count} items</span>
                 )}
-                <button
-                  onClick={() => handleEdit(loc)}
-                  className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                >
-                  <Pencil size={13} />
-                </button>
-                <button
-                  onClick={() => handleDelete(loc)}
-                  className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                >
-                  <Trash2 size={13} />
-                </button>
+                {canManage && (
+                  <>
+                    <button
+                      onClick={() => handleEdit(loc)}
+                      className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(loc)}
+                      className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </>
+                )}
               </div>
             ))
           )}

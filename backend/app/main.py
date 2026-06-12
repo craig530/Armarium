@@ -19,6 +19,7 @@ from .migrations import (
     rename_default_subtypes,
     add_books_digital_subtypes,
     seed_default_platforms,
+    add_user_permission_columns,
     drop_legacy_media_type_column,
 )
 from .services.search import setup_fts
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
         await run_additive_migrations(conn)
         await create_missing_indexes(conn)
+        await add_user_permission_columns(conn)
         await setup_fts(conn)
 
     Path(settings.covers_dir).mkdir(parents=True, exist_ok=True)

@@ -7,7 +7,7 @@ from ...database import get_db
 from ...models.media_subtype import MediaSubtype
 from ...models.media import MediaItem
 from ...schemas.media_subtype import MediaSubtypeCreate, MediaSubtypeUpdate, MediaSubtypeResponse
-from ...services.auth import get_current_user
+from ...services.auth import get_current_user, require_permission
 
 router = APIRouter()
 
@@ -64,7 +64,7 @@ async def list_media_subtypes(response: Response, _=Depends(get_current_user), d
 @router.post("", response_model=MediaSubtypeResponse, status_code=201)
 async def create_media_subtype(
     payload: MediaSubtypeCreate,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_media_types")),
     db: AsyncSession = Depends(get_db),
 ):
     await _check_unique(db, payload.category, payload.supertype, payload.name)
@@ -80,7 +80,7 @@ async def create_media_subtype(
 async def update_media_subtype(
     subtype_id: int,
     payload: MediaSubtypeUpdate,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_media_types")),
     db: AsyncSession = Depends(get_db),
 ):
     subtype = (await db.execute(select(MediaSubtype).where(MediaSubtype.id == subtype_id))).scalar_one_or_none()
@@ -103,7 +103,7 @@ async def update_media_subtype(
 @router.delete("/{subtype_id}", status_code=204)
 async def delete_media_subtype(
     subtype_id: int,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_media_types")),
     db: AsyncSession = Depends(get_db),
 ):
     subtype = (await db.execute(select(MediaSubtype).where(MediaSubtype.id == subtype_id))).scalar_one_or_none()

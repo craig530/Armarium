@@ -21,6 +21,11 @@ class UserCreate(BaseModel):
     username: str = Field(..., pattern=USERNAME_PATTERN)
     password: str = Field(..., min_length=8, max_length=128)
     is_admin: bool = False
+    is_read_only: bool = False
+    can_add_items: bool = True
+    can_manage_locations: bool = True
+    can_manage_platforms: bool = True
+    can_manage_media_types: bool = False
 
 
 class UserUpdate(BaseModel):
@@ -28,6 +33,11 @@ class UserUpdate(BaseModel):
     password: Optional[str] = Field(None, min_length=8, max_length=128)
     is_admin: Optional[bool] = None
     is_active: Optional[bool] = None
+    is_read_only: Optional[bool] = None
+    can_add_items: Optional[bool] = None
+    can_manage_locations: Optional[bool] = None
+    can_manage_platforms: Optional[bool] = None
+    can_manage_media_types: Optional[bool] = None
 
 
 class UserResponse(BaseModel):
@@ -35,6 +45,11 @@ class UserResponse(BaseModel):
     username: str
     is_admin: bool
     is_active: bool
+    is_read_only: bool
+    can_add_items: bool
+    can_manage_locations: bool
+    can_manage_platforms: bool
+    can_manage_media_types: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

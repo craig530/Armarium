@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import axios from 'axios'
+import client from '../api/client'
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,12 @@ function clearServiceWorkerCache() {
   navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_API_CACHE' })
 }
 
+// Mirrors the backend's require_permission() logic: admins bypass all
+// checks, is_read_only overrides every can_* flag.
+export function hasPermission(user, flag) {
+  return !!user?.is_admin || (!user?.is_read_only && !!user?.[flag])
+}
+
 export const useAuthStore = create((set) => ({
   ...loadStoredAuth(),
 
@@ -54,6 +61,24 @@ export const useAuthStore = create((set) => ({
     localStorage.setItem('armarium-token', access_token)
     localStorage.setItem('armarium-user', JSON.stringify(user))
     set({ token: access_token, user, isAuthenticated: true })
+
+    // Populate the full profile (id + permission flags) from the API —
+    // the JWT only carries username/is_admin.
+    await useAuthStore.getState().refreshUser()
+  },
+
+  // Re-fetch the current user's profile (including permission flags) from
+  // the API. Called after login and on app load so permissions stay fresh
+  // without requiring re-login.
+  async refreshUser() {
+    try {
+      const resp = await client.get('/auth/me')
+      const user = resp.data
+      localStorage.setItem('armarium-user', JSON.stringify(user))
+      set({ user })
+    } catch {
+      // Token may be invalid/expired — the response interceptor handles 401s.
+    }
   },
 
   logout() {

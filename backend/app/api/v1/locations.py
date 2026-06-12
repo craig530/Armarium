@@ -8,7 +8,7 @@ from ...database import get_db
 from ...models.location import Location
 from ...models.media import MediaItem
 from ...schemas.location import LocationCreate, LocationUpdate, LocationResponse
-from ...services.auth import get_current_user
+from ...services.auth import get_current_user, require_permission
 from ...services.asset_upload import save_asset, remove_asset
 from ...config import settings
 
@@ -89,7 +89,7 @@ async def list_locations(response: Response, _=Depends(get_current_user), db: As
 @router.post("", response_model=LocationResponse, status_code=201)
 async def create_location(
     payload: LocationCreate,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_locations")),
     db: AsyncSession = Depends(get_db),
 ):
     if payload.parent_id:
@@ -128,7 +128,7 @@ async def get_location(
 async def update_location(
     loc_id: int,
     payload: LocationUpdate,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_locations")),
     db: AsyncSession = Depends(get_db),
 ):
     loc = (await db.execute(select(Location).where(Location.id == loc_id))).scalar_one_or_none()
@@ -175,7 +175,7 @@ async def update_location(
 @router.delete("/{loc_id}", status_code=204)
 async def delete_location(
     loc_id: int,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_locations")),
     db: AsyncSession = Depends(get_db),
 ):
     loc = (await db.execute(select(Location).where(Location.id == loc_id))).scalar_one_or_none()
@@ -202,7 +202,7 @@ async def delete_location(
 async def upload_location_icon(
     loc_id: int,
     file: UploadFile = File(...),
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_locations")),
     db: AsyncSession = Depends(get_db),
 ):
     loc = (await db.execute(select(Location).where(Location.id == loc_id))).scalar_one_or_none()

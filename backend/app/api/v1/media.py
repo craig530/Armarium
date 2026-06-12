@@ -18,7 +18,7 @@ from ...schemas.media import (
     MediaSubtypeSummary, PlatformSummary, LinkedItemSummary, ItemLinkCreate,
 )
 from ...services.cover_art import download_cover, cover_urls, delete_cover_files, optimise_and_save
-from ...services.auth import get_current_user
+from ...services.auth import get_current_user, require_permission
 from ...services import search as search_service
 
 router = APIRouter()
@@ -429,7 +429,7 @@ async def _fetch_cover_in_background(item_id: int, url: str) -> None:
 async def create_media(
     payload: MediaItemCreate,
     background_tasks: BackgroundTasks,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_add_items")),
     db: AsyncSession = Depends(get_db),
 ):
     subtype = await _resolve_subtype(db, payload.media_subtype_id)
@@ -496,7 +496,7 @@ async def get_stats(_=Depends(get_current_user), db: AsyncSession = Depends(get_
 @router.post("/link", response_model=MediaItemResponse, status_code=201)
 async def link_items(
     payload: ItemLinkCreate,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_add_items")),
     db: AsyncSession = Depends(get_db),
 ):
     if payload.item_a_id == payload.item_b_id:
@@ -557,7 +557,7 @@ async def update_media(
     item_id: int,
     payload: MediaItemUpdate,
     background_tasks: BackgroundTasks,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_add_items")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(MediaItem).where(MediaItem.id == item_id).options(selectinload(MediaItem.location))
@@ -592,7 +592,7 @@ async def update_media(
 
 
 @router.delete("/{item_id}", status_code=204)
-async def delete_media(item_id: int, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def delete_media(item_id: int, _=Depends(require_permission("can_add_items")), db: AsyncSession = Depends(get_db)):
     stmt = select(MediaItem).where(MediaItem.id == item_id)
     item = (await db.execute(stmt)).scalar_one_or_none()
     if not item:
@@ -613,7 +613,7 @@ async def delete_media(item_id: int, _=Depends(get_current_user), db: AsyncSessi
 
 
 @router.delete("/{item_id}/link", status_code=204)
-async def unlink_item(item_id: int, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def unlink_item(item_id: int, _=Depends(require_permission("can_add_items")), db: AsyncSession = Depends(get_db)):
     item = (await db.execute(select(MediaItem.id).where(MediaItem.id == item_id))).scalar_one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -634,7 +634,7 @@ async def unlink_item(item_id: int, _=Depends(get_current_user), db: AsyncSessio
 async def upload_cover(
     item_id: int,
     file: UploadFile = File(...),
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_add_items")),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(MediaItem).where(MediaItem.id == item_id).options(selectinload(MediaItem.location))

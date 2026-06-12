@@ -41,7 +41,14 @@ export default function App() {
             <Route index element={<Home />} />
             <Route path="library" element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
             <Route path="library/:category" element={<Library />} />
-            <Route path="add" element={<AddItem />} />
+            <Route
+              path="add"
+              element={
+                <ProtectedRoute requirePermission="can_add_items">
+                  <AddItem />
+                </ProtectedRoute>
+              }
+            />
             <Route path="item/:id" element={<ItemDetail />} />
             <Route path="locations" element={<Navigate to="/settings/locations" replace />} />
             <Route path="settings" element={<SettingsLayout />}>

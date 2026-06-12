@@ -4,11 +4,14 @@ import { mediaSubtypesApi } from '../../api/mediaSubtypes'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
 import Input, { Select } from '../ui/Input'
 import Button from '../ui/Button'
+import { useAuthStore, hasPermission } from '../../store'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', category: CATEGORIES[0].value, supertype: SUPERTYPES[0].value }
 
 export default function MediaSubtypeManager() {
+  const { user } = useAuthStore()
+  const canManage = hasPermission(user, 'can_manage_media_types')
   const [subtypes, setSubtypes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -75,14 +78,16 @@ export default function MediaSubtypeManager() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-end">
-        <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true) }}>
-          <Plus size={15} /> New type
-        </Button>
-      </div>
+      {canManage && (
+        <div className="flex items-center justify-end">
+          <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true) }}>
+            <Plus size={15} /> New type
+          </Button>
+        </div>
+      )}
 
       {/* Add/Edit form */}
-      {showForm && (
+      {canManage && showForm && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3 bg-gray-50 dark:bg-gray-900">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
             {editId ? 'Edit media type' : 'New media type'}
@@ -146,38 +151,44 @@ export default function MediaSubtypeManager() {
                       <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{supertype.label}</p>
                       {group.map((subtype, idx) => (
                         <div key={subtype.id} className="flex items-center gap-2 py-1">
-                          <div className="flex flex-col -my-1">
-                            <button
-                              onClick={() => move(subtype, -1, group)}
-                              disabled={idx === 0}
-                              className="p-0.5 text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                              <ChevronUp size={12} />
-                            </button>
-                            <button
-                              onClick={() => move(subtype, 1, group)}
-                              disabled={idx === group.length - 1}
-                              className="p-0.5 text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                              <ChevronDown size={12} />
-                            </button>
-                          </div>
+                          {canManage && (
+                            <div className="flex flex-col -my-1">
+                              <button
+                                onClick={() => move(subtype, -1, group)}
+                                disabled={idx === 0}
+                                className="p-0.5 text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                <ChevronUp size={12} />
+                              </button>
+                              <button
+                                onClick={() => move(subtype, 1, group)}
+                                disabled={idx === group.length - 1}
+                                className="p-0.5 text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                <ChevronDown size={12} />
+                              </button>
+                            </div>
+                          )}
                           <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{subtype.name}</span>
                           {subtype.item_count > 0 && (
                             <span className="text-xs text-gray-400">{subtype.item_count} items</span>
                           )}
-                          <button
-                            onClick={() => handleEdit(subtype)}
-                            className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(subtype)}
-                            className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {canManage && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(subtype)}
+                                className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(subtype)}
+                                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>

@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { Sun, Moon, Plus, LayoutGrid, Music, Clapperboard, BookOpen, Settings, ShieldCheck, LogOut, User, Download, ChevronDown, MapPin, Tv, Tags } from 'lucide-react'
-import { useThemeStore, useAuthStore } from '../../store'
+import { useThemeStore, useAuthStore, hasPermission } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
 import client from '../../api/client'
@@ -167,13 +167,15 @@ export default function Navbar({ stats }) {
           </button>
 
           {/* Add item */}
-          <button
-            onClick={() => navigate('/add')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
-          >
-            <Plus size={16} />
-            <span className="hidden sm:block">Add Item</span>
-          </button>
+          {hasPermission(user, 'can_add_items') && (
+            <button
+              onClick={() => navigate('/add')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
+            >
+              <Plus size={16} />
+              <span className="hidden sm:block">Add Item</span>
+            </button>
+          )}
 
           {/* User menu */}
           <div className="relative">

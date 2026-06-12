@@ -14,6 +14,22 @@ client.interceptors.request.use((config) => {
   return config
 })
 
+// Format a FastAPI error `detail` payload into a readable string.
+// 422 validation errors arrive as a list of {loc, msg, ...} objects.
+function formatErrorDetail(detail) {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((e) => {
+        const field = Array.isArray(e?.loc) ? e.loc.filter((p) => p !== 'body').join('.') : null
+        return field ? `${field}: ${e.msg}` : e?.msg
+      })
+      .filter(Boolean)
+      .join('; ')
+  }
+  return JSON.stringify(detail)
+}
+
 // On 401, clear credentials and redirect to login
 client.interceptors.response.use(
   (res) => res,
@@ -25,8 +41,9 @@ client.interceptors.response.use(
       window.location.href = '/login'
       return Promise.reject(new Error('Session expired. Please log in again.'))
     }
-    const msg = err.response?.data?.detail || err.message || 'An error occurred'
-    return Promise.reject(new Error(typeof msg === 'string' ? msg : JSON.stringify(msg)))
+    const detail = err.response?.data?.detail
+    const msg = detail != null ? formatErrorDetail(detail) : err.message || 'An error occurred'
+    return Promise.reject(new Error(msg || 'An error occurred'))
   }
 )
 

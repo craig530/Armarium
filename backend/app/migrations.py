@@ -280,6 +280,36 @@ async def seed_default_platforms(session: AsyncSession) -> None:
         logger.info("Seeded %d default platform(s)", added)
 
 
+# (column name, SQL default literal) — granular per-user permission flags.
+# These are NOT NULL with a default, so they can't go through
+# `run_additive_migrations` (which skips non-nullable columns); added here
+# directly with an explicit SQL DEFAULT instead.
+_USER_PERMISSION_COLUMNS = [
+    ("is_read_only", "0"),
+    ("can_add_items", "1"),
+    ("can_manage_locations", "1"),
+    ("can_manage_platforms", "1"),
+    ("can_manage_media_types", "0"),
+]
+
+
+async def add_user_permission_columns(conn: AsyncConnection) -> None:
+    """Add granular permission columns to `users` on existing databases."""
+    if conn.engine.dialect.name != "sqlite":
+        return
+
+    result = await conn.execute(text('PRAGMA table_info("users")'))
+    existing_columns = {row[1] for row in result.fetchall()}
+
+    for column_name, default in _USER_PERMISSION_COLUMNS:
+        if column_name in existing_columns:
+            continue
+        await conn.execute(text(
+            f'ALTER TABLE "users" ADD COLUMN "{column_name}" BOOLEAN NOT NULL DEFAULT {default}'
+        ))
+        logger.info("Added users.%s column (default=%s)", column_name, default)
+
+
 async def drop_legacy_media_type_column(conn: AsyncConnection) -> None:
     """Drop the orphaned NOT NULL `media_type` column from `media_items`.
 

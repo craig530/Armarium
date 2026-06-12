@@ -59,3 +59,22 @@ async def get_current_admin(current_user=Depends(get_current_user)):
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
+
+
+def require_permission(permission: str):
+    """Dependency factory: only admins, or non-read-only users with the
+    given `permission` flag set, may proceed.
+
+    Admins bypass all checks. `is_read_only` overrides every other flag.
+    """
+    async def checker(current_user=Depends(get_current_user)):
+        if current_user.is_admin:
+            return current_user
+        if current_user.is_read_only or not getattr(current_user, permission, False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to perform this action",
+            )
+        return current_user
+
+    return checker

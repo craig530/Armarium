@@ -8,7 +8,7 @@ from ...database import get_db
 from ...models.platform import Platform
 from ...models.media import MediaItem
 from ...schemas.platform import PlatformCreate, PlatformUpdate, PlatformResponse
-from ...services.auth import get_current_user
+from ...services.auth import get_current_user, require_permission
 from ...services.asset_upload import save_asset, remove_asset
 from ...config import settings
 
@@ -54,7 +54,7 @@ async def list_platforms(response: Response, _=Depends(get_current_user), db: As
 @router.post("", response_model=PlatformResponse, status_code=201)
 async def create_platform(
     payload: PlatformCreate,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_platforms")),
     db: AsyncSession = Depends(get_db),
 ):
     existing = (await db.execute(select(Platform.id).where(Platform.name == payload.name))).scalar_one_or_none()
@@ -72,7 +72,7 @@ async def create_platform(
 async def update_platform(
     platform_id: int,
     payload: PlatformUpdate,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_platforms")),
     db: AsyncSession = Depends(get_db),
 ):
     platform = (await db.execute(select(Platform).where(Platform.id == platform_id))).scalar_one_or_none()
@@ -99,7 +99,7 @@ async def update_platform(
 @router.delete("/{platform_id}", status_code=204)
 async def delete_platform(
     platform_id: int,
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_platforms")),
     db: AsyncSession = Depends(get_db),
 ):
     platform = (await db.execute(select(Platform).where(Platform.id == platform_id))).scalar_one_or_none()
@@ -121,7 +121,7 @@ async def delete_platform(
 async def upload_platform_logo(
     platform_id: int,
     file: UploadFile = File(...),
-    _=Depends(get_current_user),
+    _=Depends(require_permission("can_manage_platforms")),
     db: AsyncSession = Depends(get_db),
 ):
     platform = (await db.execute(select(Platform).where(Platform.id == platform_id))).scalar_one_or_none()
