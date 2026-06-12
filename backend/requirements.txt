@@ -10,6 +10,13 @@ pydantic==2.5.2
 pydantic-settings==2.1.0
 aiofiles==23.2.1
 
+# Server-side barcode decoding for the camera scanner (the zxing-cpp port —
+# far more robust at decoding real camera frames than the @zxing/library JS
+# port used previously). Prebuilt wheels cover cp311 manylinux x86_64 and
+# aarch64, matching this project's python:3.11-slim image on both
+# architectures, so no compiler is needed in the Docker build.
+zxing-cpp==3.0.0
+
 # Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4

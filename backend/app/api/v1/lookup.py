@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Query, HTTPException, Depends
+import io
+
+from fastapi import APIRouter, Query, HTTPException, Depends, UploadFile, File
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -23,9 +26,22 @@ router = APIRouter()
 # throttled or banned upstream.
 lookup_limiter = SlidingWindowRateLimiter(max_attempts=30, window_seconds=60)
 
+# The camera scanner polls /scan every ~400ms while open — much more
+# frequent than the external-API lookups above, but still bounded so a
+# misbehaving client can't peg the server decoding images indefinitely.
+scan_limiter = SlidingWindowRateLimiter(max_attempts=300, window_seconds=60)
+
+ALLOWED_SCAN_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_SCAN_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+
 
 async def _rate_limited_user(current_user: User = Depends(get_current_user)) -> User:
     lookup_limiter.check(current_user.username, "Too many lookup requests. Please wait a moment and try again.")
+    return current_user
+
+
+async def _scan_rate_limited_user(current_user: User = Depends(get_current_user)) -> User:
+    scan_limiter.check(current_user.username, "Too many scan requests. Please wait a moment and try again.")
     return current_user
 
 
@@ -40,6 +56,36 @@ async def _library_count(db: AsyncSession, processed: dict) -> int:
         or_(MediaItem.barcode.in_(values), MediaItem.isbn.in_(values))
     )
     return (await db.execute(stmt)).scalar_one()
+
+
+@router.post("/scan")
+async def scan_barcode_image(
+    file: UploadFile = File(...),
+    _: User = Depends(_scan_rate_limited_user),
+):
+    """Decode barcodes from a single camera frame using zxing-cpp.
+
+    The camera scanner POSTs cropped JPEG frames here at a steady interval
+    while open. zxing-cpp's binarizer and rotation handling are far more
+    robust on real camera frames than decoding client-side in the browser.
+    """
+    if file.content_type not in ALLOWED_SCAN_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported image type. Use JPEG, PNG or WebP.")
+
+    data = await file.read()
+    if len(data) > MAX_SCAN_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large (max 5 MB)")
+
+    try:
+        image = Image.open(io.BytesIO(data))
+        image.load()
+    except (UnidentifiedImageError, OSError):
+        raise HTTPException(status_code=400, detail="File is not a valid image")
+
+    import zxingcpp
+
+    barcodes = zxingcpp.read_barcodes(image)
+    return {"results": [{"text": b.text, "format": str(b.format)} for b in barcodes]}
 
 
 @router.get("/barcode/{barcode}", response_model=List[LookupCandidate])

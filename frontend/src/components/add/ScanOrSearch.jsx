@@ -6,8 +6,8 @@ import LoadingSpinner from '../ui/LoadingSpinner'
 import { lookupApi } from '../../api/lookup'
 import toast from 'react-hot-toast'
 
-// The barcode scanner pulls in @zxing/library (~400KB) — only fetch it once
-// the user actually opts to scan, rather than on every Add Item page load.
+// Code-split the scanner — only fetch it once the user actually opts to
+// scan, rather than on every Add Item page load.
 const BarcodeScanner = lazy(() => import('../scanner/BarcodeScanner'))
 
 const SEARCH_PLACEHOLDERS = {

@@ -1,49 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  BrowserMultiFormatReader,
-  NotFoundException,
-  ChecksumException,
-  FormatException,
-  DecodeHintType,
-  BarcodeFormat,
-} from '@zxing/library'
 import { CameraOff, Flashlight, FlashlightOff, Loader2 } from 'lucide-react'
 import Button from '../ui/Button'
+import { lookupApi } from '../../api/lookup'
 
 const SECURE_CONTEXT_ERROR =
   'Camera scanning requires a secure (HTTPS) connection. Use manual entry below, or access this site over HTTPS.'
 
-// Books, CDs, DVDs and Blu-rays mostly use these retail barcode formats, plus
-// Code128 (some library/AV-rental barcodes). Restricting to just these (with
-// TRY_HARDER) avoids the default reader set — which also tries Code39/Code93/
-// ITF/RSS — occasionally mis-decoding a UPC/EAN barcode as a different,
-// shorter/garbled code under one of those formats.
-const HINTS = new Map([
-  [DecodeHintType.POSSIBLE_FORMATS, [
-    BarcodeFormat.EAN_13,
-    BarcodeFormat.EAN_8,
-    BarcodeFormat.UPC_A,
-    BarcodeFormat.UPC_E,
-    BarcodeFormat.CODE_128,
-  ]],
-  [DecodeHintType.TRY_HARDER, true],
-])
+// How often to send a cropped frame to the backend for decoding. The
+// `isProcessingRef` lock means the actual cadence is max(this, round-trip
+// time) — this is a floor, not a guarantee.
+const SCAN_INTERVAL_MS = 400
 
-// Consecutive Checksum/Format misses (a barcode-like shape was seen but
-// unreadable) before switching the guidance text to "hold steady".
-const HOLD_STEADY_THRESHOLD = 3
-// Consecutive plain "nothing in frame" misses before reverting back to the
-// default guidance text.
-const RESET_GUIDANCE_THRESHOLD = 5
-// Minimum time between invalid-format flash/vibrate feedback for the same
-// decoded text, so a held-up unsupported barcode doesn't flash every frame.
-const INVALID_FLASH_COOLDOWN_MS = 1500
 // Number of consecutive identical, checksum-valid decodes required before
 // accepting a result. A single-frame misread that happens to pass the shape
 // and checksum checks is extremely unlikely to repeat identically on the
 // very next frame, while a real, steadily-held barcode decodes the same way
-// many times per second.
+// many times in a row.
 const CONFIRM_MATCHES = 2
+
+// Minimum time between invalid-format flash/vibrate feedback for the same
+// decoded text, so a held-up unsupported barcode doesn't flash every frame.
+const INVALID_FLASH_COOLDOWN_MS = 1500
 
 const GUIDANCE_TEXT = {
   default: 'Point your camera at a barcode',
@@ -51,8 +28,8 @@ const GUIDANCE_TEXT = {
 }
 
 // Mirrors the shape checks in `app/services/barcode.py::process_barcode` —
-// used to decide whether a successful decode is a barcode we can actually
-// look up, or just some other barcode-shaped code (e.g. a QR code or a
+// used to decide whether a decoded result is a barcode we can actually look
+// up, or just some other barcode-shaped code (e.g. a QR code or a
 // foreign/garbled retail code) that should be flagged rather than accepted.
 function looksLikeRecognizedBarcode(text) {
   const cleaned = (text || '').replace(/[\s-]/g, '')
@@ -63,11 +40,11 @@ function looksLikeRecognizedBarcode(text) {
 }
 
 // Validates the EAN-8/UPC-A/EAN-13 check digit (ISBN-13 uses the EAN-13
-// algorithm). A misread that happens to have a recognised barcode *shape*
-// — e.g. CODE_128 misclassifying part of an EAN-13 — will almost always
-// fail this, so it catches "random number" false positives that @zxing's
-// own per-format checksum (which only runs for the format it thinks it
-// decoded) doesn't.
+// algorithm). zxing-cpp already validates per-format checksums for EAN/UPC
+// results, but a misread that happens to produce a recognised barcode
+// *shape* from a different format (e.g. CODE_128 decoding to a 13-digit
+// string) would skip that check — this catches those "random number" false
+// positives too.
 function hasValidCheckDigit(cleaned) {
   const digits = cleaned.length === 18 ? cleaned.slice(0, 13) : cleaned
   if (digits.length === 8) {
@@ -113,13 +90,41 @@ function describeCameraError(err) {
   }
 }
 
+// Crops a centered horizontal band from the current video frame — wide
+// enough to give margin for imprecise aiming, but small enough to keep each
+// upload light. Returns a JPEG blob, or null if the video has no frame ready
+// yet (e.g. dimensions not reported on the very first ticks).
+function captureCroppedFrame(video, canvas) {
+  const vw = video.videoWidth
+  const vh = video.videoHeight
+  if (!vw || !vh) return Promise.resolve(null)
+
+  const cropW = Math.round(vw * 0.9)
+  const cropH = Math.round(vh * 0.5)
+  const cropX = Math.round((vw - cropW) / 2)
+  const cropY = Math.round((vh - cropH) / 2)
+
+  canvas.width = cropW
+  canvas.height = cropH
+  canvas.getContext('2d').drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH)
+
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+}
+
 export default function BarcodeScanner({ onDetected, onClose, restartSignal, loading }) {
   const videoRef = useRef(null)
-  const readerRef = useRef(null)
-  const missStreakRef = useRef({ notFound: 0, holdSteady: 0 })
-  const lastInvalidRef = useRef({ text: null, time: 0 })
+  const canvasRef = useRef(null)
+  if (!canvasRef.current && typeof document !== 'undefined') {
+    canvasRef.current = document.createElement('canvas')
+  }
+  const streamRef = useRef(null)
+  const intervalRef = useRef(null)
+  const isProcessingRef = useRef(false)
+  const abortRef = useRef(null)
   const lastMatchRef = useRef({ text: null, count: 0 })
+  const lastInvalidRef = useRef({ text: null, time: 0 })
   const flashTimeoutRef = useRef(null)
+
   const [devices, setDevices] = useState([])
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [error, setError] = useState(null)
@@ -129,139 +134,132 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
   const [torchSupported, setTorchSupported] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
 
-  const startScanning = () => {
-    const reader = readerRef.current
-    if (!reader) return
+  const flashInvalid = () => {
+    setFlash(true)
+    navigator.vibrate?.(200)
+    clearTimeout(flashTimeoutRef.current)
+    flashTimeoutRef.current = setTimeout(() => setFlash(false), 400)
+  }
 
-    setScanning(true)
+  const stopStream = () => {
+    clearInterval(intervalRef.current)
+    intervalRef.current = null
+    abortRef.current?.abort()
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+  }
+
+  // Applies the backend's decode results to the confirm/guidance/flash state
+  // machine. A miss/unsupported-format never throws — the loop just keeps
+  // polling on the next tick.
+  const handleResults = (results) => {
+    for (const r of results) {
+      if (!looksLikeRecognizedBarcode(r.text)) continue
+      const cleaned = r.text.replace(/[\s-]/g, '')
+      if (!hasValidCheckDigit(cleaned)) continue
+
+      const match = lastMatchRef.current
+      lastMatchRef.current = match.text === cleaned
+        ? { text: cleaned, count: match.count + 1 }
+        : { text: cleaned, count: 1 }
+
+      if (lastMatchRef.current.count >= CONFIRM_MATCHES) {
+        // Pause the stream and hand off to the caller for a lookup. A
+        // miss/error resumes scanning automatically via `restartSignal`.
+        stopStream()
+        setScanning(false)
+        onDetected(r.text)
+        return
+      }
+      setGuidance('holdSteady')
+      return
+    }
+
+    lastMatchRef.current = { text: null, count: 0 }
+    setGuidance('default')
+
+    // Decoded *something* barcode-shaped, but not a format we can look up —
+    // flag it rather than silently ignoring it.
+    if (results.length > 0) {
+      const text = results[0].text
+      const now = Date.now()
+      if (text !== lastInvalidRef.current.text || now - lastInvalidRef.current.time > INVALID_FLASH_COOLDOWN_MS) {
+        lastInvalidRef.current = { text, time: now }
+        flashInvalid()
+      }
+    }
+  }
+
+  const scanFrame = async () => {
+    if (isProcessingRef.current) return
+    const video = videoRef.current
+    if (!video) return
+
+    isProcessingRef.current = true
+    try {
+      const blob = await captureCroppedFrame(video, canvasRef.current)
+      if (!blob) return
+      const controller = new AbortController()
+      abortRef.current = controller
+      const data = await lookupApi.scan(blob, controller.signal)
+      handleResults(data.results || [])
+    } catch {
+      // Network error, rate limit, or aborted request — just try again on
+      // the next tick.
+    } finally {
+      isProcessingRef.current = false
+    }
+  }
+
+  const startScanning = async () => {
+    stopStream()
     setError(null)
     setFlash(false)
     setGuidance('default')
     setTorchSupported(false)
     setTorchOn(false)
-    missStreakRef.current = { notFound: 0, holdSteady: 0 }
-    lastInvalidRef.current = { text: null, time: 0 }
     lastMatchRef.current = { text: null, count: 0 }
-
-    const flashInvalid = () => {
-      setFlash(true)
-      navigator.vibrate?.(200)
-      clearTimeout(flashTimeoutRef.current)
-      flashTimeoutRef.current = setTimeout(() => setFlash(false), 400)
-    }
+    lastInvalidRef.current = { text: null, time: 0 }
 
     // Asking for a higher resolution helps the decoder resolve small/dense
     // barcodes (e.g. paperback ISBNs) held further from the camera.
-    // `decodeFromVideoDevice` builds these same constraints internally when
-    // given a deviceId/facingMode — `decodeFromConstraints` lets us add the
-    // resolution hints on top while keeping identical device-selection and
-    // continuous-scanning behaviour.
-    const videoConstraints = selectedDevice
-      ? { deviceId: { exact: selectedDevice }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-      : isMobileDevice()
-        ? { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-        : { width: { ideal: 1920 }, height: { ideal: 1080 } }
+    const videoConstraints = {
+      ...(selectedDevice
+        ? { deviceId: { exact: selectedDevice } }
+        : isMobileDevice() ? { facingMode: 'environment' } : {}),
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+    }
 
-    reader
-      .decodeFromConstraints({ video: videoConstraints }, videoRef.current, (result, err) => {
-        if (result) {
-          const text = result.getText()
-          if (looksLikeRecognizedBarcode(text)) {
-            const cleaned = text.replace(/[\s-]/g, '')
-            if (!hasValidCheckDigit(cleaned)) {
-              // Right shape, wrong check digit — almost certainly a misread
-              // (e.g. CODE_128 misclassifying part of an EAN-13). Treat as a
-              // normal miss and keep scanning rather than surfacing it as an
-              // "unsupported format".
-              missStreakRef.current.notFound = 0
-              missStreakRef.current.holdSteady += 1
-              if (missStreakRef.current.holdSteady >= HOLD_STEADY_THRESHOLD) setGuidance('holdSteady')
-              return
-            }
-            // Require the same checksum-valid code to decode on (at least)
-            // two consecutive frames before accepting it — filters out the
-            // rare misread that happens to pass the checksum by chance,
-            // without a confirmation step for genuine reads.
-            const match = lastMatchRef.current
-            lastMatchRef.current = match.text === cleaned
-              ? { text: cleaned, count: match.count + 1 }
-              : { text: cleaned, count: 1 }
-            if (lastMatchRef.current.count >= CONFIRM_MATCHES) {
-              // Pause the stream and hand off to the caller for a lookup.
-              // A miss/error resumes scanning automatically via
-              // `restartSignal` — there's no confirmation step, so a bad
-              // read just gets silently rejected and scanning continues.
-              reader.reset()
-              setScanning(false)
-              onDetected(text)
-              return
-            }
-            setGuidance('holdSteady')
-            return
-          }
-          // Barcode-shaped but not a format we can look up — flag it and
-          // keep scanning rather than silently ignoring it.
-          const now = Date.now()
-          if (text !== lastInvalidRef.current.text || now - lastInvalidRef.current.time > INVALID_FLASH_COOLDOWN_MS) {
-            lastInvalidRef.current = { text, time: now }
-            flashInvalid()
-          }
-          return
-        }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints })
+      streamRef.current = stream
+      if (videoRef.current) videoRef.current.srcObject = stream
 
-        // NotFoundException fires on every frame with no decodable code, and
-        // ChecksumException/FormatException on a partial/garbled read — all
-        // three are normal "keep scanning" outcomes, not camera errors.
-        const isScanMiss =
-          err instanceof NotFoundException ||
-          err instanceof ChecksumException ||
-          err instanceof FormatException
-        if (!isScanMiss) {
-          if (err) {
-            setError(describeCameraError(err))
-            setScanning(false)
-          }
-          return
-        }
+      // Device labels/ids are only populated after permission is granted —
+      // re-enumerate now so the camera-switcher dropdown can show them.
+      navigator.mediaDevices.enumerateDevices()
+        .then((all) => setDevices(all.filter((d) => d.kind === 'videoinput')))
+        .catch(() => {})
 
-        const streak = missStreakRef.current
-        if (err instanceof NotFoundException) {
-          streak.holdSteady = 0
-          streak.notFound += 1
-          if (streak.notFound >= RESET_GUIDANCE_THRESHOLD) {
-            setGuidance('default')
-          }
-        } else {
-          streak.notFound = 0
-          streak.holdSteady += 1
-          if (streak.holdSteady >= HOLD_STEADY_THRESHOLD) {
-            setGuidance('holdSteady')
-          }
-        }
-      })
-      .then(() => {
-        // Device labels/ids are only populated after permission is granted —
-        // re-enumerate now so the camera-switcher dropdown can show them.
-        reader.listVideoInputDevices().then(setDevices).catch(() => {})
+      // Torch is only available on some mobile rear cameras.
+      const track = stream.getVideoTracks()[0]
+      const capabilities = track?.getCapabilities?.()
+      setTorchSupported(!!capabilities?.torch)
 
-        // Torch is only available on some mobile rear cameras, and only once
-        // the stream has actually started.
-        const track = reader.stream?.getVideoTracks?.()[0]
-        const capabilities = track?.getCapabilities?.()
-        setTorchSupported(!!capabilities?.torch)
+      // Some cameras (especially webcams) default to a single-shot
+      // autofocus that doesn't refocus once the stream starts, which makes
+      // it hard to read a barcode held close to the lens. Ask for
+      // continuous autofocus where supported.
+      if (capabilities?.focusMode?.includes('continuous')) {
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
+      }
 
-        // Some cameras (especially webcams) default to a single-shot
-        // autofocus that doesn't refocus once the stream starts, which
-        // makes it hard to read a barcode held close to the lens. Ask for
-        // continuous autofocus where supported.
-        if (capabilities?.focusMode?.includes('continuous')) {
-          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
-        }
-      })
-      .catch((e) => {
-        setError(describeCameraError(e))
-        setScanning(false)
-      })
+      setScanning(true)
+      intervalRef.current = setInterval(scanFrame, SCAN_INTERVAL_MS)
+    } catch (e) {
+      setError(describeCameraError(e))
+    }
   }
 
   useEffect(() => {
@@ -270,27 +268,25 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
       return
     }
 
-    const reader = readerRef.current ?? (readerRef.current = new BrowserMultiFormatReader(HINTS))
     startScanning()
 
     return () => {
-      reader.reset()
+      stopStream()
       clearTimeout(flashTimeoutRef.current)
     }
   }, [selectedDevice]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lets the caller force scanning to resume after a detected code turns out
-  // to be a miss/error and the user stays on this screen — `reader.reset()`
-  // already stopped the stream once a code was decoded, so resuming needs an
+  // to be a miss/error and the user stays on this screen — `stopStream()`
+  // already stopped the camera once a code was decoded, so resuming needs an
   // explicit restart.
   useEffect(() => {
     if (!restartSignal) return
-    readerRef.current?.reset()
     startScanning()
   }, [restartSignal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleTorch = async () => {
-    const track = readerRef.current?.stream?.getVideoTracks?.()[0]
+    const track = streamRef.current?.getVideoTracks?.()[0]
     if (!track) return
     try {
       await track.applyConstraints({ advanced: [{ torch: !torchOn }] })
@@ -367,9 +363,9 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
           </div>
         )}
 
-        {/* Looking up a detected code — the stream is paused while this
-            shows. A miss/error resumes scanning automatically, no
-            confirmation needed. */}
+        {/* Looking up a detected code — the stream is stopped while this
+            shows. A miss/error resumes scanning automatically via
+            `restartSignal`, no confirmation needed. */}
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 p-4 text-center">
             <Loader2 className="animate-spin text-white" size={28} />

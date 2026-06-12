@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@zxing/library": "^0.20.0",
     "axios": "^1.6.2",
     "clsx": "^2.0.0",
     "lucide-react": "^0.294.0",
