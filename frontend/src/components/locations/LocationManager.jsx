@@ -7,6 +7,7 @@ import LocationIcon from '../ui/LocationIcon'
 import LocationPicker from './LocationPicker'
 import IconPicker from '../settings/IconPicker'
 import { flattenLocations } from '../../lib/locations'
+import { reorderSiblings } from '../../lib/reorder'
 import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
 import { useConfirm } from '../../hooks/useConfirm'
 import toast from 'react-hot-toast'
@@ -90,21 +91,11 @@ export default function LocationManager() {
     }
   }
 
-  // Re-sequences the sibling group to 0..N-1 in the new (swapped) order,
-  // rather than just swapping the two `sort_order` values directly — new
-  // locations all default to `sort_order: 0`, so a same-value swap between
-  // tied siblings would otherwise be a no-op. Only siblings whose target
-  // index differs from their current `sort_order` are written.
   const move = async (loc, direction) => {
     const siblings = findSiblings(locations, loc.parent_id) || []
     const idx = siblings.findIndex((s) => s.id === loc.id)
-    const swapIdx = idx + direction
-    if (swapIdx < 0 || swapIdx >= siblings.length) return
-    const reordered = [...siblings]
-    ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
-    const updates = reordered
-      .map((s, i) => ({ id: s.id, sort_order: i, changed: s.sort_order !== i }))
-      .filter((u) => u.changed)
+    const updates = reorderSiblings(siblings, idx, direction)
+    if (updates.length === 0) return
     try {
       await Promise.all(updates.map((u) => locationsApi.update(u.id, { sort_order: u.sort_order })))
       load()

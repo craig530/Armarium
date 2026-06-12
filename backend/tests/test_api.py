@@ -708,6 +708,19 @@ async def test_media_filters_by_category_supertype_subtype_platform(client, auth
     assert "Filter Digital Music" in titles
     assert "Filter CD" not in titles
 
+    # category + supertype combined — the "Recently added" panel in the add
+    # flow filters by both at once, so they must compose with AND, not
+    # override each other.
+    resp = await client.get("/api/v1/media?category=music&supertype=digital", headers=auth_headers)
+    assert resp.status_code == 200
+    titles = {i["title"] for i in resp.json()["items"]}
+    assert titles == {"Filter Digital Music"}
+
+    resp = await client.get("/api/v1/media?category=music&supertype=physical", headers=auth_headers)
+    assert resp.status_code == 200
+    titles = {i["title"] for i in resp.json()["items"]}
+    assert titles == {"Filter CD"}
+
     # media_subtype_id filter
     resp = await client.get(f"/api/v1/media?media_subtype_id={cd_id}", headers=auth_headers)
     assert resp.status_code == 200

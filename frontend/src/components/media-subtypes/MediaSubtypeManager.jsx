@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Check, X, ChevronUp, ChevronDown } from 'lucide-react'
 import { mediaSubtypesApi } from '../../api/mediaSubtypes'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
+import { reorderSiblings } from '../../lib/reorder'
 import Input, { Select } from '../ui/Input'
 import Button from '../ui/Button'
 import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
@@ -64,20 +65,10 @@ export default function MediaSubtypeManager() {
     }
   }
 
-  // Re-sequences the group to 0..N-1 in the new (swapped) order, rather than
-  // just swapping the two `sort_order` values directly — new subtypes all
-  // default to `sort_order: 0`, so a same-value swap between tied entries
-  // would otherwise be a no-op. Only entries whose target index differs from
-  // their current `sort_order` are written.
   const move = async (subtype, direction, group) => {
     const idx = group.findIndex((s) => s.id === subtype.id)
-    const swapIdx = idx + direction
-    if (swapIdx < 0 || swapIdx >= group.length) return
-    const reordered = [...group]
-    ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
-    const updates = reordered
-      .map((s, i) => ({ id: s.id, sort_order: i, changed: s.sort_order !== i }))
-      .filter((u) => u.changed)
+    const updates = reorderSiblings(group, idx, direction)
+    if (updates.length === 0) return
     try {
       await Promise.all(updates.map((u) => mediaSubtypesApi.update(u.id, { sort_order: u.sort_order })))
       load()
