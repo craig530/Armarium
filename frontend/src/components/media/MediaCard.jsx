@@ -16,6 +16,7 @@ export default function MediaCard({ item }) {
       <div className="relative overflow-hidden rounded-lg aspect-[2/3] bg-gray-100 dark:bg-gray-800 w-full">
         <CoverImage
           src={item.cover_thumb_url}
+          src2x={item.cover_url}
           category={item.category}
           title={item.title}
           size="full"

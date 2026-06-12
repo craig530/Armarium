@@ -12,7 +12,8 @@ const sizes = {
   sm: 'px-3 py-1.5 text-sm',
   md: 'px-4 py-2 text-sm',
   lg: 'px-5 py-2.5 text-base',
-  icon: 'p-2',
+  // 44x44 minimum hit target for touch, per WCAG 2.5.5.
+  icon: 'h-11 w-11',
 }
 
 export default function Button({

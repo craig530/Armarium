@@ -4,17 +4,30 @@ import client from '../api/client'
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 
-export const useThemeStore = create((set) => ({
-  dark: document.documentElement.classList.contains('dark'),
-  toggle() {
-    set((s) => {
-      const next = !s.dark
-      document.documentElement.classList.toggle('dark', next)
-      localStorage.setItem('armarium-theme', next ? 'dark' : 'light')
-      return { dark: next }
-    })
-  },
-}))
+// Keeps the PWA status bar / browser chrome colour matching the navbar
+// background (white in light mode, gray-950 in dark mode) so standalone mode
+// doesn't show a mismatched bar above the header.
+function applyThemeColor(dark) {
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#15100C' : '#FFFFFF')
+}
+
+export const useThemeStore = create((set) => {
+  const initialDark = document.documentElement.classList.contains('dark')
+  applyThemeColor(initialDark)
+
+  return {
+    dark: initialDark,
+    toggle() {
+      set((s) => {
+        const next = !s.dark
+        document.documentElement.classList.toggle('dark', next)
+        localStorage.setItem('armarium-theme', next ? 'dark' : 'light')
+        applyThemeColor(next)
+        return { dark: next }
+      })
+    },
+  }
+})
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 

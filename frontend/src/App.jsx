@@ -11,6 +11,7 @@ const Home = lazy(() => import('./pages/Home'))
 const Library = lazy(() => import('./pages/Library'))
 const AddItem = lazy(() => import('./pages/AddItem'))
 const ItemDetail = lazy(() => import('./pages/ItemDetail'))
+const Profile = lazy(() => import('./pages/Profile'))
 const Admin = lazy(() => import('./pages/Admin'))
 const SettingsLayout = lazy(() => import('./pages/Settings/SettingsLayout'))
 const SettingsLocations = lazy(() => import('./pages/Settings/SettingsLocations'))
@@ -50,6 +51,7 @@ export default function App() {
               }
             />
             <Route path="item/:id" element={<ItemDetail />} />
+            <Route path="profile" element={<Profile />} />
             <Route path="locations" element={<Navigate to="/settings/locations" replace />} />
             <Route path="settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="/settings/locations" replace />} />

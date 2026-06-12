@@ -9,7 +9,7 @@ const CATEGORY_BG = {
   books: 'bg-amber-100 dark:bg-amber-900/30 text-amber-400',
 }
 
-export default function CoverImage({ src, category, title, className, size = 'md' }) {
+export default function CoverImage({ src, src2x, category, title, className, size = 'md' }) {
   const [error, setError] = useState(false)
   const Icon = CATEGORY_ICONS[category] || BookOpen
 
@@ -32,6 +32,7 @@ export default function CoverImage({ src, category, title, className, size = 'md
   return (
     <img
       src={src}
+      srcSet={src2x && src2x !== src ? `${src} 1x, ${src2x} 2x` : undefined}
       alt={title}
       loading="lazy"
       onError={() => setError(true)}

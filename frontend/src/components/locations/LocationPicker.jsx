@@ -80,7 +80,7 @@ export default function LocationPicker({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search locations…"
-                  className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-7 pr-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-7 pr-2 py-1.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 />
               </div>
             </div>

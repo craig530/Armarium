@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Navbar from './Navbar'
 import Footer from './Footer'
+import MobileTabBar from './MobileTabBar'
+import Fab from './Fab'
 import OfflineBanner from '../ui/OfflineBanner'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { mediaApi } from '../../api/media'
@@ -29,10 +31,12 @@ export default function Layout() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
       <Navbar stats={stats} />
       <OfflineBanner />
-      <main className="mx-auto max-w-7xl px-4 py-6 flex-1 w-full">
+      <main className="mx-auto max-w-7xl px-4 py-6 flex-1 w-full pb-24 sm:pb-6">
         <Outlet />
       </main>
       <Footer />
+      <Fab />
+      <MobileTabBar />
     </div>
   )
 }

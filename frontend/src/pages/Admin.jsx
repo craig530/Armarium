@@ -155,7 +155,7 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="New password"
-              className="w-36 text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-36 text-base sm:text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
               autoFocus
             />
             <button onClick={handlePasswordReset} disabled={saving} className="p-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">

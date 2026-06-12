@@ -8,7 +8,8 @@ export default function Input({ label, error, className, ...props }) {
       )}
       <input
         className={clsx(
-          'w-full rounded-lg border px-3 py-2 text-sm',
+          // text-base (16px) on mobile prevents iOS Safari's zoom-on-focus.
+          'w-full rounded-lg border px-3 py-2 text-base sm:text-sm',
           'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100',
           'border-gray-300 dark:border-gray-700',
           'placeholder-gray-400 dark:placeholder-gray-600',
@@ -32,7 +33,7 @@ export function Textarea({ label, error, className, ...props }) {
       )}
       <textarea
         className={clsx(
-          'w-full rounded-lg border px-3 py-2 text-sm resize-none',
+          'w-full rounded-lg border px-3 py-2 text-base sm:text-sm resize-none',
           'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100',
           'border-gray-300 dark:border-gray-700',
           'placeholder-gray-400 dark:placeholder-gray-600',
@@ -55,7 +56,8 @@ export function Select({ label, error, className, children, ...props }) {
       )}
       <select
         className={clsx(
-          'w-full rounded-lg border px-3 py-2 text-sm',
+          // text-base (16px) on mobile prevents iOS Safari's zoom-on-focus.
+          'w-full rounded-lg border px-3 py-2 text-base sm:text-sm',
           'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100',
           'border-gray-300 dark:border-gray-700',
           'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent',

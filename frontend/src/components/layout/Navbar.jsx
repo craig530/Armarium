@@ -3,9 +3,9 @@ import { Sun, Moon, Plus, LayoutGrid, Music, Clapperboard, BookOpen, Settings, S
 import { useThemeStore, useAuthStore, hasPermission } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
-import client from '../../api/client'
 import toast from 'react-hot-toast'
 import { CATEGORIES } from '../../lib/categories'
+import { exportLibrary } from '../../lib/export'
 import Logo from '../ui/Logo'
 
 const CATEGORY_ICONS = {
@@ -24,7 +24,7 @@ const navItems = [
   })),
 ]
 
-const MANAGE_LINKS = [
+export const MANAGE_LINKS = [
   { to: '/settings/locations', label: 'Manage Locations', icon: MapPin },
   { to: '/settings/platforms', label: 'Manage Platforms', icon: Tv },
   { to: '/settings/media-subtypes', label: 'Manage Media Types', icon: Tags },
@@ -39,14 +39,7 @@ export default function Navbar({ stats }) {
 
   const handleExport = async (format) => {
     try {
-      const resp = await client.get(`/library/export?format=${format}`, { responseType: 'blob' })
-      const ext = format === 'json' ? 'json' : 'csv'
-      const url = URL.createObjectURL(resp.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `armarium-export.${ext}`
-      a.click()
-      URL.revokeObjectURL(url)
+      const ext = await exportLibrary(format)
       toast.success(`Library exported as ${ext.toUpperCase()}`)
     } catch (err) {
       toast.error(err.message)
@@ -62,8 +55,8 @@ export default function Navbar({ stats }) {
           <Logo size={28} withWordmark wordmarkClassName="hidden sm:inline-flex" />
         </NavLink>
 
-        {/* Nav links */}
-        <nav className="flex items-center gap-1 ml-2">
+        {/* Nav links — hidden on mobile, where the bottom tab bar covers All/Music/Films & TV/Books */}
+        <nav className="hidden sm:flex items-center gap-1 ml-2">
           {navItems.map(({ to, label, icon: Icon, end, value }) => {
             const count = value ? stats?.by_category?.[value] : undefined
             return (
@@ -90,8 +83,8 @@ export default function Navbar({ stats }) {
           })}
         </nav>
 
-        {/* Manage menu */}
-        <div className="relative">
+        {/* Manage menu — hidden on mobile, where it's reached via the Profile tab */}
+        <div className="relative hidden sm:block">
           <button
             onClick={() => setManageMenuOpen((o) => !o)}
             className={clsx(
@@ -141,12 +134,12 @@ export default function Navbar({ stats }) {
             <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">n</kbd> add
           </span>
 
-          {/* Settings */}
+          {/* Settings — hidden on mobile, where it's reached via the Profile tab */}
           <NavLink
             to="/settings"
             className={({ isActive }) =>
               clsx(
-                'p-2 rounded-lg transition-colors',
+                'hidden sm:inline-flex p-2 rounded-lg transition-colors',
                 isActive
                   ? 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300'
                   : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -160,17 +153,17 @@ export default function Navbar({ stats }) {
           {/* Dark mode toggle */}
           <button
             onClick={toggle}
-            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="h-11 w-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Toggle theme"
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
 
-          {/* Add item */}
+          {/* Add item — hidden on mobile, where the FAB covers it */}
           {hasPermission(user, 'can_add_items') && (
             <button
               onClick={() => navigate('/add')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
             >
               <Plus size={16} />
               <span className="hidden sm:block">Add Item</span>
@@ -181,7 +174,7 @@ export default function Navbar({ stats }) {
           <div className="relative">
             <button
               onClick={() => setUserMenuOpen((o) => !o)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm"
             >
               <User size={15} />
               <span className="hidden sm:block max-w-[80px] truncate">{user?.username}</span>
@@ -196,6 +189,14 @@ export default function Navbar({ stats }) {
                     <p className="text-sm font-medium text-gray-900 dark:text-white">{user?.username}</p>
                     {user?.is_admin && <p className="text-xs text-brand-500">Administrator</p>}
                   </div>
+
+                  <NavLink
+                    to="/profile"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    <User size={14} /> Profile
+                  </NavLink>
 
                   {user?.is_admin && (
                     <NavLink
