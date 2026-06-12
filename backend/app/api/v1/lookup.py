@@ -120,7 +120,10 @@ async def lookup_barcode(
     if candidates is None:
         if is_book:
             candidates = await openlibrary.lookup_by_isbn(lookups["open_library"])
-        elif lookups["musicbrainz"]:
+        elif category in (None, MediaCategory.MUSIC) and lookups["musicbrainz"]:
+            # MusicBrainz only knows about music releases — a UPC/EAN-13 scanned
+            # while adding a film/TV item has no matching provider here, so
+            # don't return mismatched (category=music) candidates for it.
             candidates = await musicbrainz.lookup_by_barcode(lookups["musicbrainz"])
         else:
             candidates = []

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
@@ -44,8 +44,7 @@ async def _item_count_map(db: AsyncSession) -> dict:
 
 
 @router.get("", response_model=List[PlatformResponse])
-async def list_platforms(response: Response, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    response.headers["Cache-Control"] = "private, max-age=60"
+async def list_platforms(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(select(Platform).order_by(Platform.name))).scalars().all()
     counts = await _item_count_map(db)
     return [_to_response(p, counts.get(p.id, 0)) for p in rows]

@@ -7,12 +7,14 @@ class LocationCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     parent_id: Optional[int] = None
     icon_key: Optional[str] = Field(None, max_length=50)
+    sort_order: int = 0
 
 
 class LocationUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     parent_id: Optional[int] = None
     icon_key: Optional[str] = Field(None, max_length=50)
+    sort_order: Optional[int] = None
 
 
 class LocationResponse(BaseModel):
@@ -21,6 +23,7 @@ class LocationResponse(BaseModel):
     parent_id: Optional[int] = None
     icon_key: Optional[str] = None
     icon_url: Optional[str] = None
+    sort_order: int = 0
     children: List["LocationResponse"] = []
     item_count: int = 0
     created_at: datetime

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Check, X } from 'lucide-react'
+import { Check, X, ChevronRight } from 'lucide-react'
 import Button from '../ui/Button'
 import Input, { Select } from '../ui/Input'
 import LoadingSpinner from '../ui/LoadingSpinner'
@@ -11,11 +11,23 @@ import { matchPlatformLogo } from '../../lib/platformLogos'
 import toast from 'react-hot-toast'
 
 // Mandatory pre-step before search/manual entry: physical items must be
-// assigned a Location, digital items must be assigned a Platform. Both
-// support inline quick-create, which auto-selects the new entity and
-// advances the flow — there is no way to skip this step with an empty
-// selection (AddFlow's handlers ignore empty ids).
-export default function LocationOrPlatformStep({ supertype, locationId, platformId, onSelectLocation, onSelectPlatform }) {
+// assigned a Location, digital items must be assigned a Platform. Picking an
+// existing entity from the dropdown advances immediately. Creating a new one
+// only selects it and refreshes the list — the step stays put so the user
+// can keep building out nested locations (e.g. create "Living Room", then
+// create "Bookshelf" under it) before pressing Continue. There is no way to
+// skip this step with an empty selection (AddFlow's handlers ignore empty
+// ids / the Continue button is hidden until something is selected).
+export default function LocationOrPlatformStep({
+  supertype,
+  locationId,
+  platformId,
+  onSelectLocation,
+  onSelectPlatform,
+  onLocationCreated,
+  onPlatformCreated,
+  onContinue,
+}) {
   const isPhysical = supertype === 'physical'
   const { locations, platforms, loaded, ensureLoaded, invalidate } = useReferenceDataStore()
   const [creating, setCreating] = useState(false)
@@ -39,13 +51,13 @@ export default function LocationOrPlatformStep({ supertype, locationId, platform
         invalidate()
         await ensureLoaded()
         toast.success(`Location "${created.name}" created`)
-        onSelectLocation(String(created.id))
+        onLocationCreated(String(created.id))
       } else {
         const created = await platformsApi.create({ name, logo_key: matchPlatformLogo(name) })
         invalidate()
         await ensureLoaded()
         toast.success(`Platform "${created.name}" created`)
-        onSelectPlatform(String(created.id))
+        onPlatformCreated(String(created.id))
       }
       setCreating(false)
       setNewName('')
@@ -128,6 +140,12 @@ export default function LocationOrPlatformStep({ supertype, locationId, platform
                 </Button>
               </div>
             </div>
+          )}
+
+          {!creating && (isPhysical ? locationId : platformId) && (
+            <Button onClick={onContinue} className="self-start">
+              Continue <ChevronRight size={15} />
+            </Button>
           )}
         </>
       )}

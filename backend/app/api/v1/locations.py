@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
@@ -33,10 +33,10 @@ async def _location_rows(db: AsyncSession):
         await db.execute(
             select(
                 Location.id, Location.name, Location.parent_id,
-                Location.icon_key, Location.icon_path,
+                Location.icon_key, Location.icon_path, Location.sort_order,
                 Location.created_at, Location.updated_at,
             )
-            .order_by(Location.name)
+            .order_by(Location.sort_order, Location.name)
         )
     ).all()
 
@@ -56,6 +56,7 @@ def _build_tree(rows, count_map: dict):
             parent_id=row.parent_id,
             icon_key=row.icon_key,
             icon_url=_icon_url(row.icon_path),
+            sort_order=row.sort_order,
             created_at=row.created_at,
             updated_at=row.updated_at,
             item_count=count_map.get(row.id, 0),
@@ -78,8 +79,7 @@ async def _count_map(db: AsyncSession) -> dict:
 
 
 @router.get("", response_model=List[LocationResponse])
-async def list_locations(response: Response, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    response.headers["Cache-Control"] = "private, max-age=60"
+async def list_locations(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     count_map = await _count_map(db)
     rows = await _location_rows(db)
     roots, _by_id = _build_tree(rows, count_map)
@@ -97,13 +97,13 @@ async def create_location(
         if not parent:
             raise HTTPException(status_code=404, detail="Parent location not found")
 
-    loc = Location(name=payload.name, parent_id=payload.parent_id, icon_key=payload.icon_key)
+    loc = Location(name=payload.name, parent_id=payload.parent_id, icon_key=payload.icon_key, sort_order=payload.sort_order)
     db.add(loc)
     await db.commit()
     await db.refresh(loc)
     return LocationResponse(
         id=loc.id, name=loc.name, parent_id=loc.parent_id,
-        icon_key=loc.icon_key, icon_url=_icon_url(loc.icon_path),
+        icon_key=loc.icon_key, icon_url=_icon_url(loc.icon_path), sort_order=loc.sort_order,
         created_at=loc.created_at, updated_at=loc.updated_at,
         item_count=0, children=[],
     )
@@ -139,6 +139,8 @@ async def update_location(
         loc.name = payload.name
     if "icon_key" in payload.model_fields_set:
         loc.icon_key = payload.icon_key
+    if payload.sort_order is not None:
+        loc.sort_order = payload.sort_order
     if payload.parent_id is not None:
         if payload.parent_id == loc_id:
             raise HTTPException(status_code=400, detail="Location cannot be its own parent")
@@ -166,7 +168,7 @@ async def update_location(
     await db.refresh(loc)
     return LocationResponse(
         id=loc.id, name=loc.name, parent_id=loc.parent_id,
-        icon_key=loc.icon_key, icon_url=_icon_url(loc.icon_path),
+        icon_key=loc.icon_key, icon_url=_icon_url(loc.icon_path), sort_order=loc.sort_order,
         created_at=loc.created_at, updated_at=loc.updated_at,
         item_count=0, children=[],
     )

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X, ChevronUp, ChevronDown } from 'lucide-react'
 import { locationsApi } from '../../api/locations'
 import Input from '../ui/Input'
 import Button from '../ui/Button'
@@ -11,6 +11,19 @@ import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', parent_id: '', icon_key: '', icon_url: null }
+
+// Finds the live array of siblings (already ordered by sort_order, name as
+// returned by the API) for a given parent_id — `null`/root locations are
+// siblings of each other at the top level of the tree.
+function findSiblings(tree, parentId) {
+  if (parentId == null) return tree
+  for (const node of tree) {
+    if (node.id === parentId) return node.children || []
+    const found = findSiblings(node.children || [], parentId)
+    if (found) return found
+  }
+  return null
+}
 
 export default function LocationManager() {
   const { user } = useAuthStore()
@@ -68,6 +81,23 @@ export default function LocationManager() {
     try {
       await locationsApi.delete(loc.id)
       toast.success('Location deleted')
+      load()
+      useReferenceDataStore.getState().invalidate()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const move = async (loc, direction) => {
+    const siblings = findSiblings(locations, loc.parent_id) || []
+    const idx = siblings.findIndex((s) => s.id === loc.id)
+    const swapWith = siblings[idx + direction]
+    if (!swapWith) return
+    try {
+      await Promise.all([
+        locationsApi.update(loc.id, { sort_order: swapWith.sort_order }),
+        locationsApi.update(swapWith.id, { sort_order: loc.sort_order }),
+      ])
       load()
       useReferenceDataStore.getState().invalidate()
     } catch (err) {
@@ -145,37 +175,59 @@ export default function LocationManager() {
           {locations.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">No locations yet.</p>
           ) : (
-            flatLocations.map((loc) => (
-              <div
-                key={loc.id}
-                className="flex items-center gap-2 py-1"
-                style={{ paddingLeft: `${loc.depth * 20}px` }}
-              >
-                <LocationIcon location={loc} size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />
-                <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">
-                  {'└ '.repeat(loc.depth > 0 ? 1 : 0)}{loc.name}
-                </span>
-                {loc.item_count > 0 && (
-                  <span className="text-xs text-gray-400">{loc.item_count} items</span>
-                )}
-                {canManage && (
-                  <>
-                    <button
-                      onClick={() => handleEdit(loc)}
-                      className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(loc)}
-                      className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </>
-                )}
-              </div>
-            ))
+            flatLocations.map((loc) => {
+              const siblings = findSiblings(locations, loc.parent_id) || []
+              const idx = siblings.findIndex((s) => s.id === loc.id)
+              return (
+                <div
+                  key={loc.id}
+                  className="flex items-center gap-2 py-1"
+                  style={{ paddingLeft: `${loc.depth * 20}px` }}
+                >
+                  {canManage && (
+                    <div className="flex flex-col -my-1">
+                      <button
+                        onClick={() => move(loc, -1)}
+                        disabled={idx <= 0}
+                        className="p-0.5 text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <ChevronUp size={12} />
+                      </button>
+                      <button
+                        onClick={() => move(loc, 1)}
+                        disabled={idx === -1 || idx === siblings.length - 1}
+                        className="p-0.5 text-gray-300 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <ChevronDown size={12} />
+                      </button>
+                    </div>
+                  )}
+                  <LocationIcon location={loc} size={16} className="shrink-0 text-gray-400 dark:text-gray-500" />
+                  <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">
+                    {'└ '.repeat(loc.depth > 0 ? 1 : 0)}{loc.name}
+                  </span>
+                  {loc.item_count > 0 && (
+                    <span className="text-xs text-gray-400">{loc.item_count} items</span>
+                  )}
+                  {canManage && (
+                    <>
+                      <button
+                        onClick={() => handleEdit(loc)}
+                        className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(loc)}
+                        className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )
+            })
           )}
         </div>
       )}

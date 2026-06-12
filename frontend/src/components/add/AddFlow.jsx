@@ -130,6 +130,10 @@ export default function AddFlow({ onSaved }) {
     push('batchMode')
   }
 
+  const handleContinue = () => {
+    push('batchMode')
+  }
+
   const handleBatchContinue = () => {
     push(supertype === 'physical' ? 'search' : 'digitalSearch')
   }
@@ -273,6 +277,9 @@ export default function AddFlow({ onSaved }) {
           platformId={platformId}
           onSelectLocation={handleSelectLocation}
           onSelectPlatform={handleSelectPlatform}
+          onLocationCreated={setLocationId}
+          onPlatformCreated={setPlatformId}
+          onContinue={handleContinue}
         />
       )}
 

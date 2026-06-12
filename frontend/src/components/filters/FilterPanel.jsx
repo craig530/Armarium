@@ -1,7 +1,7 @@
 import { useLibraryStore } from '../../store'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
-import { Select } from '../ui/Input'
 import Button from '../ui/Button'
+import SelectMenu from '../ui/SelectMenu'
 import LocationPicker from '../locations/LocationPicker'
 
 const SORT_OPTIONS = [
@@ -63,58 +63,55 @@ export default function FilterPanel({
     filters.genre || filters.year || filters.location_id || (showCategory && filters.category)
   )
 
+  const categoryGroups = [{
+    options: [
+      { value: '', label: 'All categories' },
+      ...CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
+    ],
+  }]
+
+  const supertypeGroups = [{
+    options: [
+      { value: '', label: 'Physical & digital' },
+      ...SUPERTYPES.map((t) => ({ value: t.value, label: t.label })),
+    ],
+  }]
+
+  const mediaSubtypeGroups = [
+    { options: [{ value: '', label: 'All types' }] },
+    ...subtypeGroups
+      .filter((g) => g.subtypes.length > 0)
+      .map((g) => ({ label: g.label, options: g.subtypes.map((s) => ({ value: String(s.id), label: s.name })) })),
+  ]
+
+  const platformGroups = [{
+    options: [
+      { value: '', label: 'All platforms' },
+      ...platforms.map((p) => ({ value: String(p.id), label: p.name })),
+    ],
+  }]
+
+  const sortGroups = [{ options: SORT_OPTIONS.map((s) => ({ value: s.value, label: s.label })) }]
+
+  const orderGroups = [{
+    options: [
+      { value: 'desc', label: 'Newest' },
+      { value: 'asc', label: 'Oldest' },
+    ],
+  }]
+
   return (
     <div className="flex flex-wrap gap-3 items-end">
       {showCategory && (
-        <Select
-          value={filters.category || ''}
-          onChange={(e) => handleCategoryChange(e.target.value)}
-          className="w-40"
-        >
-          <option value="">All categories</option>
-          {CATEGORIES.map((c) => (
-            <option key={c.value} value={c.value}>{c.label}</option>
-          ))}
-        </Select>
+        <SelectMenu groups={categoryGroups} value={filters.category || ''} onChange={handleCategoryChange} className="w-40" />
       )}
 
-      <Select
-        value={filters.supertype}
-        onChange={(e) => setFilter('supertype', e.target.value)}
-        className="w-36"
-      >
-        <option value="">Physical & digital</option>
-        {SUPERTYPES.map((t) => (
-          <option key={t.value} value={t.value}>{t.label}</option>
-        ))}
-      </Select>
+      <SelectMenu groups={supertypeGroups} value={filters.supertype} onChange={(value) => setFilter('supertype', value)} className="w-36" />
 
-      <Select
-        value={filters.media_subtype_id}
-        onChange={(e) => setFilter('media_subtype_id', e.target.value)}
-        className="w-40"
-      >
-        <option value="">All types</option>
-        {subtypeGroups.filter((g) => g.subtypes.length > 0).map((g) => (
-          <optgroup key={g.label} label={g.label}>
-            {g.subtypes.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </optgroup>
-        ))}
-      </Select>
+      <SelectMenu groups={mediaSubtypeGroups} value={filters.media_subtype_id} onChange={(value) => setFilter('media_subtype_id', value)} className="w-40" />
 
       {platforms.length > 0 && (
-        <Select
-          value={filters.platform_id}
-          onChange={(e) => setFilter('platform_id', e.target.value)}
-          className="w-40"
-        >
-          <option value="">All platforms</option>
-          {platforms.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </Select>
+        <SelectMenu groups={platformGroups} value={filters.platform_id} onChange={(value) => setFilter('platform_id', value)} className="w-40" />
       )}
 
       <LocationPicker
@@ -125,24 +122,9 @@ export default function FilterPanel({
         className="w-48"
       />
 
-      <Select
-        value={filters.sort}
-        onChange={(e) => setFilter('sort', e.target.value)}
-        className="w-40"
-      >
-        {SORT_OPTIONS.map((s) => (
-          <option key={s.value} value={s.value}>{s.label}</option>
-        ))}
-      </Select>
+      <SelectMenu groups={sortGroups} value={filters.sort} onChange={(value) => setFilter('sort', value)} className="w-40" />
 
-      <Select
-        value={filters.order}
-        onChange={(e) => setFilter('order', e.target.value)}
-        className="w-28"
-      >
-        <option value="desc">Newest</option>
-        <option value="asc">Oldest</option>
-      </Select>
+      <SelectMenu groups={orderGroups} value={filters.order} onChange={(value) => setFilter('order', value)} className="w-28" />
 
       {hasActiveFilters && (
         <Button variant="ghost" size="sm" onClick={resetFilters}>

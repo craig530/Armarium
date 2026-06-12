@@ -134,22 +134,6 @@ export default function Navbar({ stats }) {
             <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">n</kbd> add
           </span>
 
-          {/* Settings — hidden on mobile, where it's reached via the Profile tab */}
-          <NavLink
-            to="/settings"
-            className={({ isActive }) =>
-              clsx(
-                'hidden sm:inline-flex p-2 rounded-lg transition-colors',
-                isActive
-                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300'
-                  : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
-              )
-            }
-            aria-label="Settings"
-          >
-            <Settings size={18} />
-          </NavLink>
-
           {/* Dark mode toggle */}
           <button
             onClick={toggle}

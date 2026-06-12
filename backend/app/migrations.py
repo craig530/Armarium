@@ -310,6 +310,25 @@ async def add_user_permission_columns(conn: AsyncConnection) -> None:
         logger.info("Added users.%s column (default=%s)", column_name, default)
 
 
+async def add_location_sort_order_column(conn: AsyncConnection) -> None:
+    """Add the NOT NULL `locations.sort_order` column to existing databases.
+
+    Like `_USER_PERMISSION_COLUMNS`, this can't go through
+    `run_additive_migrations` (which skips non-nullable columns) — added here
+    directly with an explicit SQL DEFAULT instead.
+    """
+    if conn.engine.dialect.name != "sqlite":
+        return
+
+    result = await conn.execute(text('PRAGMA table_info("locations")'))
+    existing_columns = {row[1] for row in result.fetchall()}
+    if "sort_order" in existing_columns:
+        return
+
+    await conn.execute(text('ALTER TABLE "locations" ADD COLUMN "sort_order" INTEGER NOT NULL DEFAULT 0'))
+    logger.info("Added locations.sort_order column")
+
+
 async def drop_legacy_media_type_column(conn: AsyncConnection) -> None:
     """Drop the orphaned NOT NULL `media_type` column from `media_items`.
 
