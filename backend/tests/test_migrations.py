@@ -13,7 +13,13 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app import models  # noqa: F401 — registers ORM tables on Base.metadata
 from app.database import Base
-from app.migrations import run_additive_migrations, create_missing_indexes, _MISSING_INDEXES
+from app.migrations import (
+    run_additive_migrations,
+    create_missing_indexes,
+    add_location_sort_order_column,
+    _MISSING_INDEXES,
+)
+from app.services.search import setup_fts, _fts_columns_from_sql, FTS_COLUMNS
 
 
 async def test_adds_missing_nullable_columns():
@@ -96,3 +102,61 @@ async def test_sqlite_foreign_keys_pragma_enabled():
     async with engine.connect() as conn:
         result = await conn.execute(text("PRAGMA foreign_keys"))
         assert result.scalar() == 1
+
+
+async def test_add_location_sort_order_column():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            # Simulate an older on-disk schema that predates `sort_order`.
+            await conn.execute(text(
+                "CREATE TABLE locations ("
+                "id INTEGER PRIMARY KEY, "
+                "name VARCHAR(200) NOT NULL, "
+                "parent_id INTEGER"
+                ")"
+            ))
+            await conn.execute(text("INSERT INTO locations (id, name) VALUES (1, 'Shelf')"))
+
+            before = await conn.execute(text('PRAGMA table_info("locations")'))
+            assert "sort_order" not in {row[1] for row in before.fetchall()}
+
+            await add_location_sort_order_column(conn)
+
+            after = await conn.execute(text('PRAGMA table_info("locations")'))
+            assert "sort_order" in {row[1] for row in after.fetchall()}
+
+            # Existing rows backfill to the default rather than NULL.
+            result = await conn.execute(text("SELECT sort_order FROM locations WHERE id = 1"))
+            assert result.scalar() == 0
+
+            # Re-running on an already-migrated database is a no-op.
+            await add_location_sort_order_column(conn)
+    finally:
+        await engine.dispose()
+
+
+async def test_setup_fts_rebuilds_when_column_set_changes():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+            # Simulate a pre-existing FTS table indexing an older, smaller
+            # column set (as it would be before FTS_COLUMNS was extended).
+            old_columns = ["title", "artist", "author", "director", "genres", "description"]
+            await conn.execute(text(
+                f"CREATE VIRTUAL TABLE media_items_fts USING fts5("
+                f"{', '.join(old_columns)}, content='media_items', content_rowid='id')"
+            ))
+
+            await setup_fts(conn)
+
+            result = await conn.execute(
+                text("SELECT sql FROM sqlite_master WHERE type='table' AND name='media_items_fts'")
+            )
+            rebuilt_sql = result.scalar()
+    finally:
+        await engine.dispose()
+
+    assert _fts_columns_from_sql(rebuilt_sql) == set(FTS_COLUMNS)

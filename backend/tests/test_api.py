@@ -276,11 +276,64 @@ async def test_location_crud(client, auth_headers):
     resp = await client.get("/api/v1/locations", headers=auth_headers)
     assert resp.status_code == 200
 
+    # Rename — must actually persist, not just echo back the request
+    resp = await client.put(
+        f"/api/v1/locations/{child_id}",
+        json={"name": "Shelf"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Shelf"
+
+    resp = await client.get("/api/v1/locations", headers=auth_headers)
+    root = next(loc for loc in resp.json() if loc["id"] == root_id)
+    assert root["children"][0]["name"] == "Shelf"
+
     # Delete child first, then root
     resp = await client.delete(f"/api/v1/locations/{child_id}", headers=auth_headers)
     assert resp.status_code == 204
     resp = await client.delete(f"/api/v1/locations/{root_id}", headers=auth_headers)
     assert resp.status_code == 204
+
+
+async def test_location_sort_order_reordering(client, auth_headers):
+    parent_resp = await client.post("/api/v1/locations", json={"name": "Cabinet"}, headers=auth_headers)
+    parent_id = parent_resp.json()["id"]
+
+    a_resp = await client.post(
+        "/api/v1/locations",
+        json={"name": "Shelf A", "parent_id": parent_id, "sort_order": 0},
+        headers=auth_headers,
+    )
+    b_resp = await client.post(
+        "/api/v1/locations",
+        json={"name": "Shelf B", "parent_id": parent_id, "sort_order": 1},
+        headers=auth_headers,
+    )
+    a_id, b_id = a_resp.json()["id"], b_resp.json()["id"]
+    assert a_resp.json()["sort_order"] == 0
+    assert b_resp.json()["sort_order"] == 1
+
+    # Initial order follows sort_order: A, B
+    resp = await client.get("/api/v1/locations", headers=auth_headers)
+    parent = next(loc for loc in resp.json() if loc["id"] == parent_id)
+    assert [c["name"] for c in parent["children"]] == ["Shelf A", "Shelf B"]
+
+    # Swap sort_order — B should now sort before A
+    resp = await client.put(f"/api/v1/locations/{a_id}", json={"sort_order": 1}, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["sort_order"] == 1
+    resp = await client.put(f"/api/v1/locations/{b_id}", json={"sort_order": 0}, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["sort_order"] == 0
+
+    resp = await client.get("/api/v1/locations", headers=auth_headers)
+    parent = next(loc for loc in resp.json() if loc["id"] == parent_id)
+    assert [c["name"] for c in parent["children"]] == ["Shelf B", "Shelf A"]
+
+    for loc_id in (a_id, b_id, parent_id):
+        resp = await client.delete(f"/api/v1/locations/{loc_id}", headers=auth_headers)
+        assert resp.status_code == 204
 
 
 async def test_location_reparent_rejects_cycle(client, auth_headers):
@@ -563,6 +616,16 @@ async def test_delete_platform_in_use_rejected(client, auth_headers):
     assert resp.status_code == 204
 
 
+async def test_reference_data_lists_have_no_cache_control_header(client, auth_headers):
+    # A `Cache-Control` header on these list endpoints previously caused the
+    # browser to serve stale data after a rename/delete/reorder, making those
+    # actions appear to silently fail.
+    for path in ("/api/v1/locations", "/api/v1/platforms", "/api/v1/media-subtypes"):
+        resp = await client.get(path, headers=auth_headers)
+        assert resp.status_code == 200
+        assert "cache-control" not in {h.lower() for h in resp.headers}
+
+
 # ── Upload validation ────────────────────────────────────────────────────────
 
 async def test_cover_upload_rejects_svg(client, auth_headers):
@@ -661,6 +724,38 @@ async def test_media_filters_by_category_supertype_subtype_platform(client, auth
         resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
         assert resp.status_code == 204
     resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_search_matches_extended_metadata_fields(client, auth_headers):
+    # `q` search was extended beyond title/artist/author/director/genres/
+    # description to cover studio/label/publisher/cast_list/isbn/barcode/
+    # edition/notes/rating — confirm a couple of the newly-added fields match,
+    # under both the FTS5 and ILIKE-fallback code paths.
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "Extended Search Test Album",
+            "media_subtype_id": cd_id,
+            "studio": "Zzyzx Recording Co",
+            "notes": "Signed by the band at a record store gig",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    item_id = resp.json()["id"]
+
+    resp = await client.get("/api/v1/media?q=Zzyzx", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "Extended Search Test Album" in {i["title"] for i in resp.json()["items"]}
+
+    resp = await client.get("/api/v1/media?q=record+store+gig", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "Extended Search Test Album" in {i["title"] for i in resp.json()["items"]}
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
     assert resp.status_code == 204
 
 
@@ -872,6 +967,27 @@ async def test_lookup_barcode_cd_queries_musicbrainz_with_ean13_from_upc(client,
     # The 12-digit UPC-A is converted to its 13-digit EAN-13 form before
     # being passed to MusicBrainz.
     mock_lookup.assert_awaited_once_with("0075678563598")
+
+
+async def test_lookup_barcode_music_category_queries_musicbrainz(client, auth_headers):
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_lookup:
+        resp = await client.get("/api/v1/lookup/barcode/075678563598?category=music", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    mock_lookup.assert_awaited_once_with("0075678563598")
+
+
+async def test_lookup_barcode_films_tv_category_does_not_query_musicbrainz(client, auth_headers):
+    # MusicBrainz only knows about music releases — a UPC/EAN-13 scanned while
+    # adding a film/TV item must not return mismatched (category=music)
+    # candidates, and must not even call MusicBrainz.
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_lookup:
+        resp = await client.get("/api/v1/lookup/barcode/075678563598?category=films_tv", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    mock_lookup.assert_not_awaited()
 
 
 async def test_lookup_barcode_isbn_queries_open_library(client, auth_headers):
