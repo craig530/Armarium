@@ -16,11 +16,17 @@ const SEARCH_PLACEHOLDERS = {
   books: 'Search by title or author…',
 }
 
-export default function ScanOrSearch({ category, onResults }) {
-  const [mode, setMode] = useState('search')   // 'search' | 'scan'
+export default function ScanOrSearch({ category, onResults, batchMode }) {
+  // In batch mode, default straight to the camera — that's the whole point
+  // of rapid scanning — and each fresh mount (after a save returns here)
+  // starts scanning again automatically.
+  const [mode, setMode] = useState(batchMode ? 'scan' : 'search')   // 'search' | 'scan'
   const [query, setQuery] = useState('')
   const [manualBarcode, setManualBarcode] = useState('')
   const [loading, setLoading] = useState(false)
+  // Bumped to tell BarcodeScanner to resume scanning without remounting, when
+  // a detected code is a miss/error and batch mode is staying on this screen.
+  const [restartSignal, setRestartSignal] = useState(0)
 
   const doSearch = async (q) => {
     if (!q.trim()) return
@@ -39,15 +45,18 @@ export default function ScanOrSearch({ category, onResults }) {
   }
 
   const handleBarcodeDetected = async (barcode) => {
-    setMode('search')
     setLoading(true)
-    toast.success(`Barcode detected: ${barcode}`)
     try {
       const results = await lookupApi.barcode(barcode, category)
       if (!results.length) {
+        // Stay on the scan screen and keep scanning — the barcode is
+        // pre-filled into the search query so a manual exit to search still
+        // has it ready to try as a title search.
         toast('No barcode match found — try a title search.', { icon: '📋' })
         setQuery(barcode)
+        setRestartSignal((n) => n + 1)
       } else {
+        toast.success(`Barcode detected: ${barcode}`)
         const count = results[0]?.metadata?.library_count || 0
         if (count > 0) {
           toast(`You already have ${count} ${count === 1 ? 'copy' : 'copies'} of this in your library.`, { icon: '📚' })
@@ -56,6 +65,7 @@ export default function ScanOrSearch({ category, onResults }) {
       onResults(results)
     } catch (err) {
       toast.error(err.message)
+      setRestartSignal((n) => n + 1)
     } finally {
       setLoading(false)
     }
@@ -92,7 +102,7 @@ export default function ScanOrSearch({ category, onResults }) {
     return (
       <div className="flex flex-col gap-5">
         <Suspense fallback={<LoadingSpinner size="lg" className="py-12" />}>
-          <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setMode('search')} />
+          <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setMode('search')} restartSignal={restartSignal} loading={loading} />
         </Suspense>
         {manualEntry}
       </div>

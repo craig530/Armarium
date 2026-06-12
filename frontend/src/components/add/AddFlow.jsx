@@ -1,8 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import { ChevronRight } from 'lucide-react'
 import TypeStep from './TypeStep'
 import LocationOrPlatformStep from './LocationOrPlatformStep'
+import BatchModeStep from './BatchModeStep'
+import BatchStatusBar from './BatchStatusBar'
+import ChangeLocationModal from './ChangeLocationModal'
+import EditItemModal from './EditItemModal'
+import ItemListPanel from './ItemListPanel'
 import ScanOrSearch from './ScanOrSearch'
 import DigitalSearch from './DigitalSearch'
 import EditionSelector from './EditionSelector'
@@ -10,17 +16,37 @@ import MetadataForm from './MetadataForm'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import Button from '../ui/Button'
 import { lookupApi } from '../../api/lookup'
+import { mediaApi } from '../../api/media'
+import { useReferenceDataStore } from '../../store'
+import { CATEGORIES } from '../../lib/categories'
+
+const SESSION_KEY = 'armarium-batch-session'
+
+// Restores an in-progress batch session (e.g. after iOS Safari reclaims a
+// backgrounded tab with an active camera). Only ever returns a session with
+// batchMode on — a stale non-batch entry is just ignored.
+function loadBatchSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    return data?.batchMode ? data : null
+  } catch {
+    return null
+  }
+}
 
 // Each step is only ever pushed onto the stack when it's actually shown, so
 // `back()` (pop) always returns to wherever the user really came from —
 // e.g. a single-result search skips `edition` entirely, so going back from
 // `form` returns straight to `search`/`digitalSearch`.
 //
-// type -> location | platform -> search | digitalSearch -> [edition] -> form
+// type -> location | platform -> batchMode -> search | digitalSearch -> [edition] -> form
 const STEP_GROUPS = {
   type: 0,
   location: 1,
   platform: 1,
+  batchMode: 1,
   search: 2,
   digitalSearch: 2,
   edition: 2,
@@ -28,21 +54,61 @@ const STEP_GROUPS = {
 }
 
 export default function AddFlow({ onSaved }) {
-  const [stepStack, setStepStack] = useState(['type'])
-  const [category, setCategory] = useState(null)
-  const [supertype, setSupertype] = useState(null)
-  const [locationId, setLocationId] = useState('')
-  const [platformId, setPlatformId] = useState('')
+  const navigate = useNavigate()
+  const restored = loadBatchSession()
+
+  const [stepStack, setStepStack] = useState(() =>
+    restored ? [restored.supertype === 'physical' ? 'search' : 'digitalSearch'] : ['type']
+  )
+  const [category, setCategory] = useState(restored?.category ?? null)
+  const [supertype, setSupertype] = useState(restored?.supertype ?? null)
+  const [locationId, setLocationId] = useState(restored?.locationId ?? '')
+  const [platformId, setPlatformId] = useState(restored?.platformId ?? '')
+  const [batchMode, setBatchMode] = useState(restored?.batchMode ?? false)
+  const [sessionItems, setSessionItems] = useState(restored?.sessionItems ?? [])
+  const [recentItems, setRecentItems] = useState([])
+  const [editingItem, setEditingItem] = useState(null)
+  const [changingLocation, setChangingLocation] = useState(false)
   const [candidates, setCandidates] = useState([])
   const [selected, setSelected] = useState(null)
   const [enriching, setEnriching] = useState(false)
 
+  const { locations, platforms, ensureLoaded } = useReferenceDataStore()
+  useEffect(() => { ensureLoaded() }, [ensureLoaded])
+
   const step = stepStack[stepStack.length - 1]
   const groupIndex = STEP_GROUPS[step]
   const groupLabels = ['Type', supertype === 'digital' ? 'Platform' : 'Location', 'Search', 'Confirm details']
+  const stepLabel = step === 'batchMode' ? 'Batch mode' : groupLabels[groupIndex]
 
   const push = (name) => setStepStack((s) => [...s, name])
   const back = () => setStepStack((s) => (s.length > 1 ? s.slice(0, -1) : s))
+
+  // Persist the batch session (config + item list) so it survives a full
+  // page reload; cleared as soon as batch mode is off.
+  useEffect(() => {
+    if (!batchMode) {
+      sessionStorage.removeItem(SESSION_KEY)
+      return
+    }
+    sessionStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({ batchMode, category, supertype, locationId, platformId, sessionItems })
+    )
+  }, [batchMode, category, supertype, locationId, platformId, sessionItems])
+
+  const loadRecentItems = useCallback(async () => {
+    try {
+      const resp = await mediaApi.list({ sort: 'created_at', order: 'desc', per_page: 10, page: 1 })
+      setRecentItems(resp.items)
+    } catch {
+      // Best-effort — the "Recently added" panel just stays empty.
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!batchMode && (step === 'search' || step === 'digitalSearch')) loadRecentItems()
+  }, [batchMode, step, loadRecentItems])
 
   const handleChangeCategory = (value) => {
     setCategory(value)
@@ -56,12 +122,16 @@ export default function AddFlow({ onSaved }) {
 
   const handleSelectLocation = (id) => {
     setLocationId(id)
-    push('search')
+    push('batchMode')
   }
 
   const handleSelectPlatform = (id) => {
     setPlatformId(id)
-    push('digitalSearch')
+    push('batchMode')
+  }
+
+  const handleBatchContinue = () => {
+    push(supertype === 'physical' ? 'search' : 'digitalSearch')
   }
 
   const selectCandidate = async (candidate) => {
@@ -94,6 +164,44 @@ export default function AddFlow({ onSaved }) {
   const handleManualAdd = () => {
     setSelected({ metadata: {} })
     push('form')
+  }
+
+  // In batch mode, saving an item returns straight to scanning — no
+  // redirect to item detail/library, and the location/platform pre-fill
+  // carries over to the next item via `locationId`/`platformId`. Outside
+  // batch mode, behaviour is unchanged (parent navigates to item detail).
+  const handleItemSaved = (item) => {
+    if (batchMode) {
+      setSessionItems((items) => [item, ...items])
+      setStepStack([supertype === 'physical' ? 'search' : 'digitalSearch'])
+      setSelected(null)
+      setCandidates([])
+      navigator.vibrate?.(50)
+    } else {
+      onSaved(item)
+    }
+  }
+
+  const handleExitBatch = () => {
+    setBatchMode(false)
+    setSessionItems([])
+    sessionStorage.removeItem(SESSION_KEY)
+    const slug = CATEGORIES.find((c) => c.value === category)?.slug
+    navigate(slug ? `/library/${slug}` : '/library')
+  }
+
+  const handleItemEdited = (saved) => {
+    if (batchMode) {
+      setSessionItems((items) => items.map((it) => (it.id === saved.id ? saved : it)))
+    } else {
+      setRecentItems((items) => items.map((it) => (it.id === saved.id ? saved : it)))
+    }
+  }
+
+  const itemListProps = {
+    title: batchMode ? 'Added this session' : 'Recently added',
+    items: batchMode ? sessionItems : recentItems,
+    onItemClick: setEditingItem,
   }
 
   return (
@@ -129,9 +237,23 @@ export default function AddFlow({ onSaved }) {
           ))}
         </div>
         <div className="ml-2 text-xs text-gray-500 dark:text-gray-400 shrink-0">
-          {groupLabels[groupIndex]}
+          {stepLabel}
         </div>
       </div>
+
+      {batchMode && groupIndex >= 2 && (
+        <div className="mb-4">
+          <BatchStatusBar
+            supertype={supertype}
+            locationId={locationId}
+            platformId={platformId}
+            locations={locations}
+            platforms={platforms}
+            onChangeLocation={() => setChangingLocation(true)}
+            onExit={handleExitBatch}
+          />
+        </div>
+      )}
 
       {enriching && <LoadingSpinner size="lg" className="py-12" />}
 
@@ -154,15 +276,20 @@ export default function AddFlow({ onSaved }) {
         />
       )}
 
+      {!enriching && step === 'batchMode' && (
+        <BatchModeStep batchMode={batchMode} onChange={setBatchMode} onContinue={handleBatchContinue} />
+      )}
+
       {!enriching && step === 'search' && (
         <div className="flex flex-col gap-4">
-          <ScanOrSearch category={category} onResults={handleResults} />
+          <ScanOrSearch category={category} onResults={handleResults} batchMode={batchMode} />
           <button
             onClick={handleManualAdd}
             className="text-sm text-center text-brand-600 dark:text-brand-400 hover:underline"
           >
             Add manually without searching →
           </button>
+          <ItemListPanel {...itemListProps} />
         </div>
       )}
 
@@ -175,6 +302,7 @@ export default function AddFlow({ onSaved }) {
           >
             Add manually without searching →
           </button>
+          <ItemListPanel {...itemListProps} />
         </div>
       )}
 
@@ -190,8 +318,23 @@ export default function AddFlow({ onSaved }) {
           locationId={locationId}
           platformId={platformId}
           onBack={back}
-          onSaved={onSaved}
+          onSaved={handleItemSaved}
         />
+      )}
+
+      {changingLocation && (
+        <ChangeLocationModal
+          supertype={supertype}
+          locationId={locationId}
+          platformId={platformId}
+          onClose={() => setChangingLocation(false)}
+          onChangeLocation={setLocationId}
+          onChangePlatform={setPlatformId}
+        />
+      )}
+
+      {editingItem && (
+        <EditItemModal item={editingItem} onClose={() => setEditingItem(null)} onSaved={handleItemEdited} />
       )}
     </div>
   )

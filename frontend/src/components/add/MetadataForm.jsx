@@ -24,8 +24,52 @@ const AUTO_SUBTYPE_NAME = {
   'books:physical': 'Book',
 }
 
-export default function MetadataForm({ candidate, category, supertype, locationId, platformId, onBack, onSaved }) {
+// `item` switches the form into edit mode: fields are seeded from the
+// existing item (rather than a lookup `candidate`), Save does a PUT instead
+// of a POST, and `onCancel` replaces `onBack`. Used both by the Add flow
+// (create) and the batch-mode/"Recently added" edit modal (update).
+export default function MetadataForm({ candidate, item, category, supertype, locationId, platformId, onBack, onCancel, onSaved }) {
+  const isEdit = !!item
+
   const [form, setForm] = useState(() => {
+    if (isEdit) {
+      return {
+        title: item.title || '',
+        media_subtype_id: item.media_subtype_id != null ? String(item.media_subtype_id) : '',
+        year: item.year || '',
+        genres: item.genres || '',
+        description: item.description || '',
+        cover_image_url: item.cover_image_url || '',
+        barcode: item.barcode || '',
+        edition: item.edition || '',
+        notes: item.notes || '',
+        // Music
+        artist: item.artist || '',
+        label: item.label || '',
+        track_count: item.track_count || '',
+        // Films & TV
+        director: item.director || '',
+        studio: item.studio || '',
+        runtime_minutes: item.runtime_minutes || '',
+        rating: item.rating || '',
+        seasons_owned: item.seasons_owned || '',
+        episode_count: item.episode_count || '',
+        // Books
+        author: item.author || '',
+        publisher: item.publisher || '',
+        page_count: item.page_count || '',
+        isbn: item.isbn || '',
+        language: item.language || '',
+        // IDs
+        musicbrainz_id: item.musicbrainz_id || '',
+        tmdb_id: item.tmdb_id || '',
+        openlibrary_id: item.openlibrary_id || '',
+        // Ownership
+        location_id: item.location_id != null ? String(item.location_id) : '',
+        platform_id: item.platform_id != null ? String(item.platform_id) : '',
+      }
+    }
+
     const m = candidate?.metadata || {}
     return {
       title: m.title || candidate?.title || '',
@@ -79,7 +123,8 @@ export default function MetadataForm({ candidate, category, supertype, locationI
 
   // Auto-select the subtype: prefer a best-guess match based on the lookup
   // result (e.g. TMDB movie vs TV), then fall back to the only option when
-  // there's exactly one for this category/supertype.
+  // there's exactly one for this category/supertype. Skipped entirely in
+  // edit mode, where media_subtype_id is already set from the item.
   useEffect(() => {
     if (form.media_subtype_id) return
     const opts = mediaSubtypes.filter((s) => s.category === category && s.supertype === supertype)
@@ -142,8 +187,10 @@ export default function MetadataForm({ candidate, category, supertype, locationI
         location_id: supertype === 'physical' && form.location_id ? Number(form.location_id) : null,
         platform_id: supertype === 'digital' && form.platform_id ? Number(form.platform_id) : null,
       }
-      const saved = await mediaApi.create(payload)
-      toast.success(`"${saved.title}" added to your collection!`)
+      const saved = isEdit
+        ? await mediaApi.update(item.id, payload)
+        : await mediaApi.create(payload)
+      toast.success(isEdit ? `"${saved.title}" updated` : `"${saved.title}" added to your collection!`)
       onSaved(saved)
     } catch (err) {
       toast.error(err.message)
@@ -152,19 +199,25 @@ export default function MetadataForm({ candidate, category, supertype, locationI
     }
   }
 
+  const previewSrc = (isEdit && (item.cover_url || item.cover_thumb_url)) || form.cover_image_url
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm details</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Review and edit before saving</p>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+          {isEdit ? 'Edit item' : 'Confirm details'}
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {isEdit ? 'Update the details below' : 'Review and edit before saving'}
+        </p>
       </div>
 
       {/* Cover preview */}
-      {form.cover_image_url && (
+      {previewSrc && (
         <div className="flex justify-center">
           <img
-            src={form.cover_image_url}
+            src={previewSrc}
             alt={form.title}
             className="h-40 rounded-xl object-cover shadow-lg"
             onError={(e) => { e.target.style.display = 'none' }}
@@ -268,9 +321,11 @@ export default function MetadataForm({ candidate, category, supertype, locationI
       </div>
 
       <div className="flex gap-3 pt-2">
-        <Button variant="secondary" onClick={onBack} className="flex-1">Back</Button>
+        <Button variant="secondary" onClick={isEdit ? onCancel : onBack} className="flex-1">
+          {isEdit ? 'Cancel' : 'Back'}
+        </Button>
         <Button onClick={handleSave} loading={saving} className="flex-1">
-          Save to collection
+          {isEdit ? 'Save changes' : 'Save to collection'}
         </Button>
       </div>
     </div>

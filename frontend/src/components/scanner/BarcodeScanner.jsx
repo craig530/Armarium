@@ -7,7 +7,7 @@ import {
   DecodeHintType,
   BarcodeFormat,
 } from '@zxing/library'
-import { CameraOff, Flashlight, FlashlightOff } from 'lucide-react'
+import { CameraOff, Flashlight, FlashlightOff, Loader2 } from 'lucide-react'
 import Button from '../ui/Button'
 
 const SECURE_CONTEXT_ERROR =
@@ -56,6 +56,69 @@ function looksLikeRecognizedBarcode(text) {
   return len === 8 || len === 12 || len === 13
 }
 
+// Maps the on-screen aim box onto the camera's source-pixel coordinates, so
+// the decoder can crop to it. `object-cover` means whichever axis of the
+// video is "wider" than the element gets cropped at render time — work out
+// that visible region first, then map the aim box's rect into it.
+function computeCropRegion(video, box) {
+  const vw = video.videoWidth
+  const vh = video.videoHeight
+  const videoRect = video.getBoundingClientRect()
+  const boxRect = box.getBoundingClientRect()
+  if (!vw || !vh || !videoRect.width || !videoRect.height || !boxRect.width || !boxRect.height) {
+    return null
+  }
+
+  const videoAspect = vw / vh
+  const elAspect = videoRect.width / videoRect.height
+  let visX = 0, visY = 0, visW = vw, visH = vh
+  if (videoAspect > elAspect) {
+    visW = vh * elAspect
+    visX = (vw - visW) / 2
+  } else if (videoAspect < elAspect) {
+    visH = vw / elAspect
+    visY = (vh - visH) / 2
+  }
+
+  const scaleX = visW / videoRect.width
+  const scaleY = visH / videoRect.height
+
+  const sx = Math.max(0, visX + (boxRect.left - videoRect.left) * scaleX)
+  const sy = Math.max(0, visY + (boxRect.top - videoRect.top) * scaleY)
+  const sWidth = Math.min(boxRect.width * scaleX, vw - sx)
+  const sHeight = Math.min(boxRect.height * scaleY, vh - sy)
+  if (sWidth <= 0 || sHeight <= 0) return null
+
+  return { sx, sy, sWidth, sHeight }
+}
+
+// Decoding the full camera frame wastes most of its resolution on whatever
+// is outside the aim box. Cropping to the aim box and upscaling it to fill
+// the decode canvas acts as a digital zoom, giving the decoder far more
+// effective resolution on small/distant barcodes (e.g. paperback ISBNs on a
+// desktop webcam) without requiring a higher-resolution camera stream.
+// Nearest-neighbour scaling (imageSmoothingEnabled = false) keeps bar/space
+// edges sharp rather than blurring them together.
+class ZoomingMultiFormatReader extends BrowserMultiFormatReader {
+  cropRegion = null
+
+  drawFrameOnCanvas(srcElement, dimensions, canvasElementContext) {
+    const ctx = canvasElementContext || this.captureCanvasContext
+    if (!dimensions && this.cropRegion && ctx) {
+      ctx.imageSmoothingEnabled = false
+      super.drawFrameOnCanvas(srcElement, {
+        ...this.cropRegion,
+        dx: 0,
+        dy: 0,
+        dWidth: srcElement.videoWidth,
+        dHeight: srcElement.videoHeight,
+      }, ctx)
+      return
+    }
+    super.drawFrameOnCanvas(srcElement, dimensions, canvasElementContext)
+  }
+}
+
 function isCameraSupported() {
   return (
     typeof window !== 'undefined' &&
@@ -87,9 +150,11 @@ function describeCameraError(err) {
   }
 }
 
-export default function BarcodeScanner({ onDetected, onClose }) {
+export default function BarcodeScanner({ onDetected, onClose, restartSignal, loading }) {
   const videoRef = useRef(null)
+  const aimBoxRef = useRef(null)
   const readerRef = useRef(null)
+  const cropCleanupRef = useRef(null)
   const missStreakRef = useRef({ notFound: 0, holdSteady: 0 })
   const lastInvalidRef = useRef({ text: null, time: 0 })
   const flashTimeoutRef = useRef(null)
@@ -101,14 +166,13 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   const [flash, setFlash] = useState(false)
   const [torchSupported, setTorchSupported] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
-  // A successfully-decoded, recognised barcode awaiting user confirmation.
-  // Scanning is paused while this is set — the camera only resumes lookup
-  // once the user taps Confirm (or Scan Again to keep looking).
-  const [pendingCode, setPendingCode] = useState(null)
 
   const startScanning = () => {
     const reader = readerRef.current
     if (!reader) return
+
+    cropCleanupRef.current?.()
+    cropCleanupRef.current = null
 
     setScanning(true)
     setError(null)
@@ -143,9 +207,13 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         if (result) {
           const text = result.getText()
           if (looksLikeRecognizedBarcode(text)) {
+            // Pause the stream and hand off to the caller for a lookup.
+            // A miss/error resumes scanning automatically via `restartSignal`
+            // — there's no confirmation step, so a bad read just gets
+            // silently rejected and scanning continues.
             reader.reset()
             setScanning(false)
-            setPendingCode(text)
+            onDetected(text)
             return
           }
           // Barcode-shaped but not a format we can look up — flag it and
@@ -198,6 +266,18 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         const track = reader.stream?.getVideoTracks?.()[0]
         const capabilities = track?.getCapabilities?.()
         setTorchSupported(!!capabilities?.torch)
+
+        // Compute the digital-zoom crop region once the stream's intrinsic
+        // resolution is known, and keep it in sync with the aim box's
+        // on-screen size (e.g. desktop window resize/orientation change).
+        const updateCrop = () => {
+          if (videoRef.current && aimBoxRef.current) {
+            reader.cropRegion = computeCropRegion(videoRef.current, aimBoxRef.current)
+          }
+        }
+        updateCrop()
+        window.addEventListener('resize', updateCrop)
+        cropCleanupRef.current = () => window.removeEventListener('resize', updateCrop)
       })
       .catch((e) => {
         setError(describeCameraError(e))
@@ -211,26 +291,26 @@ export default function BarcodeScanner({ onDetected, onClose }) {
       return
     }
 
-    const reader = readerRef.current ?? (readerRef.current = new BrowserMultiFormatReader(HINTS))
-    setPendingCode(null)
+    const reader = readerRef.current ?? (readerRef.current = new ZoomingMultiFormatReader(HINTS))
     startScanning()
 
     return () => {
       reader.reset()
+      cropCleanupRef.current?.()
+      cropCleanupRef.current = null
       clearTimeout(flashTimeoutRef.current)
     }
   }, [selectedDevice]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleScanAgain = () => {
-    setPendingCode(null)
+  // Lets the caller force scanning to resume after a detected code turns out
+  // to be a miss/error and the user stays on this screen — `reader.reset()`
+  // already stopped the stream once a code was decoded, so resuming needs an
+  // explicit restart.
+  useEffect(() => {
+    if (!restartSignal) return
+    readerRef.current?.reset()
     startScanning()
-  }
-
-  const handleConfirm = () => {
-    const code = pendingCode
-    setPendingCode(null)
-    onDetected(code)
-  }
+  }, [restartSignal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleTorch = async () => {
     const track = readerRef.current?.stream?.getVideoTracks?.()[0]
@@ -267,7 +347,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
 
         {/* Aim overlay */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="relative w-48 h-32">
+          <div ref={aimBoxRef} className="relative w-48 h-32">
             {/* Corner brackets */}
             {[
               'top-0 left-0 border-t-4 border-l-4 rounded-tl-lg',
@@ -310,24 +390,13 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           </div>
         )}
 
-        {/* Confirmation step — pause on a recognised barcode and let the
-            user verify it before it's used for a lookup, so a spurious
-            decode (e.g. a different barcode in frame) doesn't waste an
-            API call. */}
-        {pendingCode && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/85 p-4 text-center">
-            <p className="text-sm text-gray-300">Barcode detected — does this look right?</p>
-            <p className="text-3xl sm:text-4xl font-bold tracking-widest text-white font-mono break-all">
-              {pendingCode}
-            </p>
-            <div className="flex gap-3 w-full max-w-xs">
-              <Button type="button" variant="outline" onClick={handleScanAgain} className="flex-1">
-                Scan again
-              </Button>
-              <Button type="button" onClick={handleConfirm} className="flex-1">
-                Confirm
-              </Button>
-            </div>
+        {/* Looking up a detected code — the stream is paused while this
+            shows. A miss/error resumes scanning automatically, no
+            confirmation needed. */}
+        {loading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 p-4 text-center">
+            <Loader2 className="animate-spin text-white" size={28} />
+            <p className="text-sm text-gray-200">Looking up barcode…</p>
           </div>
         )}
       </div>
