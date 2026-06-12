@@ -6,6 +6,7 @@ import LoadingSpinner from '../ui/LoadingSpinner'
 import LocationPicker from '../locations/LocationPicker'
 import { locationsApi } from '../../api/locations'
 import { platformsApi } from '../../api/platforms'
+import { useReferenceDataStore } from '../../store'
 import { matchPlatformLogo } from '../../lib/platformLogos'
 import toast from 'react-hot-toast'
 
@@ -16,22 +17,13 @@ import toast from 'react-hot-toast'
 // selection (AddFlow's handlers ignore empty ids).
 export default function LocationOrPlatformStep({ supertype, locationId, platformId, onSelectLocation, onSelectPlatform }) {
   const isPhysical = supertype === 'physical'
-  const [locations, setLocations] = useState([])
-  const [platforms, setPlatforms] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { locations, platforms, loaded, ensureLoaded, invalidate } = useReferenceDataStore()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newParentId, setNewParentId] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    setLoading(true)
-    if (isPhysical) {
-      locationsApi.list().then(setLocations).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
-    } else {
-      platformsApi.list().then(setPlatforms).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
-    }
-  }, [isPhysical])
+  useEffect(() => { ensureLoaded() }, [ensureLoaded])
 
   const handleCreate = async () => {
     const name = newName.trim()
@@ -44,12 +36,14 @@ export default function LocationOrPlatformStep({ supertype, locationId, platform
           parent_id: newParentId ? Number(newParentId) : null,
           icon_key: null,
         })
-        setLocations(await locationsApi.list())
+        invalidate()
+        await ensureLoaded()
         toast.success(`Location "${created.name}" created`)
         onSelectLocation(String(created.id))
       } else {
         const created = await platformsApi.create({ name, logo_key: matchPlatformLogo(name) })
-        setPlatforms((p) => [...p, created].sort((a, b) => a.name.localeCompare(b.name)))
+        invalidate()
+        await ensureLoaded()
         toast.success(`Platform "${created.name}" created`)
         onSelectPlatform(String(created.id))
       }
@@ -76,7 +70,7 @@ export default function LocationOrPlatformStep({ supertype, locationId, platform
         </p>
       </div>
 
-      {loading ? (
+      {!loaded ? (
         <LoadingSpinner size="lg" className="py-8" />
       ) : (
         <>

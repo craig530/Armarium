@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { MoreVertical } from 'lucide-react'
-import { MediaSubtypeBadge, OwnershipBadge } from '../ui/Badge'
+import { MediaSubtypeIcon, OwnershipIcon } from '../ui/Badge'
 import CoverImage from './CoverImage'
 import OwnershipRow from './OwnershipRow'
 import { useState } from 'react'
@@ -36,10 +36,10 @@ export default function MediaListRow({ item, onDeleted }) {
 
       {/* Main info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-start gap-2 flex-wrap">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</p>
-          <MediaSubtypeBadge subtype={item.media_subtype} className="shrink-0" />
-          <OwnershipBadge ownership={item.ownership} className="shrink-0" />
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{item.title}</p>
+          <MediaSubtypeIcon subtype={item.media_subtype} className="shrink-0" />
+          <OwnershipIcon ownership={item.ownership} className="shrink-0" />
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
           {[creator, item.year].filter(Boolean).join(' · ')}

@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import axios from 'axios'
 import client from '../api/client'
+import { locationsApi } from '../api/locations'
+import { platformsApi } from '../api/platforms'
+import { mediaSubtypesApi } from '../api/mediaSubtypes'
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 
@@ -123,4 +126,33 @@ export const useLibraryStore = create((set) => ({
   setFilter: (key, value) =>
     set((s) => ({ filters: { ...s.filters, [key]: value } })),
   resetFilters: () => set({ filters: { ...DEFAULT_FILTERS } }),
+}))
+
+// ── Reference data (locations / platforms / media subtypes) ────────────────
+//
+// Shared, lazily-loaded cache for the small lookup lists used across
+// Library, Home, ItemDetail and the Add flow. Avoids re-fetching all three
+// lists on every page/category switch; call `invalidate()` after any
+// create/update/delete in the Settings managers so the next `ensureLoaded()`
+// picks up the change.
+
+export const useReferenceDataStore = create((set, get) => ({
+  locations: [],
+  platforms: [],
+  mediaSubtypes: [],
+  loaded: false,
+  loading: null,
+  ensureLoaded() {
+    if (get().loaded || get().loading) return get().loading
+    const promise = Promise.all([locationsApi.list(), platformsApi.list(), mediaSubtypesApi.list()])
+      .then(([locations, platforms, mediaSubtypes]) => {
+        set({ locations, platforms, mediaSubtypes, loaded: true, loading: null })
+      })
+      .catch(() => set({ loading: null }))
+    set({ loading: promise })
+    return promise
+  },
+  invalidate() {
+    set({ loaded: false })
+  },
 }))

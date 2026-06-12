@@ -70,11 +70,32 @@ export default function ScanOrSearch({ category, onResults }) {
     setManualBarcode('')
   }
 
+  // Manual entry stays available while the camera scanner is open too — it's
+  // the fallback for codes the camera can't read (damaged labels, no camera
+  // permission, etc.) so the user never has to back out of scan mode to use it.
+  const manualEntry = (
+    <form onSubmit={handleManualBarcodeSubmit} className="flex gap-2">
+      <Input
+        value={manualBarcode}
+        onChange={(e) => setManualBarcode(e.target.value)}
+        inputMode="numeric"
+        placeholder="Or type the barcode/ISBN number…"
+        className="flex-1"
+      />
+      <Button type="submit" variant="outline" loading={loading}>
+        Look up
+      </Button>
+    </form>
+  )
+
   if (mode === 'scan') {
     return (
-      <Suspense fallback={<LoadingSpinner size="lg" className="py-12" />}>
-        <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setMode('search')} />
-      </Suspense>
+      <div className="flex flex-col gap-5">
+        <Suspense fallback={<LoadingSpinner size="lg" className="py-12" />}>
+          <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setMode('search')} />
+        </Suspense>
+        {manualEntry}
+      </div>
     )
   }
 
@@ -118,18 +139,7 @@ export default function ScanOrSearch({ category, onResults }) {
 
       {/* Manual fallback for when the camera isn't available (e.g. no HTTPS,
           camera permission denied, or no camera on the device) */}
-      <form onSubmit={handleManualBarcodeSubmit} className="flex gap-2">
-        <Input
-          value={manualBarcode}
-          onChange={(e) => setManualBarcode(e.target.value)}
-          inputMode="numeric"
-          placeholder="Or type the barcode/ISBN number…"
-          className="flex-1"
-        />
-        <Button type="submit" variant="outline" loading={loading}>
-          Look up
-        </Button>
-      </form>
+      {manualEntry}
 
       <p className="text-xs text-gray-400 text-center">
         Books use OpenLibrary · Music uses MusicBrainz · Films & TV use TMDB (requires API key)

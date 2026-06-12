@@ -57,7 +57,8 @@ export default function LocationPicker({
           type="button"
           onClick={() => setOpen((o) => !o)}
           className={clsx(
-            'w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm text-left',
+            // text-base (16px) on mobile prevents iOS Safari's zoom-on-focus, matching Input/Select.
+            'w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-base sm:text-sm text-left',
             'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100',
             'border-gray-300 dark:border-gray-700',
             'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent'

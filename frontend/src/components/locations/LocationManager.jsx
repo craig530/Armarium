@@ -7,7 +7,7 @@ import LocationIcon from '../ui/LocationIcon'
 import LocationPicker from './LocationPicker'
 import IconPicker from '../settings/IconPicker'
 import { flattenLocations } from '../../lib/locations'
-import { useAuthStore, hasPermission } from '../../store'
+import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', parent_id: '', icon_key: '', icon_url: null }
@@ -48,6 +48,7 @@ export default function LocationManager() {
       setEditId(null)
       setForm(EMPTY_FORM)
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }
@@ -68,6 +69,7 @@ export default function LocationManager() {
       await locationsApi.delete(loc.id)
       toast.success('Location deleted')
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }
@@ -80,6 +82,7 @@ export default function LocationManager() {
       setForm((f) => ({ ...f, icon_url: updated.icon_url }))
       toast.success('Icon uploaded')
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }

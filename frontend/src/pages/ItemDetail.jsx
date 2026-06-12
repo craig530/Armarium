@@ -2,10 +2,9 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink } from 'lucide-react'
 import { mediaApi } from '../api/media'
-import { locationsApi } from '../api/locations'
-import { platformsApi } from '../api/platforms'
-import { mediaSubtypesApi } from '../api/mediaSubtypes'
-import { MediaSubtypeBadge, OwnershipBadge } from '../components/ui/Badge'
+import { useReferenceDataStore } from '../store'
+import { MediaSubtypeIcon, OwnershipIcon } from '../components/ui/Badge'
+import { OWNERSHIP_ICONS } from '../lib/mediaIcons'
 import CoverImage from '../components/media/CoverImage'
 import LocationIcon from '../components/ui/LocationIcon'
 import PlatformLogo from '../components/ui/PlatformLogo'
@@ -14,7 +13,7 @@ import LocationPicker from '../components/locations/LocationPicker'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import TMDBAttribution from '../components/ui/TMDBAttribution'
-import { categoryLabel, supertypeLabel } from '../lib/categories'
+import { CATEGORIES, categoryLabel, supertypeLabel } from '../lib/categories'
 import toast from 'react-hot-toast'
 
 function OwnershipEntry({ children, action }) {
@@ -22,6 +21,28 @@ function OwnershipEntry({ children, action }) {
     <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-3 min-w-0">{children}</div>
       {action}
+    </div>
+  )
+}
+
+// Uniform 40px icon slot for an ownership row — a location icon or platform
+// logo, with a small physical/digital glyph badged in the corner.
+function OwnershipIconSlot({ supertype, location, platform }) {
+  const Glyph = OWNERSHIP_ICONS[supertype]
+  return (
+    <div className="relative shrink-0">
+      {supertype === 'physical' ? (
+        <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+          <LocationIcon location={location} size={20} className="text-gray-400 dark:text-gray-500" />
+        </div>
+      ) : (
+        <PlatformLogo platform={platform} className="h-10 w-10" />
+      )}
+      {Glyph && (
+        <span className="absolute -bottom-1 -right-1 flex items-center justify-center h-4 w-4 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+          <Glyph size={10} />
+        </span>
+      )}
     </div>
   )
 }
@@ -87,7 +108,7 @@ function LinkSearch({ item, onLinked, onCancel }) {
               className="w-full flex items-center justify-between gap-2 p-2 rounded-lg text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
             >
               <span className="truncate">{r.title}{r.year ? ` (${r.year})` : ''}</span>
-              <MediaSubtypeBadge subtype={r.media_subtype} className="shrink-0" />
+              <MediaSubtypeIcon subtype={r.media_subtype} className="shrink-0" />
             </button>
           ))}
         </div>
@@ -101,10 +122,8 @@ export default function ItemDetail() {
   const navigate = useNavigate()
   const fileRef = useRef()
 
+  const { locations, platforms, mediaSubtypes, ensureLoaded } = useReferenceDataStore()
   const [item, setItem] = useState(null)
-  const [locations, setLocations] = useState([])
-  const [platforms, setPlatforms] = useState([])
-  const [mediaSubtypes, setMediaSubtypes] = useState([])
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
@@ -120,17 +139,15 @@ export default function ItemDetail() {
   }
 
   useEffect(() => {
-    Promise.all([mediaApi.get(id), locationsApi.list(), platformsApi.list(), mediaSubtypesApi.list()])
-      .then(([item, locs, plats, subtypes]) => {
+    ensureLoaded()
+    mediaApi.get(id)
+      .then((item) => {
         setItem(item)
         setForm(item)
-        setLocations(locs)
-        setPlatforms(plats)
-        setMediaSubtypes(subtypes)
       })
       .catch(() => toast.error('Failed to load item'))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -172,7 +189,8 @@ export default function ItemDetail() {
     if (!confirm(`Delete "${item.title}"?`)) return
     await mediaApi.delete(id)
     toast.success('Deleted')
-    navigate('/library')
+    const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
+    navigate(`/library/${slug}`)
   }
 
   const handleCoverUpload = async (e) => {
@@ -259,8 +277,8 @@ export default function ItemDetail() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{item.title}</h1>
           )}
           <div className="flex items-center gap-2 flex-wrap">
-            <MediaSubtypeBadge subtype={item.media_subtype} />
-            <OwnershipBadge ownership={item.ownership} />
+            <MediaSubtypeIcon subtype={item.media_subtype} />
+            <OwnershipIcon ownership={item.ownership} />
             {item.year && <span className="text-sm text-gray-500">{item.year}</span>}
             {item.edition && <span className="text-sm px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{item.edition}</span>}
           </div>
@@ -282,11 +300,11 @@ export default function ItemDetail() {
         <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ownership</h3>
 
         <OwnershipEntry>
-          {item.supertype === 'physical' ? (
-            <LocationIcon location={{ icon_key: item.location_icon_key, icon_url: item.location_icon_url }} size={20} className="shrink-0 text-gray-400 dark:text-gray-500" />
-          ) : (
-            <PlatformLogo platform={item.platform} className="h-9 w-9 shrink-0" />
-          )}
+          <OwnershipIconSlot
+            supertype={item.supertype}
+            location={{ icon_key: item.location_icon_key, icon_url: item.location_icon_url }}
+            platform={item.platform}
+          />
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
               {item.supertype === 'physical' ? (item.location_path || 'No location') : (item.platform?.name || 'No platform')}
@@ -305,11 +323,11 @@ export default function ItemDetail() {
               }
             >
               <button onClick={() => navigate(`/item/${linked.id}`)} className="flex items-center gap-3 min-w-0 text-left hover:opacity-80">
-                {linked.supertype === 'physical' ? (
-                  <LocationIcon location={{ icon_key: linked.location_icon_key, icon_url: linked.location_icon_url }} size={20} className="shrink-0 text-gray-400 dark:text-gray-500" />
-                ) : (
-                  <PlatformLogo platform={linked.platform} className="h-9 w-9 shrink-0" />
-                )}
+                <OwnershipIconSlot
+                  supertype={linked.supertype}
+                  location={{ icon_key: linked.location_icon_key, icon_url: linked.location_icon_url }}
+                  platform={linked.platform}
+                />
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{linked.title}</p>
                   <p className="text-xs text-gray-400 truncate">

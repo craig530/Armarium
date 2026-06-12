@@ -284,6 +284,15 @@ async def list_media(
                     MediaItem.director.ilike(term),
                     MediaItem.genres.ilike(term),
                     MediaItem.description.ilike(term),
+                    MediaItem.studio.ilike(term),
+                    MediaItem.label.ilike(term),
+                    MediaItem.publisher.ilike(term),
+                    MediaItem.cast_list.ilike(term),
+                    MediaItem.isbn.ilike(term),
+                    MediaItem.barcode.ilike(term),
+                    MediaItem.edition.ilike(term),
+                    MediaItem.notes.ilike(term),
+                    MediaItem.rating.ilike(term),
                 )
             )
     if genre:

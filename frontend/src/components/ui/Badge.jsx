@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { getSubtypeIcon, OWNERSHIP_ICONS, OWNERSHIP_LABELS } from '../../lib/mediaIcons'
 
 // "Archive ledger" hues: wine for Music, deep emerald for Films & TV, brass for Books.
 const CATEGORY_COLORS = {
@@ -16,17 +17,39 @@ export function MediaSubtypeBadge({ subtype, className }) {
   )
 }
 
-const OWNERSHIP_LABELS = { physical: 'Physical Only', digital: 'Digital Only', both: 'Both' }
-const OWNERSHIP_COLORS = {
-  physical: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-  digital: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-  both: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+// Small icon chip representing an item's media subtype, used in place of the
+// text-based MediaSubtypeBadge where space is tight (cards, list rows, hero).
+export function MediaSubtypeIcon({ subtype, className }) {
+  if (!subtype) return null
+  const Icon = getSubtypeIcon(subtype)
+  if (!Icon) return null
+  return (
+    <span
+      title={subtype.name}
+      className={clsx('inline-flex items-center justify-center h-6 w-6 rounded-full', CATEGORY_COLORS[subtype.category], className)}
+    >
+      <Icon size={14} />
+    </span>
+  )
 }
 
-export function OwnershipBadge({ ownership, className }) {
+const OWNERSHIP_ICON_COLORS = 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+
+// Small icon chip representing whether an item is owned physically,
+// digitally, or both (one icon per owned form).
+export function OwnershipIcon({ ownership, className }) {
+  const forms = ownership === 'both' ? ['physical', 'digital'] : [ownership]
   return (
-    <span className={clsx('inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium', OWNERSHIP_COLORS[ownership], className)}>
-      {OWNERSHIP_LABELS[ownership] || ownership}
+    <span className="inline-flex items-center gap-1">
+      {forms.map((form) => {
+        const Icon = OWNERSHIP_ICONS[form]
+        if (!Icon) return null
+        return (
+          <span key={form} title={OWNERSHIP_LABELS[form]} className={clsx('inline-flex items-center justify-center h-6 w-6 rounded-full', OWNERSHIP_ICON_COLORS, className)}>
+            <Icon size={14} />
+          </span>
+        )
+      })}
     </span>
   )
 }

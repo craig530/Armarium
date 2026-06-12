@@ -4,7 +4,7 @@ import { mediaSubtypesApi } from '../../api/mediaSubtypes'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
 import Input, { Select } from '../ui/Input'
 import Button from '../ui/Button'
-import { useAuthStore, hasPermission } from '../../store'
+import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', category: CATEGORIES[0].value, supertype: SUPERTYPES[0].value }
@@ -38,6 +38,7 @@ export default function MediaSubtypeManager() {
       setEditId(null)
       setForm(EMPTY_FORM)
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }
@@ -55,6 +56,7 @@ export default function MediaSubtypeManager() {
       await mediaSubtypesApi.delete(subtype.id)
       toast.success('Media type deleted')
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }
@@ -70,6 +72,7 @@ export default function MediaSubtypeManager() {
         mediaSubtypesApi.update(swapWith.id, { sort_order: subtype.sort_order }),
       ])
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }

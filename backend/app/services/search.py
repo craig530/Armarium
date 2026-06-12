@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 logger = logging.getLogger("armarium")
 
 # Columns indexed for full-text search.
-FTS_COLUMNS = ["title", "artist", "author", "director", "genres", "description"]
+FTS_COLUMNS = [
+    "title", "artist", "author", "director", "genres", "description",
+    "studio", "label", "publisher", "cast_list", "isbn", "barcode", "edition", "notes", "rating",
+]
 
 # Flipped to False if FTS5 isn't available (non-SQLite backend, or a SQLite
 # build without the FTS5 extension). `list_media` falls back to per-column
@@ -16,6 +19,21 @@ FTS_COLUMNS = ["title", "artist", "author", "director", "genres", "description"]
 FTS5_ENABLED = False
 
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _fts_columns_from_sql(create_sql: str) -> set[str]:
+    """Extract the column names from a `CREATE VIRTUAL TABLE ... USING fts5(...)`
+    statement, ignoring fts5 options like `content='media_items'`."""
+    match = re.search(r"\((.*)\)", create_sql, re.DOTALL)
+    if not match:
+        return set()
+    columns = set()
+    for part in match.group(1).split(","):
+        part = part.strip()
+        if not part or "=" in part:
+            continue
+        columns.add(part.split()[0].strip('"'))
+    return columns
 
 
 async def setup_fts(conn: AsyncConnection) -> None:
@@ -36,9 +54,21 @@ async def setup_fts(conn: AsyncConnection) -> None:
     old_values = ", ".join(f"old.{c}" for c in FTS_COLUMNS)
 
     existing = await conn.execute(
-        text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='media_items_fts'")
+        text("SELECT sql FROM sqlite_master WHERE type='table' AND name='media_items_fts'")
     )
-    table_existed = existing.first() is not None
+    existing_row = existing.first()
+    table_existed = existing_row is not None
+
+    # If the table exists but with a different column set (e.g. FTS_COLUMNS
+    # was extended), CREATE ... IF NOT EXISTS below would be a no-op and the
+    # new columns would never be indexed — drop and rebuild instead.
+    if table_existed and _fts_columns_from_sql(existing_row[0]) != set(FTS_COLUMNS):
+        logger.info("media_items_fts column set changed — rebuilding")
+        await conn.execute(text("DROP TRIGGER IF EXISTS media_items_fts_ai"))
+        await conn.execute(text("DROP TRIGGER IF EXISTS media_items_fts_ad"))
+        await conn.execute(text("DROP TRIGGER IF EXISTS media_items_fts_au"))
+        await conn.execute(text("DROP TABLE IF EXISTS media_items_fts"))
+        table_existed = False
 
     try:
         await conn.execute(text(

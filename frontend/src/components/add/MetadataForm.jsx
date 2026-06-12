@@ -4,13 +4,25 @@ import Input, { Textarea, Select } from '../ui/Input'
 import Button from '../ui/Button'
 import LocationPicker from '../locations/LocationPicker'
 import { mediaApi } from '../../api/media'
-import { locationsApi } from '../../api/locations'
 import { platformsApi } from '../../api/platforms'
-import { mediaSubtypesApi } from '../../api/mediaSubtypes'
+import { useReferenceDataStore } from '../../store'
 import { matchPlatformLogo } from '../../lib/platformLogos'
 import toast from 'react-hot-toast'
 
 const NEW_PLATFORM = '__new__'
+
+// Best-guess subtype name for a given category/supertype (and, for TMDB
+// results, movie vs TV), checked before falling back to "exactly 1 option".
+// Formats that come in multiple flavours (DVD vs Blu-ray, Book vs Graphic
+// Novel, eBook vs Audiobook) aren't derivable from lookup metadata and are
+// left for the user to pick.
+const AUTO_SUBTYPE_NAME = {
+  'films_tv:digital:movie': 'Film',
+  'films_tv:digital:tv': 'TV Series',
+  'music:digital': 'Music',
+  'books:digital': 'eBook',
+  'books:physical': 'Book',
+}
 
 export default function MetadataForm({ candidate, category, supertype, locationId, platformId, onBack, onSaved }) {
   const [form, setForm] = useState(() => {
@@ -52,18 +64,12 @@ export default function MetadataForm({ candidate, category, supertype, locationI
     }
   })
 
-  const [locations, setLocations] = useState([])
-  const [platforms, setPlatforms] = useState([])
-  const [mediaSubtypes, setMediaSubtypes] = useState([])
+  const { locations, platforms, mediaSubtypes, ensureLoaded, invalidate } = useReferenceDataStore()
   const [creatingPlatform, setCreatingPlatform] = useState(false)
   const [newPlatformName, setNewPlatformName] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    mediaSubtypesApi.list().then(setMediaSubtypes).catch(() => {})
-    if (supertype === 'physical') locationsApi.list().then(setLocations).catch(() => {})
-    if (supertype === 'digital') platformsApi.list().then(setPlatforms).catch(() => {})
-  }, [supertype])
+  useEffect(() => { ensureLoaded() }, [ensureLoaded])
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -71,10 +77,24 @@ export default function MetadataForm({ candidate, category, supertype, locationI
     .filter((s) => s.category === category && s.supertype === supertype)
     .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
 
-  // Auto-select the subtype when there's only one option for this category/supertype.
+  // Auto-select the subtype: prefer a best-guess match based on the lookup
+  // result (e.g. TMDB movie vs TV), then fall back to the only option when
+  // there's exactly one for this category/supertype.
   useEffect(() => {
     if (form.media_subtype_id) return
     const opts = mediaSubtypes.filter((s) => s.category === category && s.supertype === supertype)
+    if (opts.length === 0) return
+
+    const candidateKeys = [`${category}:${supertype}:${candidate?.media_kind}`, `${category}:${supertype}`]
+    for (const key of candidateKeys) {
+      const guessName = AUTO_SUBTYPE_NAME[key]
+      const match = guessName && opts.find((s) => s.name.toLowerCase() === guessName.toLowerCase())
+      if (match) {
+        set('media_subtype_id', String(match.id))
+        return
+      }
+    }
+
     if (opts.length === 1) set('media_subtype_id', String(opts[0].id))
   }, [mediaSubtypes, category, supertype]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -92,7 +112,8 @@ export default function MetadataForm({ candidate, category, supertype, locationI
     if (!name) return
     try {
       const created = await platformsApi.create({ name, logo_key: matchPlatformLogo(name) })
-      setPlatforms((p) => [...p, created].sort((a, b) => a.name.localeCompare(b.name)))
+      invalidate()
+      await ensureLoaded()
       set('platform_id', String(created.id))
       setCreatingPlatform(false)
       setNewPlatformName('')

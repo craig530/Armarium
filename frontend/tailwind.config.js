@@ -39,6 +39,15 @@ export default {
         serif: ['Fraunces', 'Georgia', 'serif'],
         display: ['Fraunces', 'Georgia', 'serif'],
       },
+      keyframes: {
+        'scan-sweep': {
+          '0%, 100%': { top: '0%' },
+          '50%': { top: '100%' },
+        },
+      },
+      animation: {
+        'scan-sweep': 'scan-sweep 2s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

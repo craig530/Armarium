@@ -6,7 +6,7 @@ import Input from '../ui/Input'
 import Button from '../ui/Button'
 import PlatformLogo from '../ui/PlatformLogo'
 import LogoPicker from '../settings/LogoPicker'
-import { useAuthStore, hasPermission } from '../../store'
+import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
 import toast from 'react-hot-toast'
 
 const EMPTY_FORM = { name: '', logo_key: '', logo_url: null }
@@ -41,6 +41,7 @@ export default function PlatformManager() {
       setEditId(null)
       setForm(EMPTY_FORM)
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }
@@ -58,6 +59,7 @@ export default function PlatformManager() {
       await platformsApi.delete(platform.id)
       toast.success('Platform deleted')
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }
@@ -70,6 +72,7 @@ export default function PlatformManager() {
       setForm((f) => ({ ...f, logo_url: updated.logo_url }))
       toast.success('Logo uploaded')
       load()
+      useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.message)
     }

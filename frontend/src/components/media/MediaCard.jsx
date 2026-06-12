@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { MediaSubtypeBadge, OwnershipBadge } from '../ui/Badge'
+import { MediaSubtypeIcon, OwnershipIcon } from '../ui/Badge'
 import CoverImage from './CoverImage'
 import OwnershipRow from './OwnershipRow'
 
@@ -23,10 +23,10 @@ export default function MediaCard({ item }) {
           className="group-hover:scale-105 transition-transform duration-300"
         />
         <div className="absolute top-2 left-2">
-          <MediaSubtypeBadge subtype={item.media_subtype} />
+          <MediaSubtypeIcon subtype={item.media_subtype} className="shadow-sm" />
         </div>
         <div className="absolute top-2 right-2">
-          <OwnershipBadge ownership={item.ownership} />
+          <OwnershipIcon ownership={item.ownership} className="shadow-sm" />
         </div>
       </div>
 

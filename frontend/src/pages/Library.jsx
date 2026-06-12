@@ -1,16 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams, Navigate } from 'react-router-dom'
-import { LayoutGrid, List, Plus, Search } from 'lucide-react'
+import axios from 'axios'
+import { LayoutGrid, List, Plus } from 'lucide-react'
 import { mediaApi } from '../api/media'
-import { locationsApi } from '../api/locations'
-import { mediaSubtypesApi } from '../api/mediaSubtypes'
-import { platformsApi } from '../api/platforms'
-import { useLibraryStore } from '../store'
+import { useLibraryStore, useReferenceDataStore } from '../store'
 import { DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/categories'
 import { dedupeLinkedItems } from '../lib/media'
 import MediaCard from '../components/media/MediaCard'
 import MediaListRow from '../components/media/MediaListRow'
 import FilterPanel from '../components/filters/FilterPanel'
+import SearchInput from '../components/ui/SearchInput'
 import Button from '../components/ui/Button'
 import { SkeletonCard, SkeletonListRow } from '../components/ui/Skeleton'
 import toast from 'react-hot-toast'
@@ -28,17 +27,19 @@ export default function Library() {
   const { category: categorySlug } = useParams()
   const category = categoryFromSlug(categorySlug)
   const { viewMode, setViewMode, filters, setFilter } = useLibraryStore()
+  const { locations, mediaSubtypes, platforms, ensureLoaded } = useReferenceDataStore()
 
   const [data, setData] = useState(null)
-  const [locations, setLocations] = useState([])
-  const [mediaSubtypes, setMediaSubtypes] = useState([])
-  const [platforms, setPlatforms] = useState([])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [searchInput, setSearchInput] = useState(filters.q)
+  const abortRef = useRef(null)
 
   const load = useCallback(async (p = 1) => {
     if (!category) return
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     try {
       const params = {
@@ -55,12 +56,13 @@ export default function Library() {
         ...(filters.year && { year: filters.year }),
         ...(filters.location_id && { location_id: filters.location_id }),
       }
-      const result = await mediaApi.list(params)
+      const result = await mediaApi.list(params, { signal: controller.signal })
       setData(result)
       setPage(p)
+      setLoading(false)
     } catch (err) {
+      if (axios.isCancel(err)) return
       toast.error(err.message)
-    } finally {
       setLoading(false)
     }
   }, [category, filters])
@@ -82,11 +84,7 @@ export default function Library() {
     setSearchInput(filters.q)
   }, [filters.q])
 
-  useEffect(() => {
-    locationsApi.list().then(setLocations).catch(() => {})
-    mediaSubtypesApi.list().then(setMediaSubtypes).catch(() => {})
-    platformsApi.list().then(setPlatforms).catch(() => {})
-  }, [])
+  useEffect(() => { ensureLoaded() }, [ensureLoaded])
 
   // Subtype ids are category-specific — drop a stale subtype filter when the
   // user switches Music/Films & TV/Books via the top nav.
@@ -114,17 +112,12 @@ export default function Library() {
 
       {/* Search + view controls */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="search"
-            data-search
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search titles, authors, directors… (press /)"
-            className="w-full pl-9 pr-4 py-2 text-base sm:text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-        </div>
+        <SearchInput
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search titles, authors, directors… (press /)"
+          className="flex-1"
+        />
 
         <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           {[
