@@ -840,6 +840,49 @@ async def test_lookup_barcode_flags_existing_library_item(client, auth_headers):
     assert resp.status_code == 204
 
 
+async def test_lookup_barcode_rejects_invalid_barcode(client, auth_headers):
+    # A 5-digit EAN-5 price extension is not a valid product barcode.
+    resp = await client.get("/api/v1/lookup/barcode/51995", headers=auth_headers)
+
+    assert resp.status_code == 400
+    assert "barcode" in resp.json()["detail"].lower()
+
+
+async def test_lookup_barcode_cd_queries_musicbrainz_with_ean13_from_upc(client, auth_headers):
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_lookup:
+        resp = await client.get("/api/v1/lookup/barcode/075678563598", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    # The 12-digit UPC-A is converted to its 13-digit EAN-13 form before
+    # being passed to MusicBrainz.
+    mock_lookup.assert_awaited_once_with("0075678563598")
+
+
+async def test_lookup_barcode_isbn_queries_open_library(client, auth_headers):
+    from app.models.enums import MediaCategory
+    from app.schemas.media import LookupCandidate
+    from app.services.cache import lookup_cache
+
+    # Avoid a cache hit from another test's lookup of the same ISBN.
+    lookup_cache.clear()
+
+    fake_candidate = LookupCandidate(
+        external_id="9780134685991",
+        source="openlibrary",
+        title="Effective Java",
+        category=MediaCategory.BOOKS,
+    )
+
+    with patch("app.services.openlibrary.lookup_by_isbn", new=AsyncMock(return_value=[fake_candidate])) as mock_lookup:
+        resp = await client.get("/api/v1/lookup/barcode/978-0-13-468599-1", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+    # Hyphens stripped server-side before querying Open Library.
+    mock_lookup.assert_awaited_once_with("9780134685991")
+
+
 # ── Stats ────────────────────────────────────────────────────────────────────
 
 async def test_stats(client, auth_headers):

@@ -9,14 +9,13 @@ from ...models.enums import MediaCategory
 from ...schemas.media import LookupCandidate
 from ...models.user import User
 from ...services import openlibrary, musicbrainz, tmdb
+from ...services.barcode import process_barcode
 from ...services.cache import lookup_cache
 from ...services.auth import get_current_user
 from ...services.rate_limit import SlidingWindowRateLimiter
 from ...config import settings
 
 router = APIRouter()
-
-_ISBN_PREFIXES = {"978", "979"}
 
 # External lookup providers (TMDB/MusicBrainz/OpenLibrary) have their own,
 # much stricter rate limits — this just stops a single user from hammering
@@ -30,17 +29,13 @@ async def _rate_limited_user(current_user: User = Depends(get_current_user)) -> 
     return current_user
 
 
-def _guess_category(barcode: str) -> MediaCategory:
-    clean = barcode.replace("-", "").strip()
-    if len(clean) in (10, 13) and (len(clean) == 10 or clean[:3] in _ISBN_PREFIXES):
-        return MediaCategory.BOOKS
-    return MediaCategory.MUSIC
-
-
-async def _library_count(db: AsyncSession, barcode: str) -> int:
+async def _library_count(db: AsyncSession, processed: dict) -> int:
     """Count items already catalogued under this barcode (or ISBN)."""
-    clean = barcode.replace("-", "").strip()
-    values = {barcode, clean}
+    lookups = processed["lookups"]
+    values = {processed["raw_cleaned"]}
+    for key in ("isbn13", "upc_a", "ean13", "ean13_from_upc"):
+        if lookups.get(key):
+            values.add(lookups[key])
     stmt = select(func.count(MediaItem.id)).where(
         or_(MediaItem.barcode.in_(values), MediaItem.isbn.in_(values))
     )
@@ -54,19 +49,23 @@ async def lookup_barcode(
     _=Depends(_rate_limited_user),
     db: AsyncSession = Depends(get_db),
 ):
-    cache_key = f"barcode:{barcode}:{category}"
+    processed = process_barcode(barcode)
+    if not processed["valid"]:
+        raise HTTPException(status_code=400, detail=processed["error"])
+
+    lookups = processed["lookups"]
+    cache_key = f"barcode:{processed['raw_cleaned']}:{category}"
     candidates = lookup_cache.get(cache_key, ttl=3600)
 
     if candidates is None:
-        detected = category or _guess_category(barcode)
+        is_book = category == MediaCategory.BOOKS or (category is None and processed["media_hint"] == "book")
         candidates = []
 
-        if detected == MediaCategory.BOOKS:
-            candidates = await openlibrary.lookup_by_isbn(barcode)
-        elif detected == MediaCategory.MUSIC:
-            candidates = await musicbrainz.lookup_by_barcode(barcode)
-            if not candidates:
-                candidates = await openlibrary.lookup_by_isbn(barcode)
+        if is_book:
+            if lookups["open_library"]:
+                candidates = await openlibrary.lookup_by_isbn(lookups["open_library"])
+        elif lookups["musicbrainz"]:
+            candidates = await musicbrainz.lookup_by_barcode(lookups["musicbrainz"])
 
         if candidates:
             lookup_cache.set(cache_key, candidates)
@@ -74,7 +73,7 @@ async def lookup_barcode(
     if candidates:
         # Computed fresh on every call (not cached) so it reflects items
         # added to the library since the lookup result was first cached.
-        count = await _library_count(db, barcode)
+        count = await _library_count(db, processed)
         for c in candidates:
             c.metadata["library_count"] = count
 

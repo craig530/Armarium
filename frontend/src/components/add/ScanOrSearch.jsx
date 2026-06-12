@@ -63,9 +63,10 @@ export default function ScanOrSearch({ category, onResults }) {
 
   const handleManualBarcodeSubmit = (e) => {
     e.preventDefault()
-    const code = manualBarcode.trim()
-    if (!code) return
-    handleBarcodeDetected(code)
+    if (!manualBarcode.trim()) return
+    // Pass the raw input through untouched — all cleanup/validation
+    // (whitespace, hyphens, ISBN/UPC/EAN normalisation) happens server side.
+    handleBarcodeDetected(manualBarcode)
     setManualBarcode('')
   }
 
