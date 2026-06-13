@@ -10,6 +10,7 @@ class PlexConfigResponse(BaseModel):
     configured: bool
     enabled: bool
     base_url: Optional[str] = None
+    platform: Optional[PlatformSummary] = None
     # Never includes the token.
 
 
@@ -17,6 +18,7 @@ class PlexConfigUpdate(BaseModel):
     base_url: str = Field(..., min_length=1, max_length=500)
     token: Optional[str] = Field(None, min_length=1, max_length=500)
     enabled: bool = True
+    platform_id: int
 
 
 class PlexTestRequest(BaseModel):
@@ -33,7 +35,6 @@ class PlexSectionResponse(BaseModel):
 
 class PlexMappingCreate(BaseModel):
     section_key: str
-    platform_id: Optional[int] = None
 
 
 class PlexMappingResponse(BaseModel):
@@ -42,7 +43,6 @@ class PlexMappingResponse(BaseModel):
     section_title: str
     section_type: str
     category: MediaCategory
-    platform: PlatformSummary
     last_synced_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

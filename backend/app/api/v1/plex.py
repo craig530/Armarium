@@ -30,7 +30,7 @@ from ...schemas.plex import (
 from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
 from ...services.cover_art import delete_cover_files, optimise_and_save
-from .media import _build_response, _build_responses, _auto_link_item
+from .media import _build_response, _build_responses, _link_unlinked
 
 router = APIRouter()
 
@@ -72,14 +72,13 @@ def _platform_summary(platform: Platform) -> PlatformSummary:
     )
 
 
-def _to_mapping_response(mapping: PlexLibraryMapping, platform: Platform | None = None) -> PlexMappingResponse:
+def _to_mapping_response(mapping: PlexLibraryMapping) -> PlexMappingResponse:
     return PlexMappingResponse(
         id=mapping.id,
         section_key=mapping.section_key,
         section_title=mapping.section_title,
         section_type=mapping.section_type,
         category=mapping.category,
-        platform=_platform_summary(platform or mapping.platform),
         last_synced_at=mapping.last_synced_at,
     )
 
@@ -89,7 +88,12 @@ async def get_config(_=Depends(get_current_admin), db: AsyncSession = Depends(ge
     config = await _get_config(db)
     if config is None:
         return PlexConfigResponse(configured=False, enabled=False, base_url=None)
-    return PlexConfigResponse(configured=True, enabled=config.enabled, base_url=config.base_url)
+    return PlexConfigResponse(
+        configured=True,
+        enabled=config.enabled,
+        base_url=config.base_url,
+        platform=_platform_summary(config.platform),
+    )
 
 
 @router.put("/config", response_model=PlexConfigResponse)
@@ -98,20 +102,25 @@ async def update_config(
     _=Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    platform = (await db.execute(select(Platform).where(Platform.id == payload.platform_id))).scalar_one_or_none()
+    if platform is None:
+        raise HTTPException(status_code=404, detail="Platform not found")
+
     config = await _get_config(db)
     if config is None:
         if not payload.token:
             raise HTTPException(status_code=400, detail="Token is required for initial setup")
-        config = PlexConfig(base_url=payload.base_url, token=payload.token, enabled=payload.enabled)
+        config = PlexConfig(base_url=payload.base_url, token=payload.token, enabled=payload.enabled, platform_id=platform.id)
         db.add(config)
     else:
         config.base_url = payload.base_url
         config.enabled = payload.enabled
+        config.platform_id = platform.id
         if payload.token:
             config.token = payload.token
 
     await db.commit()
-    return PlexConfigResponse(configured=True, enabled=config.enabled, base_url=config.base_url)
+    return PlexConfigResponse(configured=True, enabled=config.enabled, base_url=config.base_url, platform=_platform_summary(platform))
 
 
 @router.delete("/config", status_code=204)
@@ -156,15 +165,6 @@ async def list_mappings(
     return [_to_mapping_response(m) for m in mappings]
 
 
-async def _get_or_create_plex_platform(db: AsyncSession) -> Platform:
-    platform = (await db.execute(select(Platform).where(Platform.name == "Plex"))).scalar_one_or_none()
-    if platform is None:
-        platform = Platform(name="Plex", logo_key="plex")
-        db.add(platform)
-        await db.flush()
-    return platform
-
-
 @router.post("/mappings", response_model=PlexMappingResponse, status_code=201)
 async def create_mapping(
     payload: PlexMappingCreate,
@@ -184,24 +184,16 @@ async def create_mapping(
     if section is None:
         raise HTTPException(status_code=404, detail="Plex library section not found")
 
-    if payload.platform_id is not None:
-        platform = (await db.execute(select(Platform).where(Platform.id == payload.platform_id))).scalar_one_or_none()
-        if platform is None:
-            raise HTTPException(status_code=404, detail="Platform not found")
-    else:
-        platform = await _get_or_create_plex_platform(db)
-
     mapping = PlexLibraryMapping(
         section_key=section["key"],
         section_title=section["title"],
         section_type=section["type"],
         category=_SECTION_CATEGORY[section["type"]],
-        platform_id=platform.id,
     )
     db.add(mapping)
     await db.commit()
     await db.refresh(mapping)
-    return _to_mapping_response(mapping, platform)
+    return _to_mapping_response(mapping)
 
 
 @router.delete("/mappings/{mapping_id}", status_code=204)
@@ -273,16 +265,17 @@ def _to_sync_fields(item: dict, section_type: str) -> dict:
     return fields
 
 
-async def _find_conflict(db: AsyncSession, mapping: PlexLibraryMapping, sync_item: PlexSyncItem) -> Optional[MediaItem]:
-    """Look for an existing, non-Plex-sourced item that looks like the same
+async def _find_matches(db: AsyncSession, mapping: PlexLibraryMapping, sync_item: PlexSyncItem) -> list[MediaItem]:
+    """Look for existing, non-Plex-sourced items that look like the same
     title — matched by tmdb_id/musicbrainz_id when the Plex item has one,
-    otherwise by case-insensitive title + year."""
+    otherwise by case-insensitive title + year. Includes both digital
+    (other-platform) and physical items — both are link candidates; the
+    caller decides which (if any) is a same-platform duplicate."""
     stmt = (
         select(MediaItem)
         .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
         .where(
             MediaSubtype.category == mapping.category,
-            MediaSubtype.supertype == Supertype.DIGITAL,
             or_(MediaItem.source != "plex", MediaItem.source.is_(None)),
         )
     )
@@ -292,7 +285,7 @@ async def _find_conflict(db: AsyncSession, mapping: PlexLibraryMapping, sync_ite
         stmt = stmt.where(MediaItem.musicbrainz_id == sync_item.musicbrainz_id)
     else:
         stmt = stmt.where(MediaItem.title.ilike(sync_item.title), MediaItem.year == sync_item.year)
-    return (await db.execute(stmt)).scalar_one_or_none()
+    return (await db.execute(stmt)).scalars().all()
 
 
 async def _apply_cover(db: AsyncSession, config: PlexConfig, item: MediaItem, thumb: Optional[str]) -> None:
@@ -347,14 +340,19 @@ async def sync_mapping(
             updated += 1
             continue
 
-        conflict_item = await _find_conflict(db, mapping, sync_item)
-        if conflict_item is not None:
-            conflicts.append(PlexConflict(existing_item=await _build_response(db, conflict_item), plex_item=sync_item))
+        matches = await _find_matches(db, mapping, sync_item)
+        # A duplicate is when platform and item match — same identity, same
+        # configured Plex platform. Anything else (a different digital
+        # platform, or a physical copy) is a related copy to link, not a
+        # conflict.
+        duplicate = next((m for m in matches if m.platform_id == config.platform_id), None)
+        if duplicate is not None:
+            conflicts.append(PlexConflict(existing_item=await _build_response(db, duplicate), plex_item=sync_item))
             continue
 
         item = MediaItem(
             media_subtype_id=subtype.id,
-            platform_id=mapping.platform_id,
+            platform_id=config.platform_id,
             source="plex",
             source_id=source_id,
             **fields,
@@ -363,7 +361,7 @@ async def sync_mapping(
         await db.flush()
         await _apply_cover(db, config, item, raw_item.get("thumb"))
         await db.flush()
-        await _auto_link_item(db, item, subtype)
+        await _link_unlinked(db, item, matches)
         created += 1
 
     stale_items = (
@@ -417,12 +415,18 @@ async def resolve_conflicts(
         item.source = "plex"
         item.source_id = f"{mapping.id}:{res.plex_item.guid}"
         item.media_subtype_id = subtype.id
-        item.platform_id = mapping.platform_id
+        item.platform_id = config.platform_id
 
         if res.resolution == "use_plex":
             for field in _SYNC_CONTENT_FIELDS:
                 setattr(item, field, getattr(res.plex_item, field))
             await _apply_cover(db, config, item, res.plex_item.cover_thumb)
+
+        # The user may also own this item on other digital platforms or
+        # physically — link those copies to the now-adopted Plex item.
+        await db.flush()
+        matches = await _find_matches(db, mapping, res.plex_item)
+        await _link_unlinked(db, item, [m for m in matches if m.platform_id != config.platform_id])
 
         resolved += 1
 

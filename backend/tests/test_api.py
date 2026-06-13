@@ -1639,22 +1639,43 @@ async def test_plex_config_not_configured_by_default(client, auth_headers):
     assert body["configured"] is False
     assert body["enabled"] is False
     assert body["base_url"] is None
+    assert body["platform"] is None
 
 
 async def test_plex_config_create_update_delete(client, auth_headers):
     from app.database import AsyncSessionLocal
 
+    resp = await client.post("/api/v1/platforms", json={"name": "Plex Config Platform"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    platform_id = resp.json()["id"]
+
+    # platform_id is required.
+    resp = await client.put(
+        "/api/v1/admin/plex/config",
+        json={"base_url": "http://192.168.1.10:32400", "token": "secret-token", "enabled": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
     # Initial setup requires a token.
     resp = await client.put(
         "/api/v1/admin/plex/config",
-        json={"base_url": "http://192.168.1.10:32400", "enabled": True},
+        json={"base_url": "http://192.168.1.10:32400", "enabled": True, "platform_id": platform_id},
         headers=auth_headers,
     )
     assert resp.status_code == 400
 
+    # Unknown platform_id -> 404.
     resp = await client.put(
         "/api/v1/admin/plex/config",
-        json={"base_url": "http://192.168.1.10:32400", "token": "secret-token", "enabled": True},
+        json={"base_url": "http://192.168.1.10:32400", "token": "secret-token", "enabled": True, "platform_id": 999999},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+    resp = await client.put(
+        "/api/v1/admin/plex/config",
+        json={"base_url": "http://192.168.1.10:32400", "token": "secret-token", "enabled": True, "platform_id": platform_id},
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
@@ -1662,17 +1683,19 @@ async def test_plex_config_create_update_delete(client, auth_headers):
     assert body["configured"] is True
     assert body["enabled"] is True
     assert body["base_url"] == "http://192.168.1.10:32400"
+    assert body["platform"]["id"] == platform_id
     assert "token" not in body
 
     # GET never returns the token either.
     resp = await client.get("/api/v1/admin/plex/config", headers=auth_headers)
     assert resp.status_code == 200
     assert "token" not in resp.json()
+    assert resp.json()["platform"]["id"] == platform_id
 
     # Omitting the token on update preserves the existing one — just toggling `enabled`.
     resp = await client.put(
         "/api/v1/admin/plex/config",
-        json={"base_url": "http://192.168.1.10:32400", "enabled": False},
+        json={"base_url": "http://192.168.1.10:32400", "enabled": False, "platform_id": platform_id},
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
@@ -1720,7 +1743,7 @@ async def test_plex_config_requires_admin(client, auth_headers):
 
     resp = await client.put(
         "/api/v1/admin/plex/config",
-        json={"base_url": "http://example.com", "token": "x"},
+        json={"base_url": "http://example.com", "token": "x", "platform_id": 1},
         headers=headers,
     )
     assert resp.status_code == 403
@@ -1735,13 +1758,27 @@ _PLEX_SECTIONS = [
 ]
 
 
+async def _ensure_plex_platform(client, auth_headers) -> dict:
+    """Get or create the platform named "Plex", used as the admin-configured
+    Plex sync platform across the Plex test suite."""
+    resp = await client.get("/api/v1/platforms", headers=auth_headers)
+    for platform in resp.json():
+        if platform["name"] == "Plex":
+            return platform
+    resp = await client.post("/api/v1/platforms", json={"name": "Plex", "logo_key": "plex"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 async def _configure_plex(client, auth_headers):
+    platform = await _ensure_plex_platform(client, auth_headers)
     resp = await client.put(
         "/api/v1/admin/plex/config",
-        json={"base_url": "http://192.168.1.10:32400", "token": "secret-token", "enabled": True},
+        json={"base_url": "http://192.168.1.10:32400", "token": "secret-token", "enabled": True, "platform_id": platform["id"]},
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
+    return platform
 
 
 async def test_plex_mappings_require_config(client, auth_headers):
@@ -1778,10 +1815,6 @@ async def test_plex_mapping_create_list_delete(client, auth_headers):
     assert mapping["section_type"] == "movie"
     assert mapping["category"] == "films_tv"
     assert mapping["last_synced_at"] is None
-    # No platform_id given -> auto-created "Plex" platform.
-    assert mapping["platform"]["name"] == "Plex"
-    assert mapping["platform"]["logo_key"] == "plex"
-    assert mapping["platform"]["logo_url"] is None
 
     # The section now shows as mapped.
     with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
@@ -1793,9 +1826,7 @@ async def test_plex_mapping_create_list_delete(client, auth_headers):
     mappings = resp.json()
     assert len(mappings) == 1
     assert mappings[0]["id"] == mapping["id"]
-    assert mappings[0]["platform"]["name"] == "Plex"
 
-    # A second mapping reuses the same "Plex" platform rather than creating another.
     with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
         resp = await client.post(
             "/api/v1/admin/plex/mappings", json={"section_key": "3"}, headers=auth_headers
@@ -1803,41 +1834,12 @@ async def test_plex_mapping_create_list_delete(client, auth_headers):
     assert resp.status_code == 201, resp.text
     second = resp.json()
     assert second["category"] == "music"
-    assert second["platform"]["id"] == mapping["platform"]["id"]
 
     resp = await client.delete(f"/api/v1/admin/plex/mappings/{mapping['id']}", headers=auth_headers)
     assert resp.status_code == 204
 
     resp = await client.get("/api/v1/admin/plex/mappings", headers=auth_headers)
     assert [m["id"] for m in resp.json()] == [second["id"]]
-
-
-async def test_plex_mapping_create_with_explicit_platform(client, auth_headers):
-    await _configure_plex(client, auth_headers)
-
-    resp = await client.post("/api/v1/platforms", json={"name": "My Plex Server"}, headers=auth_headers)
-    assert resp.status_code == 201
-    platform_id = resp.json()["id"]
-
-    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
-        resp = await client.post(
-            "/api/v1/admin/plex/mappings",
-            json={"section_key": "2", "platform_id": platform_id},
-            headers=auth_headers,
-        )
-    assert resp.status_code == 201, resp.text
-    mapping = resp.json()
-    assert mapping["platform"]["id"] == platform_id
-    assert mapping["category"] == "films_tv"
-
-    # Unknown platform_id -> 404.
-    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
-        resp = await client.post(
-            "/api/v1/admin/plex/mappings",
-            json={"section_key": "1", "platform_id": 999999},
-            headers=auth_headers,
-        )
-    assert resp.status_code == 404
 
 
 async def test_plex_mapping_duplicate_and_unknown_section(client, auth_headers):
@@ -1999,6 +2001,22 @@ _PLEX_MOVIE_ITEM_3 = {
     "content_rating": "R",
 }
 
+_PLEX_MOVIE_ITEM_EDGE = {
+    "guid": "plex://movie/edgeoftomorrow",
+    "title": "Edge of Tomorrow",
+    "year": 2014,
+    "summary": "A soldier fighting aliens gets to relive the same day over and over again.",
+    "genres": ["Action", "Sci-Fi"],
+    "studio": "Warner Bros.",
+    "thumb": "/library/metadata/10/thumb/1",
+    "tmdb_id": 137113,
+    "musicbrainz_id": None,
+    "directors": ["Doug Liman"],
+    "cast": ["Tom Cruise", "Emily Blunt"],
+    "duration_ms": 6960000,
+    "content_rating": "PG-13",
+}
+
 _PLEX_ALBUM_ITEM = {
     "guid": "plex://album/xyz789",
     "title": "OK Computer",
@@ -2125,12 +2143,12 @@ async def test_plex_sync_rerun_updates_not_duplicates(client, auth_headers):
     assert matches[0]["description"] == "Updated description"
 
 
-async def test_plex_sync_detects_conflict_with_manual_item(client, auth_headers):
+async def test_plex_sync_detects_conflict_with_same_platform_item(client, auth_headers):
+    """A duplicate is when platform and item match: an existing item on the
+    admin-configured Plex platform with the same identity is a conflict, just
+    like before this item ever appeared on a different platform."""
     mapping = await _create_movie_mapping(client, auth_headers)
-
-    resp = await client.post("/api/v1/platforms", json={"name": "Apple TV"}, headers=auth_headers)
-    assert resp.status_code == 201, resp.text
-    platform_id = resp.json()["id"]
+    plex_platform = await _ensure_plex_platform(client, auth_headers)
 
     film_subtype_id = await _subtype_id(client, auth_headers, "Film")
     resp = await client.post(
@@ -2140,7 +2158,7 @@ async def test_plex_sync_detects_conflict_with_manual_item(client, auth_headers)
             "media_subtype_id": film_subtype_id,
             "year": 2003,
             "tmdb_id": 605,
-            "platform_id": platform_id,
+            "platform_id": plex_platform["id"],
         },
         headers=auth_headers,
     )
@@ -2164,6 +2182,64 @@ async def test_plex_sync_detects_conflict_with_manual_item(client, auth_headers)
     # The manual item is untouched and not adopted.
     resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
     assert resp.json()["source"] is None
+
+
+async def test_plex_sync_links_other_platform_and_physical_matches(client, auth_headers):
+    """If we already have a physical copy or a copy on a different digital
+    platform, the new Plex item is created on the configured platform and
+    linked to those copies instead of being flagged as a conflict."""
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Edge of Tomorrow", "media_subtype_id": bluray_id, "year": 2014, "tmdb_id": 137113},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    physical_id = resp.json()["id"]
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Amazon Video"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    amazon_platform_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "Edge of Tomorrow",
+            "media_subtype_id": film_subtype_id,
+            "year": 2014,
+            "tmdb_id": 137113,
+            "platform_id": amazon_platform_id,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    amazon_id = resp.json()["id"]
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_EDGE])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    result = resp.json()
+    assert result["created"] == 1
+    assert result["conflicts"] == []
+
+    resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
+    items = [i for i in resp.json()["items"] if i["title"] == "Edge of Tomorrow"]
+    assert len(items) == 3
+    plex_item = next(i for i in items if i["source"] == "plex")
+    assert plex_item["platform"]["name"] == "Plex"
+    assert {li["id"] for li in plex_item["linked_items"]} == {physical_id, amazon_id}
+    assert plex_item["ownership"] == "both"
+
+    resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert plex_item["id"] in {li["id"] for li in resp.json()["linked_items"]}
+
+    resp = await client.get(f"/api/v1/media/{amazon_id}", headers=auth_headers)
+    assert plex_item["id"] in {li["id"] for li in resp.json()["linked_items"]}
 
 
 async def test_plex_sync_detects_stale_items(client, auth_headers):
@@ -2233,10 +2309,7 @@ async def test_plex_sync_permission_enforced(client, auth_headers):
 
 async def test_plex_resolve_conflict_keep_mine(client, auth_headers):
     mapping = await _create_movie_mapping(client, auth_headers)
-
-    resp = await client.post("/api/v1/platforms", json={"name": "Apple TV 2"}, headers=auth_headers)
-    assert resp.status_code == 201, resp.text
-    platform_id = resp.json()["id"]
+    plex_platform = await _ensure_plex_platform(client, auth_headers)
 
     film_subtype_id = await _subtype_id(client, auth_headers, "Film")
     resp = await client.post(
@@ -2247,7 +2320,7 @@ async def test_plex_resolve_conflict_keep_mine(client, auth_headers):
             "year": 2014,
             "tmdb_id": 606,
             "description": "My manual notes",
-            "platform_id": platform_id,
+            "platform_id": plex_platform["id"],
         },
         headers=auth_headers,
     )
@@ -2295,10 +2368,7 @@ async def test_plex_resolve_conflict_keep_mine(client, auth_headers):
 
 async def test_plex_resolve_conflict_use_plex(client, auth_headers):
     mapping = await _create_movie_mapping(client, auth_headers)
-
-    resp = await client.post("/api/v1/platforms", json={"name": "Apple TV 3"}, headers=auth_headers)
-    assert resp.status_code == 201, resp.text
-    platform_id = resp.json()["id"]
+    plex_platform = await _ensure_plex_platform(client, auth_headers)
 
     film_subtype_id = await _subtype_id(client, auth_headers, "Film")
     resp = await client.post(
@@ -2310,7 +2380,7 @@ async def test_plex_resolve_conflict_use_plex(client, auth_headers):
             "tmdb_id": 607,
             "description": "My manual notes",
             "genres": "Comedy",
-            "platform_id": platform_id,
+            "platform_id": plex_platform["id"],
         },
         headers=auth_headers,
     )

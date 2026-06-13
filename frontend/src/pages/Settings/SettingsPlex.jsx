@@ -169,6 +169,12 @@ export default function SettingsPlex() {
 
   return (
     <div className="space-y-6">
+      {config.platform && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <PlatformLogo platform={config.platform} className="h-5 w-5" />
+          Synced media is filed under <span className="font-medium text-gray-700 dark:text-gray-300">{config.platform.name}</span>
+        </div>
+      )}
       <section>
         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Synced libraries</h3>
         {mappings.length === 0 ? (
@@ -179,7 +185,6 @@ export default function SettingsPlex() {
               <div key={m.id} className="flex items-center gap-3 py-1.5">
                 <MediaSubtypeBadge subtype={{ category: m.category, name: categoryLabel(m.category) }} />
                 <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{m.section_title}</span>
-                <PlatformLogo platform={m.platform} className="h-6 w-6" />
                 <span className="text-xs text-gray-400">
                   {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
                 </span>

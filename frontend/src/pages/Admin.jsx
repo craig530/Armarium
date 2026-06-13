@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download } from 'lucide-react'
 import client from '../api/client'
 import { adminApi } from '../api/admin'
 import { plexApi } from '../api/plex'
 import { exportCovers } from '../lib/export'
-import { useAuthStore } from '../store'
+import { useAuthStore, useReferenceDataStore } from '../store'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import SelectMenu from '../components/ui/SelectMenu'
+import PlatformLogo from '../components/ui/PlatformLogo'
 import { useConfirm } from '../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
@@ -500,21 +503,33 @@ function PlexIntegrationPanel() {
   const [baseUrl, setBaseUrl] = useState('')
   const [token, setToken] = useState('')
   const [enabled, setEnabled] = useState(true)
+  const [platformId, setPlatformId] = useState('')
   const [loading, setLoading] = useState(true)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
+  const { platforms, ensureLoaded } = useReferenceDataStore()
 
   useEffect(() => {
+    ensureLoaded()
     plexApi.getConfig()
       .then((c) => {
         setConfig(c)
         setBaseUrl(c.base_url || '')
         setEnabled(c.configured ? c.enabled : true)
+        if (c.platform?.id) setPlatformId(String(c.platform.id))
       })
       .catch((err) => toast.error(err.message))
       .finally(() => setLoading(false))
   }, [])
+
+  // Pre-select a platform literally named "Plex" once the reference data has
+  // loaded, but only if there's no configured platform to prefer already.
+  useEffect(() => {
+    if (platformId || config?.configured) return
+    const plex = platforms.find((p) => p.name === 'Plex')
+    if (plex) setPlatformId(String(plex.id))
+  }, [platforms, config, platformId])
 
   const handleTest = async () => {
     if (!baseUrl || !token) {
@@ -537,9 +552,13 @@ function PlexIntegrationPanel() {
       toast.error('Server URL is required')
       return
     }
+    if (!platformId) {
+      toast.error('Choose a platform for synced Plex media')
+      return
+    }
     setSaving(true)
     try {
-      const r = await plexApi.updateConfig({ base_url: baseUrl, token: token || undefined, enabled })
+      const r = await plexApi.updateConfig({ base_url: baseUrl, token: token || undefined, enabled, platform_id: Number(platformId) })
       setConfig(r)
       setToken('')
       toast.success('Plex configuration saved')
@@ -557,10 +576,11 @@ function PlexIntegrationPanel() {
     )) return
     try {
       await plexApi.deleteConfig()
-      setConfig({ configured: false, enabled: false, base_url: null })
+      setConfig({ configured: false, enabled: false, base_url: null, platform: null })
       setBaseUrl('')
       setToken('')
       setEnabled(true)
+      setPlatformId('')
       toast.success('Plex integration removed')
     } catch (err) {
       toast.error(err.message)
@@ -600,11 +620,31 @@ function PlexIntegrationPanel() {
             />
             Enabled
           </label>
+          {platforms.length === 0 ? (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              Create a platform in <Link to="/settings/platforms" className="underline">Settings → Platforms</Link> first —
+              synced films, shows and music need a platform to be filed under.
+            </p>
+          ) : (
+            <SelectMenu
+              label="Platform"
+              groups={[{ options: [
+                { value: '', label: 'Select a platform…' },
+                ...platforms.map((p) => ({ value: String(p.id), label: p.name, platform: p })),
+              ] }]}
+              value={platformId}
+              onChange={setPlatformId}
+              renderIcon={(opt) => opt.platform && <PlatformLogo platform={opt.platform} className="h-5 w-5" />}
+            />
+          )}
+          <p className="text-xs text-gray-400">
+            All films, TV shows and music synced from Plex are filed as digital media under this platform.
+          </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="secondary" loading={testing} onClick={handleTest}>
               Test connection
             </Button>
-            <Button size="sm" loading={saving} onClick={handleSave}>
+            <Button size="sm" loading={saving} disabled={platforms.length === 0} onClick={handleSave}>
               Save
             </Button>
             {config?.configured && (
