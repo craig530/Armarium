@@ -663,6 +663,7 @@ async def upload_cover(
         raise HTTPException(status_code=400, detail="File is not a valid image")
 
     item.cover_image_path = local_path
+    item.cover_image_url = None
     await db.commit()
     item = await _reload_item(db, item.id)
     return await _build_response(db, item)

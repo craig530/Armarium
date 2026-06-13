@@ -408,20 +408,23 @@ export default function ItemDetail() {
           )}
 
           <Input label="Barcode" value={form.barcode || ''} onChange={(e) => set('barcode', e.target.value)} />
-          <div className="col-span-2 flex items-end gap-2">
-            <Input label="Cover URL" value={form.cover_image_url || ''} onChange={(e) => set('cover_image_url', e.target.value)} className="flex-1" />
-            {item.cover_image_url && (
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                title="Redownload cover from URL"
-                loading={refreshingCover}
-                onClick={handleRefreshCover}
-              >
-                <RefreshCw size={14} />
-              </Button>
-            )}
+          <div className="col-span-2">
+            <div className="flex items-end gap-2">
+              <Input label="Cover URL" value={form.cover_image_url || ''} onChange={(e) => set('cover_image_url', e.target.value)} className="flex-1" />
+              {item.cover_image_url && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Redownload cover from URL"
+                  loading={refreshingCover}
+                  onClick={handleRefreshCover}
+                >
+                  <RefreshCw size={14} />
+                </Button>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-gray-400">Uploading a photo replaces this URL.</p>
           </div>
           <Textarea label="Description" value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={3} className="col-span-2" />
           <Textarea label="Notes" value={form.notes || ''} onChange={(e) => set('notes', e.target.value)} rows={2} className="col-span-2" />
