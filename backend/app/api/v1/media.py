@@ -719,6 +719,26 @@ async def upload_cover(
     return await _build_response(db, item)
 
 
+@router.delete("/{item_id}/cover", response_model=MediaItemResponse)
+async def delete_cover(
+    item_id: int,
+    _=Depends(require_permission("can_add_items")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove a locally-stored cover (uploaded or downloaded), falling back
+    to `cover_image_url` (if set) for `cover_url`."""
+    stmt = select(MediaItem).where(MediaItem.id == item_id).options(selectinload(MediaItem.location))
+    item = (await db.execute(stmt)).scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    delete_cover_files(item.cover_image_path)
+    item.cover_image_path = None
+    await db.commit()
+    item = await _reload_item(db, item.id)
+    return await _build_response(db, item)
+
+
 @router.post("/{item_id}/cover/refresh", response_model=MediaItemResponse)
 async def refresh_cover(
     item_id: int,

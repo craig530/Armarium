@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import clsx from 'clsx'
 import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink, RefreshCw } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { coverProxyUrl } from '../api/lookup'
@@ -133,6 +134,7 @@ export default function ItemDetail() {
   const [loading, setLoading] = useState(true)
   const [showLinkSearch, setShowLinkSearch] = useState(false)
   const [refreshingCover, setRefreshingCover] = useState(false)
+  const [deletingCover, setDeletingCover] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
 
   const load = () => {
@@ -225,6 +227,20 @@ export default function ItemDetail() {
     }
   }
 
+  const handleDeleteCover = async () => {
+    setDeletingCover(true)
+    try {
+      const updated = await mediaApi.deleteCover(id)
+      setItem(updated)
+      setForm(updated)
+      toast.success('Cover removed')
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setDeletingCover(false)
+    }
+  }
+
   const handleUnlink = async (otherId) => {
     if (!await confirm('Unlink these items?')) return
     try {
@@ -246,6 +262,7 @@ export default function ItemDetail() {
 
   const creator = item.artist || item.director || item.author
   const linkedItems = item.linked_items || []
+  const isCustomCover = !!item.cover_image_path?.includes('_custom_')
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -255,10 +272,6 @@ export default function ItemDetail() {
           <ArrowLeft size={18} />
         </Button>
         <div className="flex-1" />
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
-        <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-          <Upload size={14} /> Cover
-        </Button>
         {!editing && (
           <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
             <Pencil size={14} /> Edit
@@ -283,7 +296,7 @@ export default function ItemDetail() {
       <div className="flex gap-6 items-start">
         <div className="shrink-0 w-36 rounded-xl overflow-hidden shadow-lg bg-gray-100 dark:bg-gray-800">
           {item.cover_url ? (
-            <img src={coverProxyUrl(item.cover_url)} alt={item.title} className="w-full aspect-[2/3] object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+            <img key={item.cover_url} src={coverProxyUrl(item.cover_url)} alt={item.title} className="w-full aspect-[2/3] object-cover" onError={(e) => { e.target.style.display = 'none' }} />
           ) : (
             <CoverImage category={item.category} title={item.title} size="full" className="aspect-[2/3]" />
           )}
@@ -435,8 +448,33 @@ export default function ItemDetail() {
                   <RefreshCw size={14} />
                 </Button>
               )}
+              {isCustomCover ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Remove custom cover"
+                  loading={deletingCover}
+                  onClick={handleDeleteCover}
+                >
+                  <Trash2 size={14} />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Upload cover image"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <Upload size={14} />
+                </Button>
+              )}
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
             </div>
-            <p className="mt-1 text-xs text-gray-400">Uploading a photo replaces this URL.</p>
+            <p className="mt-1 text-xs text-gray-400">
+              {isCustomCover ? 'Custom cover uploaded — remove it to fall back to the URL above.' : 'Uploading a photo replaces this URL.'}
+            </p>
           </div>
           <Textarea label="Description" value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={3} className="col-span-2" />
           <Textarea label="Notes" value={form.notes || ''} onChange={(e) => set('notes', e.target.value)} rows={2} className="col-span-2" />
@@ -477,7 +515,10 @@ export default function ItemDetail() {
                 .map(([label, value]) => (
                   <div key={label}>
                     <dt className="text-xs text-gray-400">{label}</dt>
-                    <dd className="text-sm font-medium text-gray-900 dark:text-white">{value}</dd>
+                    <dd className={clsx(
+                      'text-sm font-medium text-gray-900 dark:text-white',
+                      label === 'Barcode' && 'font-mono tracking-widest'
+                    )}>{value}</dd>
                   </div>
                 ))}
             </dl>

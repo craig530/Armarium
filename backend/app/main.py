@@ -101,8 +101,23 @@ app.add_middleware(
 )
 
 # Compresses JSON list/search responses, which dominate traffic for a
-# catalogue with thousands of items.
-app.add_middleware(GZipMiddleware, minimum_size=500)
+# catalogue with thousands of items. Excludes the static image mounts below:
+# JPEGs are already compressed (gzip adds nothing), and GZipMiddleware
+# rewrites Content-Length/body for *any* response — including 206 Partial
+# Content from StaticFiles range requests — without adjusting Content-Range,
+# producing a response some proxies (e.g. Cloudflare) treat as invalid or
+# incomplete.
+class AssetExemptGZipMiddleware(GZipMiddleware):
+    EXEMPT_PREFIXES = ("/covers/", "/location-icons/", "/platform-logos/")
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith(self.EXEMPT_PREFIXES):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
+app.add_middleware(AssetExemptGZipMiddleware, minimum_size=500)
 
 app.include_router(router)
 

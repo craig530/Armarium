@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Music, Clapperboard, BookOpen } from 'lucide-react'
 import clsx from 'clsx'
 import { coverProxyUrl } from '../../api/lookup'
@@ -13,6 +13,11 @@ const CATEGORY_BG = {
 export default function CoverImage({ src, src2x, category, title, className, size = 'md' }) {
   const [error, setError] = useState(false)
   const Icon = CATEGORY_ICONS[category] || BookOpen
+
+  // Reset a previous load failure when the source changes (e.g. a new cover
+  // was uploaded) — otherwise this instance keeps showing the fallback icon
+  // forever even once `src` points to a working image.
+  useEffect(() => setError(false), [src, src2x])
 
   const sizes = {
     sm: 'h-16 w-12',

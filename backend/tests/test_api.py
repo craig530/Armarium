@@ -643,6 +643,45 @@ async def test_cover_upload_rejects_svg(client, auth_headers):
     assert resp.status_code == 204
 
 
+async def test_delete_cover_clears_path_and_falls_back_to_url(client, auth_headers):
+    from sqlalchemy import update
+    from app.database import AsyncSessionLocal
+    from app.models.media import MediaItem
+
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Delete Cover Test", "media_subtype_id": cd_id, "cover_image_url": "https://example.com/cover.jpg"},
+        headers=auth_headers,
+    )
+    item_id = resp.json()["id"]
+
+    files = {"file": ("cover.png", PNG_1X1, "image/png")}
+    resp = await client.post(f"/api/v1/media/{item_id}/cover", files=files, headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["cover_image_path"]
+    assert body["cover_image_url"] is None
+    assert body["cover_url"] == body["cover_image_path"]
+
+    # Simulate an item whose local cover came from a `cover/refresh` download
+    # rather than an upload — refresh leaves cover_image_url intact.
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(MediaItem).where(MediaItem.id == item_id).values(cover_image_url="https://example.com/cover.jpg")
+        )
+        await db.commit()
+
+    resp = await client.delete(f"/api/v1/media/{item_id}/cover", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["cover_image_path"] is None
+    assert body["cover_url"] == "https://example.com/cover.jpg"
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
 async def test_location_icon_upload_rejects_svg(client, auth_headers):
     resp = await client.post("/api/v1/locations", json={"name": "Icon Upload Test Shelf"}, headers=auth_headers)
     loc_id = resp.json()["id"]
