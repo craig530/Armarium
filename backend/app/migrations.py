@@ -308,18 +308,28 @@ async def add_location_sort_order_column(conn: AsyncConnection) -> None:
 
 
 async def reset_mismatched_plex_tables(conn: AsyncConnection) -> None:
-    """Drop `plex_config`/`plex_library_mappings` if their columns don't match
-    the current models, so `create_all()` (which runs right after this) can
-    recreate them.
+    """Drop `plex_config`/`plex_library_mappings` if their columns are
+    *irreparably* mismatched with the current models, so `create_all()`
+    (which runs right after this) can recreate them.
 
     `platform_id` moved from `PlexLibraryMapping` to `PlexConfig` (and became
     required there) after these tables were already created on some installs —
     `create_all()` only creates missing tables, so those installs are left with
     the old columns and every Plex endpoint fails with "no such column" on
     `plex_config.platform_id`. Both tables hold only admin-configured sync
-    settings (no media data), so on mismatch they're dropped and recreated
-    fresh — the admin re-enters the Plex URL/token, platform and library
-    mappings. Must run *before* `create_all()`.
+    settings (no media data), so a genuinely incompatible schema is repaired by
+    dropping and recreating fresh — the admin re-enters the Plex URL/token,
+    platform and library mappings.
+
+    Only two kinds of mismatch are "irreparable" enough to warrant that:
+    columns that no longer exist on the model (orphaned — SQLite can't drop a
+    single column cleanly pre-3.35), and columns the model now requires
+    (NOT NULL) that aren't present yet. A table that's merely *missing a
+    nullable column* — e.g. a new optional field added in a later release —
+    is left alone; `run_additive_migrations` (which runs right after this and
+    covers every table in `Base.metadata`, including these two) adds it in
+    place without touching the admin's existing config. Must run *before*
+    `create_all()`.
     """
     if conn.engine.dialect.name != "sqlite":
         return
@@ -335,9 +345,17 @@ async def reset_mismatched_plex_tables(conn: AsyncConnection) -> None:
             continue  # table doesn't exist yet — create_all will make it
 
         expected_columns = {c.name for c in model.__table__.columns}
-        if existing_columns != expected_columns:
+        orphaned = existing_columns - expected_columns
+        missing_required = {
+            c.name for c in model.__table__.columns
+            if c.name not in existing_columns and not c.nullable
+        }
+        if orphaned or missing_required:
             await conn.execute(text(f'DROP TABLE "{table_name}"'))
-            logger.info("Dropped outdated %s table (schema changed) — will be recreated", table_name)
+            logger.info(
+                "Dropped outdated %s table (orphaned columns=%s, missing required columns=%s) — will be recreated",
+                table_name, sorted(orphaned), sorted(missing_required),
+            )
 
 
 async def drop_legacy_media_type_column(conn: AsyncConnection) -> None:

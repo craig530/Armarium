@@ -186,6 +186,52 @@ async def test_reset_mismatched_plex_tables_recreates_outdated_schema():
     assert "platform_id" not in mapping_columns
 
 
+async def test_reset_mismatched_plex_tables_leaves_missing_nullable_column_for_additive_migration():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            # Simulate an install where `plex_library_mappings` has every
+            # current column except the nullable `last_synced_at` — added in
+            # a later release. This must NOT be treated as an irreparable
+            # mismatch (no orphaned columns, nothing NOT NULL is missing).
+            await conn.execute(text(
+                "CREATE TABLE plex_library_mappings ("
+                "id INTEGER PRIMARY KEY, "
+                "section_key VARCHAR(50) NOT NULL UNIQUE, "
+                "section_title VARCHAR(300) NOT NULL, "
+                "section_type VARCHAR(20) NOT NULL, "
+                "category VARCHAR(20) NOT NULL, "
+                "created_at DATETIME, "
+                "updated_at DATETIME"
+                ")"
+            ))
+            await conn.execute(text(
+                "INSERT INTO plex_library_mappings "
+                "(id, section_key, section_title, section_type, category) "
+                "VALUES (1, 'abc', 'Movies', 'movie', 'films_tv')"
+            ))
+
+            await reset_mismatched_plex_tables(conn)
+
+            # Table was left in place — row survives.
+            result = await conn.execute(text(
+                "SELECT section_title FROM plex_library_mappings WHERE id = 1"
+            ))
+            assert result.scalar() == "Movies"
+
+            await run_additive_migrations(conn)
+
+            after = await conn.execute(text('PRAGMA table_info("plex_library_mappings")'))
+            assert "last_synced_at" in {row[1] for row in after.fetchall()}
+
+            result = await conn.execute(text(
+                "SELECT section_title FROM plex_library_mappings WHERE id = 1"
+            ))
+            assert result.scalar() == "Movies"
+    finally:
+        await engine.dispose()
+
+
 async def test_reset_mismatched_plex_tables_is_noop_when_schema_matches():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     try:
