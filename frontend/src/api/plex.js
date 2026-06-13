@@ -5,4 +5,9 @@ export const plexApi = {
   updateConfig: (data) => client.put('/admin/plex/config', data).then((r) => r.data),
   deleteConfig: () => client.delete('/admin/plex/config'),
   testConnection: (data) => client.post('/admin/plex/test', data).then((r) => r.data),
+
+  getSections: () => client.get('/admin/plex/sections').then((r) => r.data),
+  listMappings: () => client.get('/admin/plex/mappings').then((r) => r.data),
+  createMapping: (data) => client.post('/admin/plex/mappings', data).then((r) => r.data),
+  deleteMapping: (id) => client.delete(`/admin/plex/mappings/${id}`),
 }

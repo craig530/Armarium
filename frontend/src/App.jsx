@@ -17,6 +17,7 @@ const SettingsLayout = lazy(() => import('./pages/Settings/SettingsLayout'))
 const SettingsLocations = lazy(() => import('./pages/Settings/SettingsLocations'))
 const SettingsPlatforms = lazy(() => import('./pages/Settings/SettingsPlatforms'))
 const SettingsMediaSubtypes = lazy(() => import('./pages/Settings/SettingsMediaSubtypes'))
+const SettingsPlex = lazy(() => import('./pages/Settings/SettingsPlex'))
 
 export default function App() {
   return (
@@ -58,6 +59,7 @@ export default function App() {
               <Route path="locations" element={<SettingsLocations />} />
               <Route path="platforms" element={<SettingsPlatforms />} />
               <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
+              <Route path="plex" element={<SettingsPlex />} />
             </Route>
             <Route
               path="admin"

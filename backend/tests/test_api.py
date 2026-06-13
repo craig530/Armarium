@@ -1648,3 +1648,165 @@ async def test_plex_config_requires_admin(client, auth_headers):
         headers=headers,
     )
     assert resp.status_code == 403
+
+
+# Plex library mappings ──────────────────────────────────────────────────────
+
+_PLEX_SECTIONS = [
+    {"key": "1", "title": "Movies", "type": "movie"},
+    {"key": "2", "title": "TV Shows", "type": "show"},
+    {"key": "3", "title": "Music", "type": "artist"},
+]
+
+
+async def _configure_plex(client, auth_headers):
+    resp = await client.put(
+        "/api/v1/admin/plex/config",
+        json={"base_url": "http://192.168.1.10:32400", "token": "secret-token", "enabled": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_plex_mappings_require_config(client, auth_headers):
+    resp = await client.get("/api/v1/admin/plex/sections", headers=auth_headers)
+    assert resp.status_code == 400
+
+    resp = await client.post(
+        "/api/v1/admin/plex/mappings", json={"section_key": "1"}, headers=auth_headers
+    )
+    assert resp.status_code == 400
+
+
+async def test_plex_sections_list_and_mapped_flag(client, auth_headers):
+    await _configure_plex(client, auth_headers)
+
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.get("/api/v1/admin/plex/sections", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    sections = resp.json()
+    assert {s["key"]: s["mapped"] for s in sections} == {"1": False, "2": False, "3": False}
+
+
+async def test_plex_mapping_create_list_delete(client, auth_headers):
+    await _configure_plex(client, auth_headers)
+
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings", json={"section_key": "1"}, headers=auth_headers
+        )
+    assert resp.status_code == 201, resp.text
+    mapping = resp.json()
+    assert mapping["section_key"] == "1"
+    assert mapping["section_title"] == "Movies"
+    assert mapping["section_type"] == "movie"
+    assert mapping["category"] == "films_tv"
+    assert mapping["last_synced_at"] is None
+    # No platform_id given -> auto-created "Plex" platform.
+    assert mapping["platform"]["name"] == "Plex"
+    assert mapping["platform"]["logo_key"] == "plex"
+    assert mapping["platform"]["logo_url"] is None
+
+    # The section now shows as mapped.
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.get("/api/v1/admin/plex/sections", headers=auth_headers)
+    assert {s["key"]: s["mapped"] for s in resp.json()} == {"1": True, "2": False, "3": False}
+
+    resp = await client.get("/api/v1/admin/plex/mappings", headers=auth_headers)
+    assert resp.status_code == 200
+    mappings = resp.json()
+    assert len(mappings) == 1
+    assert mappings[0]["id"] == mapping["id"]
+    assert mappings[0]["platform"]["name"] == "Plex"
+
+    # A second mapping reuses the same "Plex" platform rather than creating another.
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings", json={"section_key": "3"}, headers=auth_headers
+        )
+    assert resp.status_code == 201, resp.text
+    second = resp.json()
+    assert second["category"] == "music"
+    assert second["platform"]["id"] == mapping["platform"]["id"]
+
+    resp = await client.delete(f"/api/v1/admin/plex/mappings/{mapping['id']}", headers=auth_headers)
+    assert resp.status_code == 204
+
+    resp = await client.get("/api/v1/admin/plex/mappings", headers=auth_headers)
+    assert [m["id"] for m in resp.json()] == [second["id"]]
+
+
+async def test_plex_mapping_create_with_explicit_platform(client, auth_headers):
+    await _configure_plex(client, auth_headers)
+
+    resp = await client.post("/api/v1/platforms", json={"name": "My Plex Server"}, headers=auth_headers)
+    assert resp.status_code == 201
+    platform_id = resp.json()["id"]
+
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings",
+            json={"section_key": "2", "platform_id": platform_id},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 201, resp.text
+    mapping = resp.json()
+    assert mapping["platform"]["id"] == platform_id
+    assert mapping["category"] == "films_tv"
+
+    # Unknown platform_id -> 404.
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings",
+            json={"section_key": "1", "platform_id": 999999},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 404
+
+
+async def test_plex_mapping_duplicate_and_unknown_section(client, auth_headers):
+    await _configure_plex(client, auth_headers)
+
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings", json={"section_key": "1"}, headers=auth_headers
+        )
+        assert resp.status_code == 201
+
+        # Re-mapping the same section -> 409.
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings", json={"section_key": "1"}, headers=auth_headers
+        )
+        assert resp.status_code == 409
+
+        # Unknown section key -> 404.
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings", json={"section_key": "does-not-exist"}, headers=auth_headers
+        )
+        assert resp.status_code == 404
+
+
+async def test_plex_mapping_delete_unknown_404(client, auth_headers):
+    await _configure_plex(client, auth_headers)
+
+    resp = await client.delete("/api/v1/admin/plex/mappings/999999", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+async def test_plex_mappings_permission_enforced(client, auth_headers):
+    await _configure_plex(client, auth_headers)
+    _, headers = await _create_user_and_login(client, auth_headers, "plexmappinguser", can_add_items=False)
+
+    resp = await client.get("/api/v1/admin/plex/sections", headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.get("/api/v1/admin/plex/mappings", headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.post(
+        "/api/v1/admin/plex/mappings", json={"section_key": "1"}, headers=headers
+    )
+    assert resp.status_code == 403
+
+    resp = await client.delete("/api/v1/admin/plex/mappings/1", headers=headers)
+    assert resp.status_code == 403
