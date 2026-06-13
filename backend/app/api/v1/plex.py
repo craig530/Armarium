@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from ...database import get_db
 from ...models.enums import MediaCategory, Supertype
+from ...models.item_link import ItemLink
 from ...models.media import MediaItem
 from ...models.media_subtype import MediaSubtype
 from ...models.platform import Platform
@@ -19,6 +20,7 @@ from ...schemas.plex import (
     PlexConfigUpdate,
     PlexMappingCreate,
     PlexMappingResponse,
+    PlexRemoveStaleRequest,
     PlexResolveRequest,
     PlexSectionResponse,
     PlexSyncItem,
@@ -27,7 +29,7 @@ from ...schemas.plex import (
 )
 from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
-from ...services.cover_art import optimise_and_save
+from ...services.cover_art import delete_cover_files, optimise_and_save
 from .media import _build_response, _build_responses, _try_auto_link
 
 router = APIRouter()
@@ -426,3 +428,35 @@ async def resolve_conflicts(
 
     await db.commit()
     return {"resolved": resolved}
+
+
+@router.post("/mappings/{mapping_id}/remove-stale")
+async def remove_stale_items(
+    mapping_id: int,
+    payload: PlexRemoveStaleRequest,
+    _=Depends(require_permission("can_add_items")),
+    db: AsyncSession = Depends(get_db),
+):
+    mapping = await _get_mapping_or_404(db, mapping_id)
+    prefix = f"{mapping.id}:"
+
+    removed = 0
+    for item_id in payload.item_ids:
+        item = (await db.execute(select(MediaItem).where(MediaItem.id == item_id))).scalar_one_or_none()
+        if item is None or item.source != "plex" or not (item.source_id or "").startswith(prefix):
+            continue
+
+        links = (
+            await db.execute(
+                select(ItemLink).where(or_(ItemLink.item_a_id == item_id, ItemLink.item_b_id == item_id))
+            )
+        ).scalars().all()
+        for link in links:
+            await db.delete(link)
+
+        delete_cover_files(item.cover_image_path)
+        await db.delete(item)
+        removed += 1
+
+    await db.commit()
+    return {"removed": removed}

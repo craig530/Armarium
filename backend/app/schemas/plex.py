@@ -99,3 +99,7 @@ class PlexConflictResolution(BaseModel):
 
 class PlexResolveRequest(BaseModel):
     resolutions: List[PlexConflictResolution]
+
+
+class PlexRemoveStaleRequest(BaseModel):
+    item_ids: List[int]

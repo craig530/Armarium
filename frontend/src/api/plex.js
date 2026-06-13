@@ -13,4 +13,6 @@ export const plexApi = {
   syncMapping: (id) => client.post(`/admin/plex/mappings/${id}/sync`).then((r) => r.data),
   resolveConflicts: (id, resolutions) =>
     client.post(`/admin/plex/mappings/${id}/resolve-conflicts`, { resolutions }).then((r) => r.data),
+  removeStaleItems: (id, itemIds) =>
+    client.post(`/admin/plex/mappings/${id}/remove-stale`, { item_ids: itemIds }).then((r) => r.data),
 }

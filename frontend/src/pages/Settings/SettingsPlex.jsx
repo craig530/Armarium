@@ -21,6 +21,8 @@ export default function SettingsPlex() {
   const [syncResult, setSyncResult] = useState(null)
   const [resolutions, setResolutions] = useState({})
   const [resolving, setResolving] = useState(false)
+  const [staleSelection, setStaleSelection] = useState({})
+  const [removingStale, setRemovingStale] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
 
   const load = async () => {
@@ -60,6 +62,7 @@ export default function SettingsPlex() {
       if (syncResult?.mapping.id === mapping.id) {
         setSyncResult(null)
         setResolutions({})
+        setStaleSelection({})
       }
       load()
     } catch (err) {
@@ -74,6 +77,7 @@ export default function SettingsPlex() {
       toast.success(`"${mapping.section_title}": ${result.created} added, ${result.updated} updated`)
       setSyncResult({ mapping, ...result })
       setResolutions({})
+      setStaleSelection(Object.fromEntries(result.stale_items.map((i) => [i.id, true])))
       await load()
       useReferenceDataStore.getState().invalidate()
     } catch (err) {
@@ -111,6 +115,36 @@ export default function SettingsPlex() {
       toast.error(err.response?.data?.detail || err.message)
     } finally {
       setResolving(false)
+    }
+  }
+
+  const handleToggleStale = (itemId) => {
+    setStaleSelection((prev) => ({ ...prev, [itemId]: !prev[itemId] }))
+  }
+
+  const handleKeepAllStale = () => {
+    setSyncResult((prev) => ({ ...prev, stale_items: [] }))
+    setStaleSelection({})
+  }
+
+  const handleRemoveStale = async () => {
+    const ids = syncResult.stale_items.filter((i) => staleSelection[i.id]).map((i) => i.id)
+    if (ids.length === 0) {
+      handleKeepAllStale()
+      return
+    }
+    setRemovingStale(true)
+    try {
+      const result = await plexApi.removeStaleItems(syncResult.mapping.id, ids)
+      toast.success(`Removed ${result.removed} item${result.removed === 1 ? '' : 's'}`)
+      const remaining = syncResult.stale_items.filter((i) => !staleSelection[i.id])
+      setSyncResult((prev) => ({ ...prev, stale_items: remaining }))
+      setStaleSelection({})
+      useReferenceDataStore.getState().invalidate()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setRemovingStale(false)
     }
   }
 
@@ -225,11 +259,18 @@ export default function SettingsPlex() {
                 No longer in "{syncResult.mapping.section_title}" ({syncResult.stale_items.length})
               </h3>
               <p className="text-xs text-gray-400 mb-2">
-                These items were previously synced from Plex but no longer exist there.
+                These items were previously synced from Plex but no longer exist there. Checked
+                items will be removed from your library.
               </p>
               <div className="space-y-1">
                 {syncResult.stale_items.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 py-1.5">
+                  <label key={item.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!staleSelection[item.id]}
+                      onChange={() => handleToggleStale(item.id)}
+                      className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                    />
                     <CoverImage
                       src={item.cover_thumb_url}
                       category={item.category}
@@ -240,8 +281,16 @@ export default function SettingsPlex() {
                       <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.title}</p>
                       <p className="text-xs text-gray-400">{item.year}</p>
                     </div>
-                  </div>
+                  </label>
                 ))}
+              </div>
+              <div className="pt-2 flex gap-2">
+                <Button size="sm" variant="danger" loading={removingStale} onClick={handleRemoveStale}>
+                  Remove selected
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleKeepAllStale}>
+                  Keep all
+                </Button>
               </div>
             </div>
           )}

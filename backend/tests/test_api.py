@@ -1937,6 +1937,22 @@ _PLEX_ALBUM_ITEM = {
     "leaf_count": 12,
 }
 
+_PLEX_TVSHOW_ITEM_REMOVE = {
+    "guid": "plex://show/removeme",
+    "title": "Quietly Cancelled Show",
+    "year": 2015,
+    "summary": "A show that got cancelled after one season.",
+    "genres": ["Drama"],
+    "studio": "Indie Studio",
+    "thumb": "/library/metadata/9/thumb/1",
+    "tmdb_id": 9001,
+    "musicbrainz_id": None,
+    "directors": ["Jane Doe"],
+    "cast": ["Someone Else"],
+    "duration_ms": 2700000,
+    "content_rating": "TV-14",
+}
+
 
 async def _get_or_create_mapping_for_section(client, auth_headers, section_key):
     """Reuse a mapping left over from earlier tests for `section_key`, or
@@ -2274,6 +2290,97 @@ async def test_plex_resolve_conflicts_permission_enforced(client, auth_headers):
     resp = await client.post(
         f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
         json={"resolutions": []},
+        headers=headers,
+    )
+    assert resp.status_code == 403
+
+
+# Plex stale-item removal ────────────────────────────────────────────────────
+
+
+async def test_plex_remove_stale_items(client, auth_headers):
+    mapping = await _create_tvshow_mapping(client, auth_headers)
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_TVSHOW_ITEM_REMOVE])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=PNG_1X1)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 1
+
+    item = await _find_item_by_title(client, auth_headers, "Quietly Cancelled Show")
+    assert item["source"] == "plex"
+
+    # Removed from Plex entirely — the next sync flags it as stale.
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    stale_item = next(i for i in resp.json()["stale_items"] if i["title"] == "Quietly Cancelled Show")
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/remove-stale",
+        json={"item_ids": [stale_item["id"]]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"removed": 1}
+
+    resp = await client.get(f"/api/v1/media/{stale_item['id']}", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+async def test_plex_remove_stale_defensive_checks(client, auth_headers):
+    movie_mapping = await _create_movie_mapping(client, auth_headers)
+    tvshow_mapping = await _create_tvshow_mapping(client, auth_headers)
+
+    # A manually-added item (source=None) is never removed, even if selected.
+    resp = await client.post("/api/v1/platforms", json={"name": "Manual Removal Platform"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    platform_id = resp.json()["id"]
+
+    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Manually Added Movie", "media_subtype_id": film_subtype_id, "platform_id": platform_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    manual_item_id = resp.json()["id"]
+
+    # An item sourced from a different mapping isn't removable via this one.
+    matrix_item = await _find_item_by_title(client, auth_headers, "The Matrix")
+    assert matrix_item["source"] == "plex"
+    assert matrix_item["source_id"].startswith(f"{movie_mapping['id']}:")
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{tvshow_mapping['id']}/remove-stale",
+        json={"item_ids": [manual_item_id, matrix_item["id"], 999999]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"removed": 0}
+
+    resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    resp = await client.get(f"/api/v1/media/{matrix_item['id']}", headers=auth_headers)
+    assert resp.status_code == 200
+
+
+async def test_plex_remove_stale_unknown_mapping_404(client, auth_headers):
+    await _configure_plex(client, auth_headers)
+    resp = await client.post(
+        "/api/v1/admin/plex/mappings/999999/remove-stale", json={"item_ids": []}, headers=auth_headers
+    )
+    assert resp.status_code == 404
+
+
+async def test_plex_remove_stale_permission_enforced(client, auth_headers):
+    mapping = await _create_tvshow_mapping(client, auth_headers)
+    _, headers = await _create_user_and_login(client, auth_headers, "plexstaleuser", can_add_items=False)
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/remove-stale",
+        json={"item_ids": []},
         headers=headers,
     )
     assert resp.status_code == 403
