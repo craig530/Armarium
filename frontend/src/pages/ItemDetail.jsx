@@ -55,7 +55,6 @@ function LinkSearch({ item, onLinked, onCancel }) {
   const [results, setResults] = useState([])
   const [searching, setSearching] = useState(false)
   const [linking, setLinking] = useState(false)
-  const oppositeSupertype = item.supertype === 'physical' ? 'digital' : 'physical'
 
   useEffect(() => {
     if (!query.trim()) {
@@ -63,14 +62,15 @@ function LinkSearch({ item, onLinked, onCancel }) {
       return
     }
     setSearching(true)
+    const excludedIds = new Set([item.id, ...(item.linked_items || []).map((l) => l.id)])
     const handle = setTimeout(() => {
-      mediaApi.list({ category: item.category, supertype: oppositeSupertype, q: query, per_page: 10 })
-        .then((r) => setResults(r.items.filter((i) => i.id !== item.id)))
+      mediaApi.list({ category: item.category, q: query, per_page: 10 })
+        .then((r) => setResults(r.items.filter((i) => !excludedIds.has(i.id))))
         .catch(() => {})
         .finally(() => setSearching(false))
     }, 300)
     return () => clearTimeout(handle)
-  }, [query, item.id, item.category, oppositeSupertype])
+  }, [query, item])
 
   const handleLink = async (candidate) => {
     setLinking(true)
@@ -91,7 +91,7 @@ function LinkSearch({ item, onLinked, onCancel }) {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Search your ${categoryLabel(item.category).toLowerCase()} ${oppositeSupertype} items…`}
+          placeholder={`Search your ${categoryLabel(item.category).toLowerCase()} items…`}
           className="flex-1"
           autoFocus
         />
@@ -99,7 +99,7 @@ function LinkSearch({ item, onLinked, onCancel }) {
       </div>
       {searching && <p className="text-xs text-gray-400">Searching…</p>}
       {!searching && query.trim() && results.length === 0 && (
-        <p className="text-xs text-gray-400">No matching {oppositeSupertype} items found</p>
+        <p className="text-xs text-gray-400">No matching items found</p>
       )}
       {results.length > 0 && (
         <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -225,10 +225,10 @@ export default function ItemDetail() {
     }
   }
 
-  const handleUnlink = async () => {
+  const handleUnlink = async (otherId) => {
     if (!await confirm('Unlink these items?')) return
     try {
-      await mediaApi.unlink(id)
+      await mediaApi.unlink(id, otherId)
       await load()
       toast.success('Unlinked')
     } catch (err) {
@@ -245,7 +245,7 @@ export default function ItemDetail() {
   if (!item) return <div className="text-center py-20 text-gray-400">Item not found</div>
 
   const creator = item.artist || item.director || item.author
-  const linked = item.linked_item
+  const linkedItems = item.linked_items || []
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -332,11 +332,11 @@ export default function ItemDetail() {
           </div>
         </OwnershipEntry>
 
-        <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
-          {linked ? (
+        {linkedItems.map((linked) => (
+          <div key={linked.id} className="pt-3 border-t border-gray-100 dark:border-gray-800">
             <OwnershipEntry
               action={
-                <Button variant="ghost" size="sm" onClick={handleUnlink}>
+                <Button variant="ghost" size="sm" onClick={() => handleUnlink(linked.id)}>
                   <Unlink size={14} /> Unlink
                 </Button>
               }
@@ -355,11 +355,15 @@ export default function ItemDetail() {
                 </div>
               </button>
             </OwnershipEntry>
-          ) : showLinkSearch ? (
+          </div>
+        ))}
+
+        <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+          {showLinkSearch ? (
             <LinkSearch item={item} onLinked={handleLinked} onCancel={() => setShowLinkSearch(false)} />
           ) : (
             <Button variant="outline" size="sm" onClick={() => setShowLinkSearch(true)}>
-              <Link2 size={14} /> Link {item.supertype === 'physical' ? 'digital' : 'physical'} copy
+              <Link2 size={14} /> Link another copy
             </Button>
           )}
         </div>

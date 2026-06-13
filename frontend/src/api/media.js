@@ -16,5 +16,5 @@ export const mediaApi = {
   },
   refreshCover: (id) => client.post(`/media/${id}/cover/refresh`).then((r) => r.data),
   link: (itemAId, itemBId) => client.post('/media/link', { item_a_id: itemAId, item_b_id: itemBId }).then((r) => r.data),
-  unlink: (id) => client.delete(`/media/${id}/link`),
+  unlink: (itemId, otherId) => client.delete(`/media/${itemId}/link/${otherId}`),
 }

@@ -37,22 +37,50 @@ function PlatformChip({ record }) {
   )
 }
 
+const MAX_VISIBLE_CHIPS = 2
+
 /**
- * Renders the location-icon and/or platform-logo "ownership chips" for a
- * media item. For unified (linked) items, `item` and `item.linked_item` are
- * one physical and one digital record — exactly one chip is shown per side.
+ * Renders compact "ownership chips" for a media item and all of its linked
+ * copies — one LocationChip per physical member, one PlatformChip per
+ * digital member. Beyond MAX_VISIBLE_CHIPS, the rest collapse into a "+N"
+ * badge (hover for the full list).
  */
 export default function OwnershipRow({ item, className }) {
-  const linked = item.linked_item
-  const physical = item.supertype === 'physical' ? item : linked?.supertype === 'physical' ? linked : null
-  const digital = item.supertype === 'digital' ? item : linked?.supertype === 'digital' ? linked : null
+  const members = [item, ...(item.linked_items || [])].filter(
+    (m) => m.supertype === 'physical' || m.supertype === 'digital'
+  )
+  if (members.length === 0) return null
 
-  if (!physical && !digital) return null
+  const chips = members.map((m) =>
+    m.supertype === 'physical'
+      ? {
+          key: `loc-${m.id}`,
+          node: <LocationChip record={m} />,
+          label: m.location_path || m.location_name || 'No location',
+        }
+      : {
+          key: `plat-${m.id}`,
+          node: <PlatformChip record={m} />,
+          label: m.platform?.name || 'No platform',
+        }
+  )
+
+  const visible = chips.slice(0, MAX_VISIBLE_CHIPS)
+  const overflow = chips.slice(MAX_VISIBLE_CHIPS)
 
   return (
     <div className={clsx('flex items-center gap-1.5 flex-wrap', className)}>
-      {physical && <LocationChip record={physical} />}
-      {digital && <PlatformChip record={digital} />}
+      {visible.map((c) => (
+        <span key={c.key}>{c.node}</span>
+      ))}
+      {overflow.length > 0 && (
+        <span
+          className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400"
+          title={overflow.map((c) => c.label).join(', ')}
+        >
+          +{overflow.length}
+        </span>
+      )}
     </div>
   )
 }
