@@ -12,6 +12,8 @@ export const plexApi = {
   updateMapping: (id, data) => client.put(`/admin/plex/mappings/${id}`, data).then((r) => r.data),
   deleteMapping: (id) => client.delete(`/admin/plex/mappings/${id}`),
   syncMapping: (id) => client.post(`/admin/plex/mappings/${id}/sync`).then((r) => r.data),
+  getSyncStatus: (id) => client.get(`/admin/plex/mappings/${id}/sync/status`).then((r) => r.data),
+  cancelSync: (id) => client.post(`/admin/plex/mappings/${id}/sync/cancel`).then((r) => r.data),
   resolveConflicts: (id, resolutions) =>
     client.post(`/admin/plex/mappings/${id}/resolve-conflicts`, { resolutions }).then((r) => r.data),
   removeStaleItems: (id, itemIds) =>

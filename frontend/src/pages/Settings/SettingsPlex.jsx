@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Trash2, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -10,6 +10,7 @@ import PlatformLogo from '../../components/ui/PlatformLogo'
 import Button from '../../components/ui/Button'
 import { categoryLabel } from '../../lib/categories'
 import { useConfirm } from '../../hooks/useConfirm'
+import { usePlexSyncGuard } from '../../hooks/usePlexSyncGuard'
 import { useAuthStore, useReferenceDataStore } from '../../store'
 
 export default function SettingsPlex() {
@@ -20,13 +21,51 @@ export default function SettingsPlex() {
   const [sections, setSections] = useState([])
   const [mappings, setMappings] = useState([])
   const [loading, setLoading] = useState(true)
-  const [syncingId, setSyncingId] = useState(null)
+  const [syncStatus, setSyncStatus] = useState({})
   const [syncResult, setSyncResult] = useState(null)
   const [resolutions, setResolutions] = useState({})
   const [resolving, setResolving] = useState(false)
   const [staleSelection, setStaleSelection] = useState({})
   const [removingStale, setRemovingStale] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
+  const pollIntervals = useRef({})
+  const syncGuardDialog = usePlexSyncGuard(syncStatus)
+
+  const startPolling = (mapping) => {
+    if (pollIntervals.current[mapping.id]) return
+    pollIntervals.current[mapping.id] = setInterval(async () => {
+      try {
+        const status = await plexApi.getSyncStatus(mapping.id)
+        setSyncStatus((prev) => ({ ...prev, [mapping.id]: status }))
+        if (status.status === 'running') return
+
+        clearInterval(pollIntervals.current[mapping.id])
+        delete pollIntervals.current[mapping.id]
+
+        if (status.status === 'completed') {
+          toast.success(`"${mapping.section_title}": ${status.result.created} added, ${status.result.updated} updated`)
+          setSyncResult({ mapping, ...status.result })
+          setResolutions({})
+          setStaleSelection(Object.fromEntries(status.result.stale_items.map((i) => [i.id, true])))
+          await load()
+          useReferenceDataStore.getState().invalidate()
+        } else if (status.status === 'cancelled') {
+          toast(`"${mapping.section_title}" sync cancelled — ${status.result.created} added, ${status.result.updated} updated before stopping`)
+          setSyncResult({ mapping, ...status.result })
+          setResolutions({})
+          setStaleSelection({})
+          await load()
+          useReferenceDataStore.getState().invalidate()
+        } else if (status.status === 'error') {
+          toast.error(status.error || 'Sync failed')
+        }
+      } catch (err) {
+        clearInterval(pollIntervals.current[mapping.id])
+        delete pollIntervals.current[mapping.id]
+        toast.error(err.response?.data?.detail || err.message)
+      }
+    }, 1000)
+  }
 
   const load = async () => {
     try {
@@ -36,6 +75,16 @@ export default function SettingsPlex() {
         const [s, m] = await Promise.all([plexApi.getSections(), plexApi.listMappings()])
         setSections(s)
         setMappings(m)
+
+        const statuses = await Promise.all(m.map((mapping) => plexApi.getSyncStatus(mapping.id)))
+        setSyncStatus((prev) => {
+          const next = { ...prev }
+          m.forEach((mapping, i) => { next[mapping.id] = statuses[i] })
+          return next
+        })
+        m.forEach((mapping, i) => {
+          if (statuses[i].status === 'running') startPolling(mapping)
+        })
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || err.message)
@@ -46,6 +95,9 @@ export default function SettingsPlex() {
 
   useEffect(() => { load() }, [])
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
+  useEffect(() => () => {
+    Object.values(pollIntervals.current).forEach(clearInterval)
+  }, [])
 
   const handleAdd = async (sectionKey) => {
     try {
@@ -86,19 +138,21 @@ export default function SettingsPlex() {
   }
 
   const handleSync = async (mapping) => {
-    setSyncingId(mapping.id)
     try {
-      const result = await plexApi.syncMapping(mapping.id)
-      toast.success(`"${mapping.section_title}": ${result.created} added, ${result.updated} updated`)
-      setSyncResult({ mapping, ...result })
-      setResolutions({})
-      setStaleSelection(Object.fromEntries(result.stale_items.map((i) => [i.id, true])))
-      await load()
-      useReferenceDataStore.getState().invalidate()
+      const status = await plexApi.syncMapping(mapping.id)
+      setSyncStatus((prev) => ({ ...prev, [mapping.id]: status }))
+      startPolling(mapping)
     } catch (err) {
       toast.error(err.response?.data?.detail || err.message)
-    } finally {
-      setSyncingId(null)
+    }
+  }
+
+  const handleCancel = async (mapping) => {
+    try {
+      const status = await plexApi.cancelSync(mapping.id)
+      setSyncStatus((prev) => ({ ...prev, [mapping.id]: status }))
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
     }
   }
 
@@ -204,26 +258,53 @@ export default function SettingsPlex() {
                     const subtypeOptions = mediaSubtypes.filter(
                       (s) => s.category === m.category && s.supertype === 'digital'
                     )
+                    const status = syncStatus[m.id]
+                    const isSyncing = status?.status === 'running'
                     return (
                       <div key={m.id} className="py-1">
                         <div className="flex items-center gap-3">
                           <MediaSubtypeBadge subtype={{ category: m.category, name: categoryLabel(m.category) }} />
                           <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{m.section_title}</span>
-                          <span className="text-xs text-gray-400">
-                            {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            loading={syncingId === m.id}
-                            disabled={!m.media_subtype}
-                            onClick={() => handleSync(m)}
-                          >
-                            <RefreshCw size={13} /> Sync now
-                          </Button>
+                          {isSyncing ? (
+                            <>
+                              <div className="flex items-center gap-2 w-36">
+                                <div className="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                                  <div
+                                    className="h-full bg-brand-500 transition-all"
+                                    style={{
+                                      width: status.total
+                                        ? `${Math.min(100, (status.processed / status.total) * 100)}%`
+                                        : '15%',
+                                    }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-400 whitespace-nowrap">
+                                  {status.processed}/{status.total ?? '?'}
+                                </span>
+                              </div>
+                              <Button size="sm" variant="danger" onClick={() => handleCancel(m)}>
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-xs text-gray-400">
+                                {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={!m.media_subtype}
+                                onClick={() => handleSync(m)}
+                              >
+                                <RefreshCw size={13} /> Sync now
+                              </Button>
+                            </>
+                          )}
                           <button
                             onClick={() => handleDelete(m)}
-                            className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            disabled={isSyncing}
+                            className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -381,6 +462,7 @@ export default function SettingsPlex() {
           </div>
         )}
       </div>
+      {syncGuardDialog}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import Layout from './components/layout/Layout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
@@ -19,9 +19,55 @@ const SettingsPlatforms = lazy(() => import('./pages/Settings/SettingsPlatforms'
 const SettingsMediaSubtypes = lazy(() => import('./pages/Settings/SettingsMediaSubtypes'))
 const SettingsPlex = lazy(() => import('./pages/Settings/SettingsPlex'))
 
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <>
+      <Route path="/login" element={<Login />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Home />} />
+        <Route path="library" element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
+        <Route path="library/:category" element={<Library />} />
+        <Route
+          path="add"
+          element={
+            <ProtectedRoute requirePermission="can_add_items">
+              <AddItem />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="item/:id" element={<ItemDetail />} />
+        <Route path="profile" element={<Profile />} />
+        <Route path="locations" element={<Navigate to="/settings/locations" replace />} />
+        <Route path="settings" element={<SettingsLayout />}>
+          <Route index element={<Navigate to="/settings/locations" replace />} />
+          <Route path="locations" element={<SettingsLocations />} />
+          <Route path="platforms" element={<SettingsPlatforms />} />
+          <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
+        </Route>
+        <Route path="settings/plex" element={<SettingsPlex />} />
+        <Route
+          path="admin"
+          element={
+            <ProtectedRoute requireAdmin>
+              <Admin />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
+    </>
+  )
+)
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -30,48 +76,8 @@ export default function App() {
         }}
       />
       <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Home />} />
-            <Route path="library" element={<Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />} />
-            <Route path="library/:category" element={<Library />} />
-            <Route
-              path="add"
-              element={
-                <ProtectedRoute requirePermission="can_add_items">
-                  <AddItem />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="item/:id" element={<ItemDetail />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="locations" element={<Navigate to="/settings/locations" replace />} />
-            <Route path="settings" element={<SettingsLayout />}>
-              <Route index element={<Navigate to="/settings/locations" replace />} />
-              <Route path="locations" element={<SettingsLocations />} />
-              <Route path="platforms" element={<SettingsPlatforms />} />
-              <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
-            </Route>
-            <Route path="settings/plex" element={<SettingsPlex />} />
-            <Route
-              path="admin"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <Admin />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
-        </Routes>
+        <RouterProvider router={router} />
       </Suspense>
-    </BrowserRouter>
+    </>
   )
 }
