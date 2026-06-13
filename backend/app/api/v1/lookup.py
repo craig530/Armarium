@@ -28,10 +28,10 @@ router = APIRouter()
 # throttled or banned upstream.
 lookup_limiter = SlidingWindowRateLimiter(max_attempts=30, window_seconds=60)
 
-# The camera scanner polls /scan every ~400ms while open — much more
+# The camera scanner polls /scan every ~200ms while open — much more
 # frequent than the external-API lookups above, but still bounded so a
 # misbehaving client can't peg the server decoding images indefinitely.
-scan_limiter = SlidingWindowRateLimiter(max_attempts=300, window_seconds=60)
+scan_limiter = SlidingWindowRateLimiter(max_attempts=600, window_seconds=60)
 
 # Cover thumbnails for a single search's results all load at once (up to 20),
 # and the browser may re-request on re-renders before caching kicks in.

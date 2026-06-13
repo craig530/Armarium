@@ -9,7 +9,7 @@ const SECURE_CONTEXT_ERROR =
 // How often to send a cropped frame to the backend for decoding. The
 // `isProcessingRef` lock means the actual cadence is max(this, round-trip
 // time) — this is a floor, not a guarantee.
-const SCAN_INTERVAL_MS = 400
+const SCAN_INTERVAL_MS = 200
 
 // Number of consecutive identical, checksum-valid decodes required before
 // accepting a result. A single-frame misread that happens to pass the shape
