@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import { ChevronRight } from 'lucide-react'
 import TypeStep from './TypeStep'
@@ -55,11 +55,17 @@ const STEP_GROUPS = {
 
 export default function AddFlow({ onSaved }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const restored = loadBatchSession()
 
   const [stepStack, setStepStack] = useState(() =>
     restored ? [restored.supertype === 'physical' ? 'search' : 'digitalSearch'] : ['type']
   )
+  // Captures the step this AddFlow instance started on, so the popstate
+  // handler below has something to restore to once the user has backed out
+  // of every step *it* pushed.
+  const initialStackRef = useRef(stepStack)
+  const lastSyncedKeyRef = useRef(location.key)
   const [category, setCategory] = useState(restored?.category ?? null)
   const [supertype, setSupertype] = useState(restored?.supertype ?? null)
   const [locationId, setLocationId] = useState(restored?.locationId ?? '')
@@ -86,8 +92,32 @@ export default function AddFlow({ onSaved }) {
   const groupLabels = ['Type', supertype === 'digital' ? 'Platform' : 'Location', 'Search', 'Confirm details']
   const stepLabel = step === 'batchMode' ? 'Batch mode' : groupLabels[groupIndex]
 
-  const push = (name) => setStepStack((s) => [...s, name])
-  const back = () => setStepStack((s) => (s.length > 1 ? s.slice(0, -1) : s))
+  // Each step push also pushes a browser history entry (same /add route,
+  // step recorded in location.state) so hardware/gesture "back" steps back
+  // through the wizard instead of exiting /add — AddItem no longer remounts
+  // AddFlow on location changes, so its candidates/selected/searchQuery
+  // state survives across these pushes.
+  const push = (name) => {
+    const newStack = [...stepStack, name]
+    setStepStack(newStack)
+    navigate('.', { state: { stepStack: newStack } })
+  }
+  // Goes through browser history (rather than popping stepStack directly) so
+  // the in-app back button and hardware/gesture back stay in sync — both
+  // land on the popstate handler below.
+  const back = () => {
+    if (stepStack.length > 1) navigate(-1)
+  }
+
+  // Restores stepStack when the user navigates back/forward through the
+  // history entries push() created above. Skips the initial mount and the
+  // re-render caused by push()'s own navigate (which already applied the
+  // same stepStack via setStepStack).
+  useEffect(() => {
+    if (location.key === lastSyncedKeyRef.current) return
+    lastSyncedKeyRef.current = location.key
+    setStepStack(location.state?.stepStack ?? initialStackRef.current)
+  }, [location])
 
   // Persist the batch session (config + item list) so it survives a full
   // page reload; cleared as soon as batch mode is off.
@@ -184,8 +214,13 @@ export default function AddFlow({ onSaved }) {
   // batch mode, behaviour is unchanged (parent navigates to item detail).
   const handleItemSaved = (item) => {
     if (batchMode) {
+      const newStack = [supertype === 'physical' ? 'search' : 'digitalSearch']
       setSessionItems((items) => [item, ...items])
-      setStepStack([supertype === 'physical' ? 'search' : 'digitalSearch'])
+      setStepStack(newStack)
+      // Replaces (rather than pushes) the current history entry — saving an
+      // item returns to the search step "in place", it isn't a new step the
+      // user should be able to back out of independently.
+      navigate('.', { state: { stepStack: newStack }, replace: true })
       setSelected(null)
       setCandidates([])
       setSearchQuery('')
