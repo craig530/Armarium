@@ -42,6 +42,13 @@ class MediaItem(Base):
     tmdb_id = Column(Integer, index=True)
     openlibrary_id = Column(String(50), index=True)
 
+    # Provenance — set for items created/adopted by an external sync (e.g.
+    # Plex). `source_id` namespaces the external identifier by the sync
+    # mapping that owns it (e.g. "<mapping_id>:<plex_guid>") so stale-item
+    # detection can scope to one mapping via a LIKE prefix match.
+    source = Column(String(50), nullable=True, index=True)
+    source_id = Column(String(200), nullable=True, index=True)
+
     # Location
     location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True, index=True)
     location = relationship("Location", back_populates="items", lazy="selectin")

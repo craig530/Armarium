@@ -57,6 +57,8 @@ _MISSING_INDEXES = [
     ("media_items", "isbn"),
     ("media_items", "media_subtype_id"),
     ("media_items", "platform_id"),
+    ("media_items", "source"),
+    ("media_items", "source_id"),
 ]
 
 

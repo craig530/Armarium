@@ -51,6 +51,8 @@ async def test_adds_missing_nullable_columns():
     assert "barcode" in after_columns
     assert "notes" in after_columns
     assert "location_id" in after_columns
+    assert "source" in after_columns
+    assert "source_id" in after_columns
     # Pre-existing columns are untouched.
     assert "title" in after_columns
     assert "media_type" in after_columns

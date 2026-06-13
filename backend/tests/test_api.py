@@ -1521,3 +1521,34 @@ async def test_backup_delete_requires_admin(client, auth_headers):
 
     resp = await client.delete("/api/v1/library/backup/armarium_20260101_000000.db", headers=headers)
     assert resp.status_code == 403
+
+
+async def test_media_item_source_fields(client, auth_headers):
+    """`source`/`source_id` are nullable provenance columns set by external
+    syncs (e.g. Plex) — not part of MediaItemCreate/Update, but round-trip
+    through MediaItemResponse once set directly on the row."""
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.media import MediaItem
+
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Synced Album", "media_subtype_id": cd_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    item_id = resp.json()["id"]
+    assert resp.json()["source"] is None
+    assert resp.json()["source_id"] is None
+
+    async with AsyncSessionLocal() as db:
+        item = (await db.execute(select(MediaItem).where(MediaItem.id == item_id))).scalar_one()
+        item.source = "plex"
+        item.source_id = "1:plex://abc123"
+        await db.commit()
+
+    resp = await client.get(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["source"] == "plex"
+    assert resp.json()["source_id"] == "1:plex://abc123"
