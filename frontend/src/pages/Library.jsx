@@ -9,6 +9,7 @@ import { DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/c
 import { dedupeLinkedItems } from '../lib/media'
 import MediaCard from '../components/media/MediaCard'
 import MediaListRow from '../components/media/MediaListRow'
+import IconLegend from '../components/media/IconLegend'
 import FilterPanel from '../components/filters/FilterPanel'
 import SearchInput from '../components/ui/SearchInput'
 import Button from '../components/ui/Button'
@@ -226,6 +227,8 @@ export default function Library() {
               </Button>
             </div>
           )}
+
+          <IconLegend />
 
           <p className="text-xs text-center text-gray-400">
             {data.total} item{data.total !== 1 ? 's' : ''}

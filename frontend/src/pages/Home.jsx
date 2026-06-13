@@ -9,6 +9,7 @@ import { CATEGORIES } from '../lib/categories'
 import { dedupeLinkedItems } from '../lib/media'
 import MediaRow from '../components/media/MediaRow'
 import MediaCard from '../components/media/MediaCard'
+import IconLegend from '../components/media/IconLegend'
 import FilterPanel from '../components/filters/FilterPanel'
 import SearchInput from '../components/ui/SearchInput'
 import Button from '../components/ui/Button'
@@ -234,6 +235,8 @@ export default function Home() {
                   </Button>
                 </div>
               )}
+
+              <IconLegend />
 
               <p className="text-xs text-center text-gray-400">
                 {data.total} item{data.total !== 1 ? 's' : ''}
