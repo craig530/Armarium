@@ -1,25 +1,33 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 
 from ...database import get_db
-from ...models.enums import MediaCategory
+from ...models.enums import MediaCategory, Supertype
+from ...models.media import MediaItem
+from ...models.media_subtype import MediaSubtype
 from ...models.platform import Platform
 from ...models.plex_config import PlexConfig
 from ...models.plex_library_mapping import PlexLibraryMapping
 from ...schemas.media import PlatformSummary
 from ...schemas.plex import (
+    PlexConflict,
     PlexConfigResponse,
     PlexConfigUpdate,
     PlexMappingCreate,
     PlexMappingResponse,
     PlexSectionResponse,
+    PlexSyncItem,
+    PlexSyncResult,
     PlexTestRequest,
 )
 from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
+from ...services.cover_art import optimise_and_save
+from .media import _build_response, _build_responses, _try_auto_link
 
 router = APIRouter()
 
@@ -30,6 +38,14 @@ _SECTION_CATEGORY = {
     "movie": MediaCategory.FILMS_TV,
     "show": MediaCategory.FILMS_TV,
     "artist": MediaCategory.MUSIC,
+}
+
+# Plex section `type` -> the seeded digital MediaSubtype that synced items
+# are filed under.
+_SECTION_SUBTYPE_NAME = {
+    "movie": "Film",
+    "show": "TV Series",
+    "artist": "Music",
 }
 
 
@@ -197,3 +213,169 @@ async def delete_mapping(
 
     await db.delete(mapping)
     await db.commit()
+
+
+async def _get_mapping_or_404(db: AsyncSession, mapping_id: int) -> PlexLibraryMapping:
+    mapping = (await db.execute(select(PlexLibraryMapping).where(PlexLibraryMapping.id == mapping_id))).scalar_one_or_none()
+    if mapping is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    return mapping
+
+
+async def _resolve_target_subtype(db: AsyncSession, mapping: PlexLibraryMapping) -> MediaSubtype:
+    name = _SECTION_SUBTYPE_NAME[mapping.section_type]
+    subtype = (
+        await db.execute(
+            select(MediaSubtype).where(
+                MediaSubtype.category == mapping.category,
+                MediaSubtype.supertype == Supertype.DIGITAL,
+                MediaSubtype.name == name,
+            )
+        )
+    ).scalar_one_or_none()
+    if subtype is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expected media type '{name}' not found — it may have been renamed or deleted",
+        )
+    return subtype
+
+
+def _to_sync_fields(item: dict, section_type: str) -> dict:
+    """Map a normalized `services.plex.list_section_items` entry to the
+    MediaItem fields it should populate, varying by section type."""
+    fields = {
+        "title": item["title"],
+        "year": item.get("year"),
+        "genres": ", ".join(item.get("genres") or []) or None,
+        "description": item.get("summary"),
+        "tmdb_id": item.get("tmdb_id"),
+        "musicbrainz_id": item.get("musicbrainz_id"),
+    }
+    if section_type == "artist":
+        fields["artist"] = item.get("artist_name")
+        fields["label"] = item.get("studio")
+        fields["track_count"] = item.get("leaf_count")
+    else:
+        fields["director"] = ", ".join(item.get("directors") or []) or None
+        fields["cast_list"] = ", ".join(item.get("cast") or []) or None
+        fields["studio"] = item.get("studio")
+        fields["rating"] = item.get("content_rating")
+        duration_ms = item.get("duration_ms")
+        fields["runtime_minutes"] = duration_ms // 60000 if duration_ms else None
+        if section_type == "show":
+            child_count = item.get("child_count")
+            fields["seasons_owned"] = str(child_count) if child_count else None
+            fields["episode_count"] = item.get("leaf_count")
+    return fields
+
+
+async def _find_conflict(db: AsyncSession, mapping: PlexLibraryMapping, sync_item: PlexSyncItem) -> Optional[MediaItem]:
+    """Look for an existing, non-Plex-sourced item that looks like the same
+    title — matched by tmdb_id/musicbrainz_id when the Plex item has one,
+    otherwise by case-insensitive title + year."""
+    stmt = (
+        select(MediaItem)
+        .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
+        .where(
+            MediaSubtype.category == mapping.category,
+            MediaSubtype.supertype == Supertype.DIGITAL,
+            or_(MediaItem.source != "plex", MediaItem.source.is_(None)),
+        )
+    )
+    if sync_item.tmdb_id is not None:
+        stmt = stmt.where(MediaItem.tmdb_id == sync_item.tmdb_id)
+    elif sync_item.musicbrainz_id is not None:
+        stmt = stmt.where(MediaItem.musicbrainz_id == sync_item.musicbrainz_id)
+    else:
+        stmt = stmt.where(MediaItem.title.ilike(sync_item.title), MediaItem.year == sync_item.year)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _apply_cover(db: AsyncSession, config: PlexConfig, item: MediaItem, thumb: Optional[str]) -> None:
+    if not thumb:
+        return
+    data = await plex_service.fetch_thumbnail(config.base_url, config.token, thumb)
+    if not data:
+        return
+    local_path = await optimise_and_save(data, item.id, "plex")
+    if local_path:
+        item.cover_image_path = local_path
+        item.cover_image_url = None
+
+
+@router.post("/mappings/{mapping_id}/sync", response_model=PlexSyncResult)
+async def sync_mapping(
+    mapping_id: int,
+    _=Depends(require_permission("can_add_items")),
+    db: AsyncSession = Depends(get_db),
+):
+    mapping = await _get_mapping_or_404(db, mapping_id)
+    config = await _require_plex_config(db)
+    subtype = await _resolve_target_subtype(db, mapping)
+
+    plex_items = await plex_service.list_section_items(config.base_url, config.token, mapping.section_key, mapping.section_type)
+
+    created = 0
+    updated = 0
+    conflicts: list[PlexConflict] = []
+    seen_source_ids: set[str] = set()
+
+    for raw_item in plex_items:
+        guid = raw_item.get("guid")
+        if not guid or not raw_item.get("title"):
+            continue
+
+        source_id = f"{mapping.id}:{guid}"
+        seen_source_ids.add(source_id)
+        fields = _to_sync_fields(raw_item, mapping.section_type)
+        sync_item = PlexSyncItem(guid=guid, cover_thumb=raw_item.get("thumb"), **fields)
+
+        existing = (
+            await db.execute(
+                select(MediaItem).where(MediaItem.source == "plex", MediaItem.source_id == source_id)
+            )
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            for field, value in fields.items():
+                setattr(existing, field, value)
+            await _apply_cover(db, config, existing, raw_item.get("thumb"))
+            updated += 1
+            continue
+
+        conflict_item = await _find_conflict(db, mapping, sync_item)
+        if conflict_item is not None:
+            conflicts.append(PlexConflict(existing_item=await _build_response(db, conflict_item), plex_item=sync_item))
+            continue
+
+        item = MediaItem(
+            media_subtype_id=subtype.id,
+            platform_id=mapping.platform_id,
+            source="plex",
+            source_id=source_id,
+            **fields,
+        )
+        db.add(item)
+        await db.flush()
+        await _apply_cover(db, config, item, raw_item.get("thumb"))
+        await db.flush()
+        await _try_auto_link(db, item, subtype)
+        created += 1
+
+    stale_items = (
+        await db.execute(
+            select(MediaItem).where(MediaItem.source == "plex", MediaItem.source_id.like(f"{mapping.id}:%"))
+        )
+    ).scalars().all()
+    stale_items = [i for i in stale_items if i.source_id not in seen_source_ids]
+
+    mapping.last_synced_at = datetime.utcnow()
+    await db.commit()
+
+    return PlexSyncResult(
+        created=created,
+        updated=updated,
+        conflicts=conflicts,
+        stale_items=await _build_responses(db, stale_items) if stale_items else [],
+    )

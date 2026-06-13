@@ -1808,5 +1808,297 @@ async def test_plex_mappings_permission_enforced(client, auth_headers):
     )
     assert resp.status_code == 403
 
+
+# Plex sync engine ────────────────────────────────────────────────────────
+
+_PLEX_MOVIE_ITEM = {
+    "guid": "plex://movie/abc123",
+    "title": "The Matrix",
+    "year": 1999,
+    "summary": "A computer hacker learns about the true nature of reality.",
+    "genres": ["Action", "Sci-Fi"],
+    "studio": "Warner Bros.",
+    "thumb": "/library/metadata/1/thumb/1",
+    "tmdb_id": 603,
+    "musicbrainz_id": None,
+    "directors": ["Lana Wachowski", "Lilly Wachowski"],
+    "cast": ["Keanu Reeves", "Laurence Fishburne"],
+    "duration_ms": 8160000,
+    "content_rating": "R",
+}
+
+_PLEX_MOVIE_ITEM_2 = {
+    "guid": "plex://movie/def456",
+    "title": "Inception",
+    "year": 2010,
+    "summary": "A thief who steals corporate secrets through dream-sharing.",
+    "genres": ["Action", "Sci-Fi"],
+    "studio": "Warner Bros.",
+    "thumb": "/library/metadata/2/thumb/1",
+    "tmdb_id": 27205,
+    "musicbrainz_id": None,
+    "directors": ["Christopher Nolan"],
+    "cast": ["Leonardo DiCaprio"],
+    "duration_ms": 8880000,
+    "content_rating": "PG-13",
+}
+
+_PLEX_MOVIE_ITEM_RELOADED = {
+    "guid": "plex://movie/reloaded",
+    "title": "The Matrix Reloaded",
+    "year": 2003,
+    "summary": "Neo and his allies race against time before the machines discover the keys to Zion's hidden location.",
+    "genres": ["Action", "Sci-Fi"],
+    "studio": "Warner Bros.",
+    "thumb": "/library/metadata/4/thumb/1",
+    "tmdb_id": 604,
+    "musicbrainz_id": None,
+    "directors": ["Lana Wachowski", "Lilly Wachowski"],
+    "cast": ["Keanu Reeves", "Laurence Fishburne"],
+    "duration_ms": 8160000,
+    "content_rating": "R",
+}
+
+_PLEX_MOVIE_ITEM_REVOLUTIONS = {
+    "guid": "plex://movie/revolutions",
+    "title": "The Matrix Revolutions",
+    "year": 2003,
+    "summary": "The human city of Zion defends itself against the massive invasion of the machines.",
+    "genres": ["Action", "Sci-Fi"],
+    "studio": "Warner Bros.",
+    "thumb": "/library/metadata/6/thumb/1",
+    "tmdb_id": 605,
+    "musicbrainz_id": None,
+    "directors": ["Lana Wachowski", "Lilly Wachowski"],
+    "cast": ["Keanu Reeves", "Laurence Fishburne"],
+    "duration_ms": 7800000,
+    "content_rating": "R",
+}
+
+_PLEX_MOVIE_ITEM_3 = {
+    "guid": "plex://movie/speed",
+    "title": "Speed",
+    "year": 1994,
+    "summary": "A young police officer must prevent a bomb exploding aboard a city bus.",
+    "genres": ["Action", "Thriller"],
+    "studio": "20th Century Fox",
+    "thumb": "/library/metadata/5/thumb/1",
+    "tmdb_id": 1234,
+    "musicbrainz_id": None,
+    "directors": ["Jan de Bont"],
+    "cast": ["Keanu Reeves", "Sandra Bullock"],
+    "duration_ms": 6960000,
+    "content_rating": "R",
+}
+
+_PLEX_ALBUM_ITEM = {
+    "guid": "plex://album/xyz789",
+    "title": "OK Computer",
+    "year": 1997,
+    "summary": "Third studio album by Radiohead.",
+    "genres": ["Alternative Rock"],
+    "studio": "Parlophone",
+    "thumb": "/library/metadata/3/thumb/1",
+    "tmdb_id": None,
+    "musicbrainz_id": "b9f3a0b9-4c0c-4d3a-9c2a-0123456789ab",
+    "artist_name": "Radiohead",
+    "leaf_count": 12,
+}
+
+
+async def _get_or_create_mapping_for_section(client, auth_headers, section_key):
+    """Reuse a mapping left over from earlier tests for `section_key`, or
+    create one. Reusing keeps mapping ids stable across tests, which matters
+    because stale-item detection scopes by `source_id` prefix `"{mapping.id}:"`."""
+    await _configure_plex(client, auth_headers)
+    resp = await client.get("/api/v1/admin/plex/mappings", headers=auth_headers)
+    for existing in resp.json():
+        if existing["section_key"] == section_key:
+            return existing
+
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings", json={"section_key": section_key}, headers=auth_headers
+        )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def _create_movie_mapping(client, auth_headers):
+    return await _get_or_create_mapping_for_section(client, auth_headers, "1")
+
+
+async def _create_tvshow_mapping(client, auth_headers):
+    return await _get_or_create_mapping_for_section(client, auth_headers, "2")
+
+
+async def _create_music_mapping(client, auth_headers):
+    return await _get_or_create_mapping_for_section(client, auth_headers, "3")
+
+
+async def _find_item_by_title(client, auth_headers, title: str) -> dict:
+    resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    for item in resp.json()["items"]:
+        if item["title"] == title:
+            return item
+    raise AssertionError(f"No item titled {title!r} found")
+
+
+async def test_plex_sync_creates_items(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=PNG_1X1)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    result = resp.json()
+    assert result["created"] == 1
+    assert result["updated"] == 0
+    assert result["conflicts"] == []
+    assert result["stale_items"] == []
+
+    item = await _find_item_by_title(client, auth_headers, "The Matrix")
+    assert item["source"] == "plex"
+    assert item["source_id"] == f"{mapping['id']}:plex://movie/abc123"
+    assert item["platform"]["name"] == "Plex"
+    assert item["media_subtype"]["name"] == "Film"
+    assert item["category"] == "films_tv"
+    assert item["tmdb_id"] == 603
+    assert item["genres"] == "Action, Sci-Fi"
+    assert item["director"] == "Lana Wachowski, Lilly Wachowski"
+    assert item["cast_list"] == "Keanu Reeves, Laurence Fishburne"
+    assert item["runtime_minutes"] == 136
+    assert item["rating"] == "R"
+    assert item["cover_image_path"] is not None
+
+    # last_synced_at is stamped.
+    resp = await client.get("/api/v1/admin/plex/mappings", headers=auth_headers)
+    synced = next(m for m in resp.json() if m["id"] == mapping["id"])
+    assert synced["last_synced_at"] is not None
+
+
+async def test_plex_sync_rerun_updates_not_duplicates(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_RELOADED])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.json()["created"] == 1
+
+    updated_item = dict(_PLEX_MOVIE_ITEM_RELOADED, summary="Updated description")
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[updated_item])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    result = resp.json()
+    assert result["created"] == 0
+    assert result["updated"] == 1
+
+    resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
+    matches = [i for i in resp.json()["items"] if i["title"] == "The Matrix Reloaded"]
+    assert len(matches) == 1
+    assert matches[0]["description"] == "Updated description"
+
+
+async def test_plex_sync_detects_conflict_with_manual_item(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Apple TV"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    platform_id = resp.json()["id"]
+
+    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
+    resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "The Matrix Revolutions",
+            "media_subtype_id": film_subtype_id,
+            "year": 2003,
+            "tmdb_id": 605,
+            "platform_id": platform_id,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    manual_item_id = resp.json()["id"]
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_REVOLUTIONS])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    result = resp.json()
+    assert result["created"] == 0
+    assert result["updated"] == 0
+    assert len(result["conflicts"]) == 1
+
+    conflict = result["conflicts"][0]
+    assert conflict["existing_item"]["id"] == manual_item_id
+    assert conflict["plex_item"]["guid"] == _PLEX_MOVIE_ITEM_REVOLUTIONS["guid"]
+    assert conflict["plex_item"]["title"] == "The Matrix Revolutions"
+
+    # The manual item is untouched and not adopted.
+    resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
+    assert resp.json()["source"] is None
+
+
+async def test_plex_sync_detects_stale_items(client, auth_headers):
+    # Uses the TV-shows mapping (a distinct mapping id from the movie tests
+    # above) so stale-detection's "{mapping.id}:" prefix scan doesn't pick up
+    # Plex items created by those tests.
+    mapping = await _create_tvshow_mapping(client, auth_headers)
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_3, _PLEX_MOVIE_ITEM_2])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.json()["created"] == 2
+
+    # "Inception" removed from Plex.
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_3])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    result = resp.json()
+    assert result["created"] == 0
+    assert result["updated"] == 1
+    assert len(result["stale_items"]) == 1
+    assert result["stale_items"][0]["title"] == "Inception"
+
+    # Still present in the library — Phase 7 removal isn't triggered by a sync.
+    item = await _find_item_by_title(client, auth_headers, "Inception")
+    assert item["source"] == "plex"
+
+
+async def test_plex_sync_music_mapping(client, auth_headers):
+    mapping = await _create_music_mapping(client, auth_headers)
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_ALBUM_ITEM])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 1
+
+    item = await _find_item_by_title(client, auth_headers, "OK Computer")
+    assert item["category"] == "music"
+    assert item["media_subtype"]["name"] == "Music"
+    assert item["artist"] == "Radiohead"
+    assert item["label"] == "Parlophone"
+    assert item["track_count"] == 12
+    assert item["musicbrainz_id"] == "b9f3a0b9-4c0c-4d3a-9c2a-0123456789ab"
+
+
+async def test_plex_sync_unknown_mapping_404(client, auth_headers):
+    await _configure_plex(client, auth_headers)
+    resp = await client.post("/api/v1/admin/plex/mappings/999999/sync", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+async def test_plex_sync_permission_enforced(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+    _, headers = await _create_user_and_login(client, auth_headers, "plexsyncuser", can_add_items=False)
+
+    resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=headers)
+    assert resp.status_code == 403
+
     resp = await client.delete("/api/v1/admin/plex/mappings/1", headers=headers)
     assert resp.status_code == 403

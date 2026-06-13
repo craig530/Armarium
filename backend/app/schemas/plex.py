@@ -1,9 +1,9 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional
 
 from ..models.enums import MediaCategory
-from .media import PlatformSummary
+from .media import MediaItemResponse, PlatformSummary
 
 
 class PlexConfigResponse(BaseModel):
@@ -46,3 +46,40 @@ class PlexMappingResponse(BaseModel):
     last_synced_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class PlexSyncItem(BaseModel):
+    """Normalized fields for a single Plex library item, used both to
+    create/update a MediaItem during sync and to show conflicting Plex data
+    alongside an existing item for the user to compare."""
+
+    guid: str
+    title: str
+    year: Optional[int] = None
+    genres: Optional[str] = None
+    description: Optional[str] = None
+    director: Optional[str] = None
+    studio: Optional[str] = None
+    runtime_minutes: Optional[int] = None
+    rating: Optional[str] = None
+    cast_list: Optional[str] = None
+    seasons_owned: Optional[str] = None
+    episode_count: Optional[int] = None
+    artist: Optional[str] = None
+    label: Optional[str] = None
+    track_count: Optional[int] = None
+    tmdb_id: Optional[int] = None
+    musicbrainz_id: Optional[str] = None
+    cover_thumb: Optional[str] = None
+
+
+class PlexConflict(BaseModel):
+    existing_item: MediaItemResponse
+    plex_item: PlexSyncItem
+
+
+class PlexSyncResult(BaseModel):
+    created: int
+    updated: int
+    conflicts: List[PlexConflict]
+    stale_items: List[MediaItemResponse]
