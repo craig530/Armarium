@@ -23,6 +23,8 @@ class MediaSubtypeResponse(BaseModel):
     supertype: Supertype
     sort_order: int
     item_count: int = 0
+    locked: bool = False
+    locked_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

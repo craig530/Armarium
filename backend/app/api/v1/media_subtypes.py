@@ -6,6 +6,7 @@ from typing import List
 from ...database import get_db
 from ...models.media_subtype import MediaSubtype
 from ...models.media import MediaItem
+from ...models.plex_library_mapping import PlexLibraryMapping
 from ...schemas.media_subtype import MediaSubtypeCreate, MediaSubtypeUpdate, MediaSubtypeResponse
 from ...services.auth import get_current_user, require_permission
 
@@ -21,7 +22,20 @@ async def _item_count_map(db: AsyncSession) -> dict:
     return {row[0]: row[1] for row in rows}
 
 
-def _to_response(subtype: MediaSubtype, item_count: int = 0) -> MediaSubtypeResponse:
+async def _locked_map(db: AsyncSession) -> dict:
+    """Media subtypes referenced by a Plex library mapping — locked
+    (undeletable) until the admin repoints or removes that mapping."""
+    rows = await db.execute(
+        select(PlexLibraryMapping.media_subtype_id, PlexLibraryMapping.section_title)
+        .where(PlexLibraryMapping.media_subtype_id.is_not(None))
+    )
+    return {
+        subtype_id: f'Used by Plex sync library "{section_title}"'
+        for subtype_id, section_title in rows
+    }
+
+
+def _to_response(subtype: MediaSubtype, item_count: int = 0, locked_reason: str = None) -> MediaSubtypeResponse:
     return MediaSubtypeResponse(
         id=subtype.id,
         name=subtype.name,
@@ -29,6 +43,8 @@ def _to_response(subtype: MediaSubtype, item_count: int = 0) -> MediaSubtypeResp
         supertype=subtype.supertype,
         sort_order=subtype.sort_order,
         item_count=item_count,
+        locked=locked_reason is not None,
+        locked_reason=locked_reason,
         created_at=subtype.created_at,
         updated_at=subtype.updated_at,
     )
@@ -57,7 +73,8 @@ async def list_media_subtypes(_=Depends(get_current_user), db: AsyncSession = De
         )
     ).scalars().all()
     counts = await _item_count_map(db)
-    return [_to_response(s, counts.get(s.id, 0)) for s in rows]
+    locked = await _locked_map(db)
+    return [_to_response(s, counts.get(s.id, 0), locked.get(s.id)) for s in rows]
 
 
 @router.post("", response_model=MediaSubtypeResponse, status_code=201)
@@ -114,6 +131,14 @@ async def delete_media_subtype(
     ).scalar_one()
     if count > 0:
         raise HTTPException(status_code=400, detail=f"Cannot delete: {count} item(s) use this media subtype")
+
+    locked = await _locked_map(db)
+    reason = locked.get(subtype_id)
+    if reason is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete: {reason}. Change or remove it in Settings → Plex Sync first.",
+        )
 
     await db.delete(subtype)
     await db.commit()

@@ -10,9 +10,12 @@ import PlatformLogo from '../../components/ui/PlatformLogo'
 import Button from '../../components/ui/Button'
 import { categoryLabel } from '../../lib/categories'
 import { useConfirm } from '../../hooks/useConfirm'
-import { useReferenceDataStore } from '../../store'
+import { useAuthStore, useReferenceDataStore } from '../../store'
 
 export default function SettingsPlex() {
+  const { user } = useAuthStore()
+  const isAdmin = !!user?.is_admin
+  const { mediaSubtypes, ensureLoaded } = useReferenceDataStore()
   const [config, setConfig] = useState(null)
   const [sections, setSections] = useState([])
   const [mappings, setMappings] = useState([])
@@ -42,12 +45,24 @@ export default function SettingsPlex() {
   }
 
   useEffect(() => { load() }, [])
+  useEffect(() => { ensureLoaded() }, [ensureLoaded])
 
   const handleAdd = async (sectionKey) => {
     try {
       await plexApi.createMapping({ section_key: sectionKey })
       toast.success('Library added')
       load()
+      useReferenceDataStore.getState().invalidate()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    }
+  }
+
+  const handleSubtypeChange = async (mapping, subtypeId) => {
+    if (!subtypeId) return
+    try {
+      const updated = await plexApi.updateMapping(mapping.id, { media_subtype_id: Number(subtypeId) })
+      setMappings((prev) => prev.map((m) => (m.id === mapping.id ? updated : m)))
       useReferenceDataStore.getState().invalidate()
     } catch (err) {
       toast.error(err.response?.data?.detail || err.message)
@@ -184,25 +199,62 @@ export default function SettingsPlex() {
               {mappings.length === 0 ? (
                 <p className="text-sm text-gray-400">No libraries added yet.</p>
               ) : (
-                <div className="space-y-1">
-                  {mappings.map((m) => (
-                    <div key={m.id} className="flex items-center gap-3 py-1.5">
-                      <MediaSubtypeBadge subtype={{ category: m.category, name: categoryLabel(m.category) }} />
-                      <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{m.section_title}</span>
-                      <span className="text-xs text-gray-400">
-                        {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
-                      </span>
-                      <Button size="sm" variant="ghost" loading={syncingId === m.id} onClick={() => handleSync(m)}>
-                        <RefreshCw size={13} /> Sync now
-                      </Button>
-                      <button
-                        onClick={() => handleDelete(m)}
-                        className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  {mappings.map((m) => {
+                    const subtypeOptions = mediaSubtypes.filter(
+                      (s) => s.category === m.category && s.supertype === 'digital'
+                    )
+                    return (
+                      <div key={m.id} className="py-1">
+                        <div className="flex items-center gap-3">
+                          <MediaSubtypeBadge subtype={{ category: m.category, name: categoryLabel(m.category) }} />
+                          <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{m.section_title}</span>
+                          <span className="text-xs text-gray-400">
+                            {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            loading={syncingId === m.id}
+                            disabled={!m.media_subtype}
+                            onClick={() => handleSync(m)}
+                          >
+                            <RefreshCw size={13} /> Sync now
+                          </Button>
+                          <button
+                            onClick={() => handleDelete(m)}
+                            className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 ml-1">
+                          <span className="text-xs text-gray-400">Media type:</span>
+                          {isAdmin ? (
+                            <select
+                              value={m.media_subtype?.id ?? ''}
+                              onChange={(e) => handleSubtypeChange(m, e.target.value)}
+                              className="text-xs rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            >
+                              <option value="" disabled>Select…</option>
+                              {subtypeOptions.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          ) : m.media_subtype ? (
+                            <span className="text-xs text-gray-600 dark:text-gray-300">{m.media_subtype.name}</span>
+                          ) : (
+                            <span className="text-xs text-amber-500">
+                              Not set — ask an admin to configure this in Plex Sync settings
+                            </span>
+                          )}
+                          {!m.media_subtype && isAdmin && (
+                            <span className="text-xs text-amber-500">— sync disabled until set</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </section>

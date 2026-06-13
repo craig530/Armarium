@@ -9,6 +9,7 @@ export const plexApi = {
   getSections: () => client.get('/admin/plex/sections').then((r) => r.data),
   listMappings: () => client.get('/admin/plex/mappings').then((r) => r.data),
   createMapping: (data) => client.post('/admin/plex/mappings', data).then((r) => r.data),
+  updateMapping: (id, data) => client.put(`/admin/plex/mappings/${id}`, data).then((r) => r.data),
   deleteMapping: (id) => client.delete(`/admin/plex/mappings/${id}`),
   syncMapping: (id) => client.post(`/admin/plex/mappings/${id}/sync`).then((r) => r.data),
   resolveConflicts: (id, resolutions) =>

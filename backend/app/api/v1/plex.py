@@ -15,11 +15,13 @@ from ...models.plex_config import PlexConfig
 from ...models.plex_library_mapping import PlexLibraryMapping
 from ...schemas.media import PlatformSummary
 from ...schemas.plex import (
+    MediaSubtypeSummary,
     PlexConflict,
     PlexConfigResponse,
     PlexConfigUpdate,
     PlexMappingCreate,
     PlexMappingResponse,
+    PlexMappingUpdate,
     PlexRemoveStaleRequest,
     PlexResolveRequest,
     PlexSectionResponse,
@@ -79,6 +81,7 @@ def _to_mapping_response(mapping: PlexLibraryMapping) -> PlexMappingResponse:
         section_title=mapping.section_title,
         section_type=mapping.section_type,
         category=mapping.category,
+        media_subtype=MediaSubtypeSummary.model_validate(mapping.media_subtype) if mapping.media_subtype else None,
         last_synced_at=mapping.last_synced_at,
     )
 
@@ -184,11 +187,23 @@ async def create_mapping(
     if section is None:
         raise HTTPException(status_code=404, detail="Plex library section not found")
 
+    category = _SECTION_CATEGORY[section["type"]]
+    default_subtype = (
+        await db.execute(
+            select(MediaSubtype).where(
+                MediaSubtype.category == category,
+                MediaSubtype.supertype == Supertype.DIGITAL,
+                MediaSubtype.name == _SECTION_SUBTYPE_NAME[section["type"]],
+            )
+        )
+    ).scalar_one_or_none()
+
     mapping = PlexLibraryMapping(
         section_key=section["key"],
         section_title=section["title"],
         section_type=section["type"],
-        category=_SECTION_CATEGORY[section["type"]],
+        category=category,
+        media_subtype_id=default_subtype.id if default_subtype else None,
     )
     db.add(mapping)
     await db.commit()
@@ -217,23 +232,30 @@ async def _get_mapping_or_404(db: AsyncSession, mapping_id: int) -> PlexLibraryM
     return mapping
 
 
-async def _resolve_target_subtype(db: AsyncSession, mapping: PlexLibraryMapping) -> MediaSubtype:
-    name = _SECTION_SUBTYPE_NAME[mapping.section_type]
+@router.put("/mappings/{mapping_id}", response_model=PlexMappingResponse)
+async def update_mapping(
+    mapping_id: int,
+    payload: PlexMappingUpdate,
+    _=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    mapping = await _get_mapping_or_404(db, mapping_id)
+
     subtype = (
-        await db.execute(
-            select(MediaSubtype).where(
-                MediaSubtype.category == mapping.category,
-                MediaSubtype.supertype == Supertype.DIGITAL,
-                MediaSubtype.name == name,
-            )
-        )
+        await db.execute(select(MediaSubtype).where(MediaSubtype.id == payload.media_subtype_id))
     ).scalar_one_or_none()
     if subtype is None:
+        raise HTTPException(status_code=404, detail="Media subtype not found")
+    if subtype.category != mapping.category or subtype.supertype != Supertype.DIGITAL:
         raise HTTPException(
             status_code=400,
-            detail=f"Expected media type '{name}' not found — it may have been renamed or deleted",
+            detail="Media subtype must be a Digital subtype in this library's category",
         )
-    return subtype
+
+    mapping.media_subtype_id = subtype.id
+    await db.commit()
+    await db.refresh(mapping)
+    return _to_mapping_response(mapping)
 
 
 def _to_sync_fields(item: dict, section_type: str) -> dict:
@@ -308,7 +330,11 @@ async def sync_mapping(
 ):
     mapping = await _get_mapping_or_404(db, mapping_id)
     config = await _require_plex_config(db)
-    subtype = await _resolve_target_subtype(db, mapping)
+    if mapping.media_subtype_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No media type configured for this library — an admin must set one in Plex Sync settings",
+        )
 
     plex_items = await plex_service.list_section_items(config.base_url, config.token, mapping.section_key, mapping.section_type)
 
@@ -351,7 +377,7 @@ async def sync_mapping(
             continue
 
         item = MediaItem(
-            media_subtype_id=subtype.id,
+            media_subtype_id=mapping.media_subtype_id,
             platform_id=config.platform_id,
             source="plex",
             source_id=source_id,
@@ -400,7 +426,11 @@ async def resolve_conflicts(
 ):
     mapping = await _get_mapping_or_404(db, mapping_id)
     config = await _require_plex_config(db)
-    subtype = await _resolve_target_subtype(db, mapping)
+    if mapping.media_subtype_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No media type configured for this library — an admin must set one in Plex Sync settings",
+        )
 
     resolved = 0
     for res in payload.resolutions:
@@ -414,7 +444,7 @@ async def resolve_conflicts(
         # re-appearing as a conflict and becomes eligible for stale-detection.
         item.source = "plex"
         item.source_id = f"{mapping.id}:{res.plex_item.guid}"
-        item.media_subtype_id = subtype.id
+        item.media_subtype_id = mapping.media_subtype_id
         item.platform_id = config.platform_id
 
         if res.resolution == "use_plex":

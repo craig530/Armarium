@@ -37,15 +37,27 @@ class PlexMappingCreate(BaseModel):
     section_key: str
 
 
+class MediaSubtypeSummary(BaseModel):
+    id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class PlexMappingResponse(BaseModel):
     id: int
     section_key: str
     section_title: str
     section_type: str
     category: MediaCategory
+    media_subtype: Optional[MediaSubtypeSummary] = None
     last_synced_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class PlexMappingUpdate(BaseModel):
+    media_subtype_id: int
 
 
 class PlexSyncItem(BaseModel):

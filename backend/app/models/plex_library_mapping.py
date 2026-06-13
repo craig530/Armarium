@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum as SQLEnum
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Enum as SQLEnum
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from ..database import Base
 from .enums import MediaCategory
@@ -16,6 +17,12 @@ class PlexLibraryMapping(Base):
     section_title = Column(String(300), nullable=False)
     section_type = Column(String(20), nullable=False)  # movie | show | artist
     category = Column(SQLEnum(MediaCategory), nullable=False)
+
+    # The media subtype synced items are filed under. Admin-set only — locked
+    # (undeletable) on the media subtype while referenced here, so a sync can't
+    # silently start filing items under a different type than the admin chose.
+    media_subtype_id = Column(Integer, ForeignKey("media_subtypes.id", ondelete="RESTRICT"), nullable=True)
+    media_subtype = relationship("MediaSubtype", lazy="selectin")
 
     last_synced_at = Column(DateTime, nullable=True)
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Check, X, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X, ChevronUp, ChevronDown, Lock } from 'lucide-react'
 import { mediaSubtypesApi } from '../../api/mediaSubtypes'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
 import { reorderSiblings } from '../../lib/reorder'
@@ -173,6 +173,9 @@ export default function MediaSubtypeManager() {
                             </div>
                           )}
                           <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{subtype.name}</span>
+                          {subtype.locked && (
+                            <Lock size={13} className="text-gray-400" title={subtype.locked_reason} />
+                          )}
                           {subtype.item_count > 0 && (
                             <span className="text-xs text-gray-400">{subtype.item_count} items</span>
                           )}
@@ -184,12 +187,14 @@ export default function MediaSubtypeManager() {
                               >
                                 <Pencil size={13} />
                               </button>
-                              <button
-                                onClick={() => handleDelete(subtype)}
-                                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              {!subtype.locked && (
+                                <button
+                                  onClick={() => handleDelete(subtype)}
+                                  className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
                             </>
                           )}
                         </div>

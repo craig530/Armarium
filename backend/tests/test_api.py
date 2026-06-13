@@ -2823,3 +2823,167 @@ async def test_plex_remove_stale_permission_enforced(client, auth_headers):
         headers=headers,
     )
     assert resp.status_code == 403
+
+
+# Plex media-type mapping & locking ──────────────────────────────────────────
+
+async def test_plex_mapping_create_preselects_default_media_subtype(client, auth_headers):
+    """Each Plex section type has a matching seeded Digital media subtype
+    (Film / TV Series / Music) — create_mapping pre-selects it so sync works
+    immediately without an admin visiting Plex Sync settings first."""
+    movie_mapping = await _create_movie_mapping(client, auth_headers)
+    assert movie_mapping["media_subtype"]["name"] == "Film"
+
+    music_mapping = await _create_music_mapping(client, auth_headers)
+    assert music_mapping["media_subtype"]["name"] == "Music"
+
+
+async def test_plex_mapping_update_media_subtype(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+    tv_series_id = await _subtype_id(client, auth_headers, "TV Series")
+    music_id = await _subtype_id(client, auth_headers, "Music")
+    dvd_id = await _subtype_id(client, auth_headers, "DVD")
+    film_id = await _subtype_id(client, auth_headers, "Film")
+
+    # Non-admin (even with can_add_items) can't repoint the mapping's subtype.
+    _, headers = await _create_user_and_login(client, auth_headers, "plexsubtypeuser")
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": tv_series_id},
+        headers=headers,
+    )
+    assert resp.status_code == 403
+
+    # Wrong category -> 400.
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": music_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    # Physical subtype (wrong supertype) -> 400.
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": dvd_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    # Unknown subtype -> 404.
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": 999999},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+    # Valid Digital subtype in the same category -> 200.
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": tv_series_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["media_subtype"]["id"] == tv_series_id
+
+    # Restore so later tests relying on this mapping's default subtype aren't affected.
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": film_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["media_subtype"]["id"] == film_id
+
+
+async def test_plex_sync_requires_media_subtype(client, auth_headers):
+    """If a mapping has no media subtype configured, sync and conflict
+    resolution 400 with a clear message rather than crashing."""
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.plex_library_mapping import PlexLibraryMapping
+
+    mapping = await _create_tvshow_mapping(client, auth_headers)
+    film_id = await _subtype_id(client, auth_headers, "TV Series")
+
+    async with AsyncSessionLocal() as db:
+        row = (await db.execute(
+            select(PlexLibraryMapping).where(PlexLibraryMapping.id == mapping["id"])
+        )).scalar_one()
+        row.media_subtype_id = None
+        await db.commit()
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[])):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 400
+    assert "media type" in resp.json()["detail"].lower()
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
+        json={"resolutions": []},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    assert "media type" in resp.json()["detail"].lower()
+
+    # Restore so later tests relying on this mapping's subtype aren't affected.
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": film_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+
+async def test_media_subtype_locked_by_plex_mapping(client, auth_headers):
+    """A media subtype referenced by a Plex library mapping is locked
+    (undeletable) until the admin repoints or removes that mapping."""
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    # A custom Digital/Films & TV subtype, used so this test doesn't touch
+    # the seeded "Film" subtype that other Plex tests rely on.
+    resp = await client.post(
+        "/api/v1/media-subtypes",
+        json={"name": "Custom Digital Film", "category": "films_tv", "supertype": "digital"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    custom = resp.json()
+    custom_id = custom["id"]
+    assert custom["locked"] is False
+    assert custom["locked_reason"] is None
+
+    film_id = mapping["media_subtype"]["id"]
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": custom_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await client.get("/api/v1/media-subtypes", headers=auth_headers)
+    assert resp.status_code == 200
+    custom = next(s for s in resp.json() if s["id"] == custom_id)
+    assert custom["locked"] is True
+    assert mapping["section_title"] in custom["locked_reason"]
+
+    resp = await client.delete(f"/api/v1/media-subtypes/{custom_id}", headers=auth_headers)
+    assert resp.status_code == 400
+    assert "Plex Sync" in resp.json()["detail"]
+
+    # Repointing the mapping back to "Film" unlocks the custom subtype.
+    resp = await client.put(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}",
+        json={"media_subtype_id": film_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await client.get("/api/v1/media-subtypes", headers=auth_headers)
+    custom = next(s for s in resp.json() if s["id"] == custom_id)
+    assert custom["locked"] is False
+    assert custom["locked_reason"] is None
+
+    resp = await client.delete(f"/api/v1/media-subtypes/{custom_id}", headers=auth_headers)
+    assert resp.status_code == 204
