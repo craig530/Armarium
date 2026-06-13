@@ -1,6 +1,7 @@
 services:
   backend:
     build: ./backend
+    container_name: armarium-backend
     restart: unless-stopped
     # Some hosts (e.g. a freshly-installed Ubuntu server using
     # systemd-resolved) leave containers with a /etc/resolv.conf pointing at
@@ -27,6 +28,10 @@ services:
       - app_data:/app/data
     expose:
       - "8000"
+    # Uptime Kuma's "Docker Container" monitor type reads this container's
+    # State.Health.Status via the Docker socket (not an HTTP probe) — point
+    # it at the "armarium-backend" container name. Uptime Kuma needs
+    # /var/run/docker.sock mounted (read-only) to read container health.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -41,12 +46,15 @@ services:
 
   frontend:
     build: ./frontend
+    container_name: armarium-frontend
     restart: unless-stopped
     ports:
       - "${PORT:-8080}:8765"
     depends_on:
       backend:
         condition: service_healthy
+    # See the backend service above: point Uptime Kuma's "Docker Container"
+    # monitor at "armarium-frontend" for this container's health status.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8765/nginx-health"]
       interval: 30s
