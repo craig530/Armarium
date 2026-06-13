@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download } from 'lucide-react'
 import client from '../api/client'
 import { adminApi } from '../api/admin'
 import { useAuthStore } from '../store'
@@ -407,6 +407,20 @@ function BackupPanel() {
     }
   }
 
+  const downloadBackup = async (name) => {
+    try {
+      const resp = await client.get(`/library/backup/${name}/download`, { responseType: 'blob' })
+      const url = URL.createObjectURL(resp.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
   return (
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-center justify-between mb-4">
@@ -422,9 +436,18 @@ function BackupPanel() {
           {backups.map((b) => (
             <div key={b.name} className="flex items-center justify-between text-sm">
               <span className="font-mono text-xs text-gray-600 dark:text-gray-400">{b.name}</span>
-              <span className="text-xs text-gray-400">
-                {(b.size_bytes / 1024).toFixed(0)} KB · {new Date(b.created).toLocaleString()}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">
+                  {(b.size_bytes / 1024).toFixed(0)} KB · {new Date(b.created).toLocaleString()}
+                </span>
+                <button
+                  onClick={() => downloadBackup(b.name)}
+                  title="Download backup"
+                  className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  <Download size={13} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -432,6 +455,15 @@ function BackupPanel() {
       <p className="mt-3 text-xs text-gray-400">
         Backups are stored in the <code className="font-mono">app_data</code> volume. The last 30 are retained automatically.
       </p>
+      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+        <p className="font-medium text-gray-700 dark:text-gray-300">To restore a backup:</p>
+        <ol className="list-decimal list-inside space-y-0.5">
+          <li>Download the backup file above.</li>
+          <li>Stop the Armarium containers (<code className="font-mono">docker compose down</code>).</li>
+          <li>Replace the database file in the <code className="font-mono">app_data</code> volume with the downloaded backup, renaming it to match the configured database filename.</li>
+          <li>Restart the containers (<code className="font-mono">docker compose up -d</code>).</li>
+        </ol>
+      </div>
     </div>
   )
 }

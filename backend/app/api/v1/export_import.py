@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 import csv
 import io
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 import shutil
@@ -21,6 +22,8 @@ from ...services.auth import get_current_user, get_current_admin
 from ...config import settings
 
 router = APIRouter()
+
+BACKUP_NAME_PATTERN = re.compile(r"^armarium_\d{8}_\d{6}\.db$")
 
 CSV_FIELDS = [
     "title", "media_subtype_id", "year", "genres", "edition", "barcode",
@@ -188,3 +191,16 @@ async def list_backups(_=Depends(get_current_admin)):
             for b in backups
         ]
     }
+
+
+@router.get("/backup/{name}/download")
+async def download_backup(name: str, _=Depends(get_current_admin)):
+    """Download a previously-created database backup (admin only)."""
+    if not BACKUP_NAME_PATTERN.match(name):
+        raise HTTPException(status_code=400, detail="Invalid backup name")
+
+    path = Path(settings.backup_dir) / name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Backup not found")
+
+    return FileResponse(path, media_type="application/octet-stream", filename=name)
