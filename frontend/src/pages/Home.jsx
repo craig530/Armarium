@@ -197,6 +197,8 @@ export default function Home() {
               loading={browseLoading}
             />
           ))}
+
+          {!browseLoading && <IconLegend items={recent ? dedupeLinkedItems(recent.items) : []} />}
         </>
       )}
 
@@ -236,7 +238,7 @@ export default function Home() {
                 </div>
               )}
 
-              <IconLegend />
+              <IconLegend items={dedupeLinkedItems(data.items)} />
 
               <p className="text-xs text-center text-gray-400">
                 {data.total} item{data.total !== 1 ? 's' : ''}
