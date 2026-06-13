@@ -20,6 +20,11 @@ export default function SelectMenu({ groups, value, onChange, label, placeholder
 
   const flat = groups.flatMap((g) => g.options)
   const selected = flat.find((o) => String(o.value) === String(value))
+  // The first option represents the "unset" default for the control —
+  // a placeholder like "All locations" for filters, or the initial sort/order
+  // value. Muting it keeps untouched controls visually consistent with each
+  // other, regardless of whether their default value happens to be ''.
+  const isDefault = flat.length > 0 && String(value) === String(flat[0].value)
 
   useEffect(() => {
     if (!open) return
@@ -50,11 +55,9 @@ export default function SelectMenu({ groups, value, onChange, label, placeholder
             'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent'
           )}
         >
-          {/* Muted when the "All ..." option (value === '') is selected,
-              matching LocationPicker's placeholder styling — `!selected`
-              would never be true here since that option is itself part of
-              `flat`. */}
-          <span className={clsx('truncate flex items-center gap-2 min-w-0', !value && 'text-gray-400 dark:text-gray-600')}>
+          {/* Muted when the first/default option is selected, matching
+              LocationPicker's placeholder styling. */}
+          <span className={clsx('truncate flex items-center gap-2 min-w-0', isDefault && 'text-gray-400 dark:text-gray-600')}>
             {selected && renderIcon?.(selected)}
             <span className="truncate">{selected ? selected.label : placeholder}</span>
           </span>
