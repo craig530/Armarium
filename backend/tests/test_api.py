@@ -788,7 +788,7 @@ async def test_manual_link_and_unlink(client, auth_headers):
     )
     digital_id = digital_resp.json()["id"]
 
-    # Same supertype -> rejected
+    # Self-link -> rejected
     resp = await client.post(
         "/api/v1/media/link",
         json={"item_a_id": physical_id, "item_b_id": physical_id},
@@ -804,10 +804,10 @@ async def test_manual_link_and_unlink(client, auth_headers):
     assert resp.status_code == 201
     body = resp.json()
     assert body["ownership"] == "both"
-    assert body["linked_item"]["id"] == digital_id
-    assert body["linked_item"]["title"] == "Digital Film"
+    assert [li["id"] for li in body["linked_items"]] == [digital_id]
+    assert body["linked_items"][0]["title"] == "Digital Film"
 
-    # Already linked -> rejected
+    # Same pair again -> rejected (duplicate edge)
     resp = await client.post(
         "/api/v1/media/link",
         json={"item_a_id": physical_id, "item_b_id": digital_id},
@@ -818,19 +818,19 @@ async def test_manual_link_and_unlink(client, auth_headers):
     # Partner reflects the link too
     resp = await client.get(f"/api/v1/media/{digital_id}", headers=auth_headers)
     assert resp.json()["ownership"] == "both"
-    assert resp.json()["linked_item"]["id"] == physical_id
+    assert [li["id"] for li in resp.json()["linked_items"]] == [physical_id]
 
     # Unlink
-    resp = await client.delete(f"/api/v1/media/{physical_id}/link", headers=auth_headers)
+    resp = await client.delete(f"/api/v1/media/{physical_id}/link/{digital_id}", headers=auth_headers)
     assert resp.status_code == 204
 
     # Unlinking again -> 404
-    resp = await client.delete(f"/api/v1/media/{physical_id}/link", headers=auth_headers)
+    resp = await client.delete(f"/api/v1/media/{physical_id}/link/{digital_id}", headers=auth_headers)
     assert resp.status_code == 404
 
     resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
     assert resp.json()["ownership"] == "physical"
-    assert resp.json()["linked_item"] is None
+    assert resp.json()["linked_items"] == []
 
     # Cleanup
     resp = await client.delete(f"/api/v1/media/{physical_id}", headers=auth_headers)
@@ -869,10 +869,10 @@ async def test_delete_linked_item_clears_partner_link(client, auth_headers):
     resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["ownership"] == "physical"
-    assert resp.json()["linked_item"] is None
+    assert resp.json()["linked_items"] == []
 
     # And the link itself is gone, so unlinking again is a 404.
-    resp = await client.delete(f"/api/v1/media/{physical_id}/link", headers=auth_headers)
+    resp = await client.delete(f"/api/v1/media/{physical_id}/link/{digital_id}", headers=auth_headers)
     assert resp.status_code == 404
 
     resp = await client.delete(f"/api/v1/media/{physical_id}", headers=auth_headers)
@@ -891,7 +891,7 @@ async def test_auto_link_on_matching_tmdb_id(client, auth_headers):
     assert physical_resp.status_code == 201
     physical_id = physical_resp.json()["id"]
     assert physical_resp.json()["ownership"] == "physical"
-    assert physical_resp.json()["linked_item"] is None
+    assert physical_resp.json()["linked_items"] == []
 
     digital_resp = await client.post(
         "/api/v1/media",
@@ -901,17 +901,93 @@ async def test_auto_link_on_matching_tmdb_id(client, auth_headers):
     assert digital_resp.status_code == 201
     digital_id = digital_resp.json()["id"]
     assert digital_resp.json()["ownership"] == "both"
-    assert digital_resp.json()["linked_item"]["id"] == physical_id
+    assert [li["id"] for li in digital_resp.json()["linked_items"]] == [physical_id]
 
     resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
     assert resp.json()["ownership"] == "both"
-    assert resp.json()["linked_item"]["id"] == digital_id
+    assert [li["id"] for li in resp.json()["linked_items"]] == [digital_id]
 
     # Cleanup
     resp = await client.delete(f"/api/v1/media/{physical_id}", headers=auth_headers)
     assert resp.status_code == 204
     resp = await client.delete(f"/api/v1/media/{digital_id}", headers=auth_headers)
     assert resp.status_code == 204
+
+
+async def test_multi_link_connected_component(client, auth_headers):
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+    digital_film_id = await _subtype_id(client, auth_headers, "Film")
+    digital_tv_id = await _subtype_id(client, auth_headers, "TV Series")
+
+    a_resp = await client.post(
+        "/api/v1/media", json={"title": "Multi A (physical)", "media_subtype_id": bluray_id}, headers=auth_headers
+    )
+    a_id = a_resp.json()["id"]
+
+    b_resp = await client.post(
+        "/api/v1/media", json={"title": "Multi B (digital film)", "media_subtype_id": digital_film_id}, headers=auth_headers
+    )
+    b_id = b_resp.json()["id"]
+
+    c_resp = await client.post(
+        "/api/v1/media", json={"title": "Multi C (digital tv)", "media_subtype_id": digital_tv_id}, headers=auth_headers
+    )
+    c_id = c_resp.json()["id"]
+
+    # Link A <-> B
+    resp = await client.post(
+        "/api/v1/media/link", json={"item_a_id": a_id, "item_b_id": b_id}, headers=auth_headers
+    )
+    assert resp.status_code == 201
+
+    # A third link on an already-linked item is allowed: A <-> C
+    resp = await client.post(
+        "/api/v1/media/link", json={"item_a_id": a_id, "item_b_id": c_id}, headers=auth_headers
+    )
+    assert resp.status_code == 201
+
+    # All three are in the same connected component
+    resp = await client.get(f"/api/v1/media/{a_id}", headers=auth_headers)
+    body = resp.json()
+    assert body["ownership"] == "both"
+    assert {li["id"] for li in body["linked_items"]} == {b_id, c_id}
+
+    resp = await client.get(f"/api/v1/media/{b_id}", headers=auth_headers)
+    body = resp.json()
+    assert body["ownership"] == "both"
+    assert {li["id"] for li in body["linked_items"]} == {a_id, c_id}
+
+    resp = await client.get(f"/api/v1/media/{c_id}", headers=auth_headers)
+    body = resp.json()
+    assert body["ownership"] == "both"
+    assert {li["id"] for li in body["linked_items"]} == {a_id, b_id}
+
+    # Unlinking A <-> C only removes that pair, leaving A <-> B intact
+    resp = await client.delete(f"/api/v1/media/{a_id}/link/{c_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+    resp = await client.get(f"/api/v1/media/{a_id}", headers=auth_headers)
+    assert {li["id"] for li in resp.json()["linked_items"]} == {b_id}
+
+    # C is now isolated again
+    resp = await client.get(f"/api/v1/media/{c_id}", headers=auth_headers)
+    body = resp.json()
+    assert body["linked_items"] == []
+    assert body["ownership"] == "digital"
+
+    # Same-supertype (digital <-> digital) links are allowed
+    resp = await client.post(
+        "/api/v1/media/link", json={"item_a_id": b_id, "item_b_id": c_id}, headers=auth_headers
+    )
+    assert resp.status_code == 201
+
+    resp = await client.get(f"/api/v1/media/{b_id}", headers=auth_headers)
+    assert {li["id"] for li in resp.json()["linked_items"]} == {a_id, c_id}
+
+    # Cleanup
+    for item_id in (a_id, b_id, c_id):
+        resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+        assert resp.status_code == 204
 
 
 # ── Lookup ───────────────────────────────────────────────────────────────────

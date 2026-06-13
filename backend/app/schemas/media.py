@@ -165,7 +165,7 @@ class MediaItemResponse(BaseModel):
     platform_id: Optional[int] = None
     platform: Optional[PlatformSummary] = None   # computed
 
-    linked_item: Optional[LinkedItemSummary] = None   # computed
+    linked_items: List[LinkedItemSummary] = []        # computed
     ownership: str = "physical"                       # computed: physical | digital | both
 
     created_at: datetime

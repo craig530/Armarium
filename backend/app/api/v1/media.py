@@ -97,22 +97,57 @@ async def _platform_map(db: AsyncSession) -> dict:
 
 
 async def _link_map(db: AsyncSession, item_ids: list) -> dict:
-    """Bidirectional {item_id: linked_item_id} map for the given item ids."""
+    """{item_id: [connected_item_ids...]} via connected components over `ItemLink`.
+
+    An item can now be linked to several others (e.g. a physical disc plus
+    digital copies on multiple platforms), so this walks the link graph
+    outward from `item_ids` until no new nodes are discovered, then returns
+    each requested item's full connected component (excluding itself).
+    """
     if not item_ids:
         return {}
-    links = (
-        await db.execute(
-            select(ItemLink).where(
-                or_(ItemLink.item_a_id.in_(item_ids), ItemLink.item_b_id.in_(item_ids))
-            )
-        )
-    ).scalars().all()
 
-    pairs: dict = {}
-    for link in links:
-        pairs[link.item_a_id] = link.item_b_id
-        pairs[link.item_b_id] = link.item_a_id
-    return pairs
+    adjacency: dict = {}
+    seen_nodes = set(item_ids)
+    frontier = set(item_ids)
+
+    while frontier:
+        links = (
+            await db.execute(
+                select(ItemLink).where(
+                    or_(ItemLink.item_a_id.in_(frontier), ItemLink.item_b_id.in_(frontier))
+                )
+            )
+        ).scalars().all()
+
+        new_nodes = set()
+        for link in links:
+            a, b = link.item_a_id, link.item_b_id
+            adjacency.setdefault(a, set()).add(b)
+            adjacency.setdefault(b, set()).add(a)
+            for node in (a, b):
+                if node not in seen_nodes:
+                    new_nodes.add(node)
+
+        seen_nodes |= new_nodes
+        frontier = new_nodes
+
+    result: dict = {}
+    for item_id in item_ids:
+        if item_id not in adjacency:
+            continue
+        visited = {item_id}
+        queue = [item_id]
+        while queue:
+            current = queue.pop(0)
+            for neighbor in adjacency.get(current, ()):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        visited.discard(item_id)
+        if visited:
+            result[item_id] = sorted(visited)
+    return result
 
 
 async def _link_summaries(
@@ -127,26 +162,22 @@ async def _link_summaries(
     if not link_map:
         return {}
 
+    all_partner_ids = {pid for partner_ids in link_map.values() for pid in partner_ids}
     partners = (
-        await db.execute(select(MediaItem).where(MediaItem.id.in_(set(link_map.values()))))
+        await db.execute(select(MediaItem).where(MediaItem.id.in_(all_partner_ids)))
     ).scalars().all()
     partner_by_id = {p.id: p for p in partners}
 
-    summaries: dict = {}
-    for item_id, partner_id in link_map.items():
-        partner = partner_by_id.get(partner_id)
-        if partner is None:
-            continue
-
+    def _summary(partner: MediaItem):
         subtype_info = subtype_map.get(partner.media_subtype_id)
         if subtype_info is None:
-            continue
+            return None
 
         platform_info = platform_map.get(partner.platform_id)
         icon_info = icon_map.get(partner.location_id, {})
         cover_url, cover_thumb_url = cover_urls(partner.cover_image_path, partner.cover_image_url)
 
-        summaries[item_id] = LinkedItemSummary(
+        return LinkedItemSummary(
             id=partner.id,
             title=partner.title,
             cover_url=cover_url,
@@ -161,6 +192,19 @@ async def _link_summaries(
             location_icon_url=icon_info.get("icon_url"),
             platform=PlatformSummary(**platform_info) if platform_info else None,
         )
+
+    summaries: dict = {}
+    for item_id, partner_ids in link_map.items():
+        result = []
+        for partner_id in partner_ids:
+            partner = partner_by_id.get(partner_id)
+            if partner is None:
+                continue
+            summary = _summary(partner)
+            if summary is not None:
+                result.append(summary)
+        if result:
+            summaries[item_id] = result
     return summaries
 
 
@@ -177,12 +221,17 @@ def _item_to_response(
     subtype_info = subtype_map.get(item.media_subtype_id)
     platform_info = platform_map.get(item.platform_id)
     icon_info = icon_map.get(item.location_id, {})
-    linked = link_summaries.get(item.id)
+    linked = link_summaries.get(item.id, [])
 
-    if linked is not None:
+    own_supertype = subtype_info["supertype"] if subtype_info else None
+    group_supertypes = {l.supertype for l in linked}
+    if own_supertype is not None:
+        group_supertypes.add(own_supertype)
+
+    if Supertype.PHYSICAL in group_supertypes and Supertype.DIGITAL in group_supertypes:
         ownership = "both"
-    elif subtype_info is not None:
-        ownership = subtype_info["supertype"].value
+    elif own_supertype is not None:
+        ownership = own_supertype.value
     else:
         ownership = "physical"
 
@@ -210,7 +259,7 @@ def _item_to_response(
         location_icon_key=icon_info.get("icon_key"),
         location_icon_url=icon_info.get("icon_url"),
         platform=PlatformSummary(**platform_info) if platform_info else None,
-        linked_item=linked,
+        linked_items=linked,
         ownership=ownership,
     )
 
@@ -368,7 +417,39 @@ def _validate_ownership_fields(supertype: Supertype, location_id: Optional[int],
         raise HTTPException(status_code=400, detail="Digital items cannot have a location")
 
 
-async def _try_auto_link(db: AsyncSession, item: MediaItem, subtype: MediaSubtype) -> None:
+async def _link_unlinked(db: AsyncSession, item: MediaItem, candidates: list) -> int:
+    """Create an `ItemLink` between `item` and each candidate not already
+    directly linked to it (and not `item` itself). Returns the number of new
+    links created. Commits if any were created.
+    """
+    if not candidates:
+        return 0
+
+    existing_links = (
+        await db.execute(
+            select(ItemLink).where(or_(ItemLink.item_a_id == item.id, ItemLink.item_b_id == item.id))
+        )
+    ).scalars().all()
+    linked_ids = set()
+    for link in existing_links:
+        linked_ids.add(link.item_a_id)
+        linked_ids.add(link.item_b_id)
+    linked_ids.discard(item.id)
+
+    created = 0
+    for candidate in candidates:
+        if candidate.id == item.id or candidate.id in linked_ids:
+            continue
+        db.add(ItemLink(item_a_id=item.id, item_b_id=candidate.id, matched_via="auto"))
+        linked_ids.add(candidate.id)
+        created += 1
+
+    if created:
+        await db.commit()
+    return created
+
+
+async def _auto_link_item(db: AsyncSession, item: MediaItem, subtype: MediaSubtype) -> None:
     field = _AUTO_LINK_FIELD.get(subtype.category)
     if field is None:
         return
@@ -377,44 +458,19 @@ async def _try_auto_link(db: AsyncSession, item: MediaItem, subtype: MediaSubtyp
     if not value:
         return
 
-    already_linked = (
-        await db.execute(
-            select(ItemLink.id).where(or_(ItemLink.item_a_id == item.id, ItemLink.item_b_id == item.id))
-        )
-    ).scalar_one_or_none()
-    if already_linked is not None:
-        return
-
-    opposite = Supertype.DIGITAL if subtype.supertype == Supertype.PHYSICAL else Supertype.PHYSICAL
-
     candidates = (
         await db.execute(
             select(MediaItem)
             .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
             .where(
                 MediaSubtype.category == subtype.category,
-                MediaSubtype.supertype == opposite,
                 getattr(MediaItem, field) == value,
                 MediaItem.id != item.id,
             )
         )
     ).scalars().all()
 
-    unlinked = []
-    for candidate in candidates:
-        link = (
-            await db.execute(
-                select(ItemLink.id).where(
-                    or_(ItemLink.item_a_id == candidate.id, ItemLink.item_b_id == candidate.id)
-                )
-            )
-        ).scalar_one_or_none()
-        if link is None:
-            unlinked.append(candidate)
-
-    if len(unlinked) == 1:
-        db.add(ItemLink(item_a_id=item.id, item_b_id=unlinked[0].id, matched_via="auto"))
-        await db.commit()
+    await _link_unlinked(db, item, candidates)
 
 
 async def _fetch_cover_in_background(item_id: int, url: str) -> None:
@@ -454,7 +510,7 @@ async def create_media(
         background_tasks.add_task(_fetch_cover_in_background, item.id, item.cover_image_url)
 
     await db.commit()
-    await _try_auto_link(db, item, subtype)
+    await _auto_link_item(db, item, subtype)
 
     item = await _reload_item(db, item.id)
     return await _build_response(db, item)
@@ -511,44 +567,29 @@ async def link_items(
     if payload.item_a_id == payload.item_b_id:
         raise HTTPException(status_code=400, detail="Cannot link an item to itself")
 
-    items = (
-        await db.execute(select(MediaItem).where(MediaItem.id.in_([payload.item_a_id, payload.item_b_id])))
+    ids = (
+        await db.execute(select(MediaItem.id).where(MediaItem.id.in_([payload.item_a_id, payload.item_b_id])))
     ).scalars().all()
-    items_by_id = {i.id: i for i in items}
-    if payload.item_a_id not in items_by_id or payload.item_b_id not in items_by_id:
+    if payload.item_a_id not in ids or payload.item_b_id not in ids:
         raise HTTPException(status_code=404, detail="Item not found")
-
-    item_a, item_b = items_by_id[payload.item_a_id], items_by_id[payload.item_b_id]
-
-    subtype_map = await _subtype_map(db)
-    subtype_a = subtype_map.get(item_a.media_subtype_id)
-    subtype_b = subtype_map.get(item_b.media_subtype_id)
-    if not subtype_a or not subtype_b:
-        raise HTTPException(status_code=400, detail="Item is missing a media subtype")
-
-    if subtype_a["supertype"] == subtype_b["supertype"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Linked items must have different ownership types (one physical, one digital)",
-        )
 
     existing = (
         await db.execute(
             select(ItemLink.id).where(
                 or_(
-                    ItemLink.item_a_id.in_([item_a.id, item_b.id]),
-                    ItemLink.item_b_id.in_([item_a.id, item_b.id]),
+                    and_(ItemLink.item_a_id == payload.item_a_id, ItemLink.item_b_id == payload.item_b_id),
+                    and_(ItemLink.item_a_id == payload.item_b_id, ItemLink.item_b_id == payload.item_a_id),
                 )
             )
         )
     ).scalar_one_or_none()
     if existing is not None:
-        raise HTTPException(status_code=400, detail="One of these items is already linked")
+        raise HTTPException(status_code=400, detail="These items are already linked")
 
-    db.add(ItemLink(item_a_id=item_a.id, item_b_id=item_b.id, matched_via="manual"))
+    db.add(ItemLink(item_a_id=payload.item_a_id, item_b_id=payload.item_b_id, matched_via="manual"))
     await db.commit()
 
-    item_a = await _reload_item(db, item_a.id)
+    item_a = await _reload_item(db, payload.item_a_id)
     return await _build_response(db, item_a)
 
 
@@ -621,19 +662,25 @@ async def delete_media(item_id: int, _=Depends(require_permission("can_add_items
     await db.commit()
 
 
-@router.delete("/{item_id}/link", status_code=204)
-async def unlink_item(item_id: int, _=Depends(require_permission("can_add_items")), db: AsyncSession = Depends(get_db)):
-    item = (await db.execute(select(MediaItem.id).where(MediaItem.id == item_id))).scalar_one_or_none()
-    if item is None:
-        raise HTTPException(status_code=404, detail="Item not found")
-
+@router.delete("/{item_id}/link/{other_id}", status_code=204)
+async def unlink_item(
+    item_id: int,
+    other_id: int,
+    _=Depends(require_permission("can_add_items")),
+    db: AsyncSession = Depends(get_db),
+):
     link = (
         await db.execute(
-            select(ItemLink).where(or_(ItemLink.item_a_id == item_id, ItemLink.item_b_id == item_id))
+            select(ItemLink).where(
+                or_(
+                    and_(ItemLink.item_a_id == item_id, ItemLink.item_b_id == other_id),
+                    and_(ItemLink.item_a_id == other_id, ItemLink.item_b_id == item_id),
+                )
+            )
         )
     ).scalar_one_or_none()
     if link is None:
-        raise HTTPException(status_code=404, detail="Item is not linked")
+        raise HTTPException(status_code=404, detail="These items are not linked")
 
     await db.delete(link)
     await db.commit()

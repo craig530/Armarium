@@ -30,7 +30,7 @@ from ...schemas.plex import (
 from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
 from ...services.cover_art import delete_cover_files, optimise_and_save
-from .media import _build_response, _build_responses, _try_auto_link
+from .media import _build_response, _build_responses, _auto_link_item
 
 router = APIRouter()
 
@@ -363,7 +363,7 @@ async def sync_mapping(
         await db.flush()
         await _apply_cover(db, config, item, raw_item.get("thumb"))
         await db.flush()
-        await _try_auto_link(db, item, subtype)
+        await _auto_link_item(db, item, subtype)
         created += 1
 
     stale_items = (
