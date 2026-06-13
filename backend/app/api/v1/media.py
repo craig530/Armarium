@@ -449,14 +449,17 @@ async def _link_unlinked(db: AsyncSession, item: MediaItem, candidates: list) ->
     return created
 
 
-async def _auto_link_item(db: AsyncSession, item: MediaItem, subtype: MediaSubtype) -> None:
+async def _auto_link_item(db: AsyncSession, item: MediaItem, subtype: MediaSubtype) -> int:
+    """Find other items in the same category sharing `item`'s auto-link field
+    (tmdb_id/musicbrainz_id/isbn) and link any not already linked. Returns the
+    number of new links created."""
     field = _AUTO_LINK_FIELD.get(subtype.category)
     if field is None:
-        return
+        return 0
 
     value = getattr(item, field)
     if not value:
-        return
+        return 0
 
     candidates = (
         await db.execute(
@@ -470,7 +473,7 @@ async def _auto_link_item(db: AsyncSession, item: MediaItem, subtype: MediaSubty
         )
     ).scalars().all()
 
-    await _link_unlinked(db, item, candidates)
+    return await _link_unlinked(db, item, candidates)
 
 
 async def _fetch_cover_in_background(item_id: int, url: str) -> None:

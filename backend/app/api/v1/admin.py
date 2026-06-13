@@ -15,6 +15,7 @@ from ...models.media_subtype import MediaSubtype
 from ...models.platform import Platform
 from ...services.auth import get_current_admin
 from ...services.cover_art import download_cover
+from .media import _AUTO_LINK_FIELD, _auto_link_item
 
 router = APIRouter()
 
@@ -86,6 +87,28 @@ async def redownload_all_covers(
 
     background_tasks.add_task(_redownload_covers, list(item_ids))
     return {"queued": len(item_ids)}
+
+
+@router.post("/auto-link")
+async def auto_link_items(
+    _=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Scan the whole library and link items that share an external id
+    (tmdb_id / musicbrainz_id / isbn) but aren't linked yet — e.g. duplicate
+    copies on other platforms or locations added before linking existed.
+    Idempotent: rerunning links nothing further. Admin only.
+    """
+    items = (await db.execute(select(MediaItem))).scalars().all()
+
+    linked = 0
+    for item in items:
+        subtype = item.media_subtype
+        if subtype is None or subtype.category not in _AUTO_LINK_FIELD:
+            continue
+        linked += await _auto_link_item(db, item, subtype)
+
+    return {"linked": linked}
 
 
 @router.post("/covers/purge-orphans")

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download } from 'lucide-react'
+import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download, Link2 } from 'lucide-react'
 import client from '../api/client'
 import { adminApi } from '../api/admin'
 import { plexApi } from '../api/plex'
@@ -389,6 +389,9 @@ export default function Admin() {
       {/* Cover images card */}
       <CoverImagesPanel />
 
+      {/* Library maintenance card */}
+      <LibraryMaintenancePanel />
+
       {/* Danger zone */}
       <DangerZonePanel />
     </div>
@@ -724,6 +727,42 @@ function CoverImagesPanel() {
           <Download size={14} /> Export covers
         </Button>
       </div>
+      {confirmDialog}
+    </div>
+  )
+}
+
+function LibraryMaintenancePanel() {
+  const [linking, setLinking] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
+
+  const handleAutoLink = async () => {
+    if (!await confirm(
+      'This scans your whole library and links items that share the same film/show, ' +
+      'album or book (by TMDB/MusicBrainz ID or ISBN) but aren\'t linked yet — useful ' +
+      'after adding copies on other platforms or locations before linking existed. Continue?'
+    )) return
+    setLinking(true)
+    try {
+      const r = await adminApi.autoLink()
+      toast.success(`Linked ${r.linked} item${r.linked === 1 ? '' : 's'}`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Library Maintenance</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Find and link copies of the same item across different platforms or locations
+        that aren't linked yet.
+      </p>
+      <Button size="sm" variant="secondary" loading={linking} onClick={handleAutoLink}>
+        <Link2 size={14} /> Scan &amp; link duplicate copies
+      </Button>
       {confirmDialog}
     </div>
   )
