@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageChops, UnidentifiedImageError
 
 from ..config import settings
 
@@ -23,6 +23,30 @@ Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 PROXY_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_PROXY_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+def _trim_border(img: Image.Image) -> Image.Image:
+    """Crop a uniform-color border (e.g. letterbox bands) from `img`.
+
+    Samples the background color from the top-left corner pixel and crops to
+    the bounding box of everything that differs from it. Only crops if the
+    border being removed is non-trivial (>2% of the image area) but the
+    remaining content is still substantial (>=50% of the original area) —
+    avoids over-cropping covers that are legitimately a solid/near-solid
+    color throughout (where a stray pixel could otherwise shrink the bbox to
+    almost nothing).
+    """
+    bg = Image.new(img.mode, img.size, img.getpixel((0, 0)))
+    bbox = ImageChops.difference(img, bg).getbbox()
+    if bbox is None:
+        return img
+
+    original_area = img.width * img.height
+    cropped_area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+    if cropped_area > original_area * 0.98 or cropped_area < original_area * 0.5:
+        return img
+
+    return img.crop(bbox)
 
 
 def _optimise(data: bytes, max_width: int = MAX_WIDTH) -> Optional[bytes]:
@@ -45,6 +69,8 @@ def _optimise(data: bytes, max_width: int = MAX_WIDTH) -> Optional[bytes]:
         img = bg
     elif img.mode != "RGB":
         img = img.convert("RGB")
+
+    img = _trim_border(img)
 
     w, h = img.size
     if w > max_width:
