@@ -48,7 +48,7 @@ export default function Navbar({ stats }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-white/90 dark:bg-gray-950/90 backdrop-blur-md border-gray-200 dark:border-gray-800">
+    <header className="sticky top-0 z-40 border-b bg-white/90 dark:bg-gray-950/90 backdrop-blur-md border-gray-200 dark:border-gray-800 pt-[env(safe-area-inset-top)]">
       <div className="mx-auto max-w-7xl px-4 h-14 flex items-center gap-4">
         {/* Logo */}
         <NavLink to="/" end className="flex items-center shrink-0">

@@ -1,4 +1,4 @@
-const CACHE = 'armarium-v1'
+const CACHE = 'armarium-v2'
 const OFFLINE_URLS = ['/']
 
 // Per-account identity/admin data — never persisted to Cache Storage.
