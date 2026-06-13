@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Check, X, ChevronRight } from 'lucide-react'
 import Button from '../ui/Button'
-import Input, { Select } from '../ui/Input'
+import Input from '../ui/Input'
+import SelectMenu from '../ui/SelectMenu'
+import PlatformLogo from '../ui/PlatformLogo'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import LocationPicker from '../locations/LocationPicker'
 import { locationsApi } from '../../api/locations'
@@ -99,14 +101,16 @@ export default function LocationOrPlatformStep({
               placeholder="Select a location…"
             />
           ) : (
-            <Select
+            <SelectMenu
               label="Platform"
+              groups={[{ options: [
+                { value: '', label: 'Select a platform…' },
+                ...platforms.map((p) => ({ value: String(p.id), label: p.name, platform: p })),
+              ] }]}
               value={platformId || ''}
-              onChange={(e) => { if (e.target.value) onSelectPlatform(e.target.value) }}
-            >
-              <option value="">Select a platform…</option>
-              {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
+              onChange={(value) => { if (value) onSelectPlatform(value) }}
+              renderIcon={(opt) => opt.platform && <PlatformLogo platform={opt.platform} className="h-5 w-5" />}
+            />
           )}
 
           {!creating ? (

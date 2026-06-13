@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Plus } from 'lucide-react'
 import Input, { Textarea, Select } from '../ui/Input'
 import Button from '../ui/Button'
+import SelectMenu from '../ui/SelectMenu'
+import PlatformLogo from '../ui/PlatformLogo'
 import LocationPicker from '../locations/LocationPicker'
 import { mediaApi } from '../../api/media'
 import { platformsApi } from '../../api/platforms'
@@ -144,8 +146,7 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
     if (opts.length === 1) set('media_subtype_id', String(opts[0].id))
   }, [mediaSubtypes, category, supertype]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handlePlatformChange = (e) => {
-    const value = e.target.value
+  const handlePlatformChange = (value) => {
     if (value === NEW_PLATFORM) {
       setCreatingPlatform(true)
       return
@@ -274,11 +275,17 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
 
         {supertype === 'digital' && (
           <div className="flex flex-col gap-1">
-            <Select label="Platform" value={form.platform_id} onChange={handlePlatformChange}>
-              <option value="">No platform</option>
-              {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              <option value={NEW_PLATFORM}>+ Add new platform…</option>
-            </Select>
+            <SelectMenu
+              label="Platform"
+              groups={[{ options: [
+                { value: '', label: 'No platform' },
+                ...platforms.map((p) => ({ value: String(p.id), label: p.name, platform: p })),
+                { value: NEW_PLATFORM, label: '+ Add new platform…' },
+              ] }]}
+              value={form.platform_id}
+              onChange={handlePlatformChange}
+              renderIcon={(opt) => opt.platform && <PlatformLogo platform={opt.platform} className="h-5 w-5" />}
+            />
             {creatingPlatform && (
               <div className="flex gap-2 mt-1">
                 <Input

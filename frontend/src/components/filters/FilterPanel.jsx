@@ -3,6 +3,7 @@ import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
 import Button from '../ui/Button'
 import SelectMenu from '../ui/SelectMenu'
 import LocationPicker from '../locations/LocationPicker'
+import PlatformLogo from '../ui/PlatformLogo'
 
 const SORT_OPTIONS = [
   { value: 'created_at', label: 'Date added' },
@@ -87,7 +88,7 @@ export default function FilterPanel({
   const platformGroups = [{
     options: [
       { value: '', label: 'All platforms' },
-      ...platforms.map((p) => ({ value: String(p.id), label: p.name })),
+      ...platforms.map((p) => ({ value: String(p.id), label: p.name, platform: p })),
     ],
   }]
 
@@ -111,7 +112,13 @@ export default function FilterPanel({
       <SelectMenu groups={mediaSubtypeGroups} value={filters.media_subtype_id} onChange={(value) => setFilter('media_subtype_id', value)} className="w-40" />
 
       {platforms.length > 0 && (
-        <SelectMenu groups={platformGroups} value={filters.platform_id} onChange={(value) => setFilter('platform_id', value)} className="w-40" />
+        <SelectMenu
+          groups={platformGroups}
+          value={filters.platform_id}
+          onChange={(value) => setFilter('platform_id', value)}
+          renderIcon={(opt) => opt.platform && <PlatformLogo platform={opt.platform} className="h-5 w-5" />}
+          className="w-40"
+        />
       )}
 
       <LocationPicker

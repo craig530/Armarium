@@ -9,6 +9,7 @@ import CoverImage from '../components/media/CoverImage'
 import LocationIcon from '../components/ui/LocationIcon'
 import PlatformLogo from '../components/ui/PlatformLogo'
 import Input, { Textarea, Select } from '../components/ui/Input'
+import SelectMenu from '../components/ui/SelectMenu'
 import LocationPicker from '../components/locations/LocationPicker'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
@@ -401,10 +402,16 @@ export default function ItemDetail() {
               onChange={(value) => set('location_id', value)}
             />
           ) : (
-            <Select label="Platform" value={form.platform_id || ''} onChange={(e) => set('platform_id', e.target.value)}>
-              <option value="">No platform</option>
-              {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
+            <SelectMenu
+              label="Platform"
+              groups={[{ options: [
+                { value: '', label: 'No platform' },
+                ...platforms.map((p) => ({ value: String(p.id), label: p.name, platform: p })),
+              ] }]}
+              value={form.platform_id || ''}
+              onChange={(value) => set('platform_id', value)}
+              renderIcon={(opt) => opt.platform && <PlatformLogo platform={opt.platform} className="h-5 w-5" />}
+            />
           )}
 
           <Input label="Barcode" value={form.barcode || ''} onChange={(e) => set('barcode', e.target.value)} />

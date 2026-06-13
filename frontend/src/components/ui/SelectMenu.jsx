@@ -10,7 +10,11 @@ import clsx from 'clsx'
 // `groups` is an array of `{ label?, options: [{ value, label }] }`. A group
 // without a `label` renders its options with no heading (used for a leading
 // "All …" option ahead of the real groups).
-export default function SelectMenu({ groups, value, onChange, label, placeholder = 'Select…', className }) {
+//
+// `renderIcon(opt)`, if given, renders an icon before each option's label
+// (and before the selected option's label in the trigger button) — used to
+// show platform logos, matching LocationPicker's inline location icons.
+export default function SelectMenu({ groups, value, onChange, label, placeholder = 'Select…', renderIcon, className }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
 
@@ -50,8 +54,9 @@ export default function SelectMenu({ groups, value, onChange, label, placeholder
               matching LocationPicker's placeholder styling — `!selected`
               would never be true here since that option is itself part of
               `flat`. */}
-          <span className={clsx('truncate', !value && 'text-gray-400 dark:text-gray-600')}>
-            {selected ? selected.label : placeholder}
+          <span className={clsx('truncate flex items-center gap-2 min-w-0', !value && 'text-gray-400 dark:text-gray-600')}>
+            {selected && renderIcon?.(selected)}
+            <span className="truncate">{selected ? selected.label : placeholder}</span>
           </span>
           <ChevronDown size={14} className="shrink-0 text-gray-400" />
         </button>
@@ -71,11 +76,12 @@ export default function SelectMenu({ groups, value, onChange, label, placeholder
                     type="button"
                     onClick={() => choose(opt.value)}
                     className={clsx(
-                      'w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 truncate',
+                      'w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 truncate flex items-center gap-2',
                       String(value) === String(opt.value) && 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
                     )}
                   >
-                    {opt.label}
+                    {renderIcon?.(opt)}
+                    <span className="truncate">{opt.label}</span>
                   </button>
                 ))}
               </div>
