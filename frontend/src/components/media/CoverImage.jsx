@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Music, Clapperboard, BookOpen } from 'lucide-react'
 import clsx from 'clsx'
+import { coverProxyUrl } from '../../api/lookup'
 
 const CATEGORY_ICONS = { music: Music, films_tv: Clapperboard, books: BookOpen }
 const CATEGORY_BG = {
@@ -29,10 +30,18 @@ export default function CoverImage({ src, src2x, category, title, className, siz
     )
   }
 
+  // Items whose cover hasn't been downloaded/optimised locally yet (or
+  // never could be, e.g. a redirect-only host) fall back to the raw
+  // third-party `cover_image_url` here — route those through the backend's
+  // cover proxy so they load even when the client's own network/DNS can't
+  // reach that host directly.
+  const proxiedSrc = coverProxyUrl(src)
+  const proxiedSrc2x = coverProxyUrl(src2x)
+
   return (
     <img
-      src={src}
-      srcSet={src2x && src2x !== src ? `${src} 1x, ${src2x} 2x` : undefined}
+      src={proxiedSrc}
+      srcSet={proxiedSrc2x && proxiedSrc2x !== proxiedSrc ? `${proxiedSrc} 1x, ${proxiedSrc2x} 2x` : undefined}
       alt={title}
       loading="lazy"
       decoding="async"

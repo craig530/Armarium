@@ -195,16 +195,30 @@ async def download_cover(url: str, item_id: int, force: bool = False) -> Optiona
     if not force and (dest_dir / f"{stem}.jpg").exists():
         return rel_url
 
-    # Redirects are not followed: a "safe" URL could redirect to an internal
-    # address, which would bypass the check above.
+    # At most one redirect hop is followed, with the target re-validated the
+    # same way as the original URL — a "safe" URL could otherwise redirect to
+    # an internal address, bypassing the check above. covers.openlibrary.org
+    # in particular 302s every cover request to an archive.org mirror.
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
-        try:
-            resp = await client.get(url)
+        for _ in range(2):
+            try:
+                resp = await client.get(url)
+            except httpx.HTTPError:
+                return None
+
+            if resp.is_redirect:
+                location = resp.headers.get("location")
+                if not location:
+                    return None
+                url = urljoin(url, location)
+                if not await _is_safe_url(url):
+                    return None
+                continue
+
             if resp.status_code == 200 and len(resp.content) > 500:
                 if _save_sized(resp.content, dest_dir, stem):
                     return rel_url
-        except httpx.HTTPError:
-            pass
+            return None
 
     return None
 
@@ -257,11 +271,18 @@ async def fetch_remote_image(url: str) -> Optional[tuple]:
 async def optimise_and_save(data: bytes, item_id: int, suffix: str = "upload") -> Optional[str]:
     """Optimise raw image bytes (medium + thumbnail) and save locally.
     Returns the local serve path for the medium image, or None if the data
-    isn't a valid image."""
+    isn't a valid image.
+
+    The filename includes a hash of the uploaded bytes so that re-uploading a
+    new cover gets a fresh URL — `/covers/` is served with a 30-day
+    `Cache-Control`, so reusing the previous filename would leave browsers
+    showing the stale cached image.
+    """
     covers_dir = Path(settings.covers_dir)
     subdir = _item_subdir(item_id)
     dest_dir = covers_dir / subdir
-    stem = f"{item_id}_{suffix}"
+    content_hash = hashlib.md5(data).hexdigest()[:12]
+    stem = f"{item_id}_{suffix}_{content_hash}"
 
     if not _save_sized(data, dest_dir, stem):
         return None
