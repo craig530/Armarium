@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, Music, Clapperboard, BookOpen, User } from 'lucide-react'
+import { LayoutGrid, Music, Clapperboard, BookOpen, Settings } from 'lucide-react'
 import clsx from 'clsx'
 import { CATEGORIES } from '../../lib/categories'
 
@@ -12,11 +12,11 @@ const CATEGORY_ICONS = {
 const TABS = [
   { to: '/', label: 'All', icon: LayoutGrid, end: true },
   ...CATEGORIES.map((c) => ({ to: `/library/${c.slug}`, label: c.label, icon: CATEGORY_ICONS[c.value] })),
-  { to: '/profile', label: 'Profile', icon: User },
+  { to: '/profile', label: 'Settings', icon: Settings },
 ]
 
 // Fixed bottom navigation shown on mobile only. Mirrors the desktop navbar's
-// category links plus a Profile tab, which also houses Manage/Admin/Export
+// category links plus a Settings tab, which also houses Manage/Admin/Export
 // (see Profile.jsx) so mobile doesn't need a 6th tab.
 export default function MobileTabBar() {
   return (

@@ -179,7 +179,7 @@ export default function Navbar({ stats }) {
                     onClick={() => setUserMenuOpen(false)}
                     className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
-                    <User size={14} /> Profile
+                    <Settings size={14} /> Settings
                   </NavLink>
 
                   {user?.is_admin && (

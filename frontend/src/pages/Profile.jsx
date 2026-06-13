@@ -21,7 +21,7 @@ export default function Profile() {
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Profile</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
 
       {/* Account */}
       <div className="flex items-center gap-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4">
