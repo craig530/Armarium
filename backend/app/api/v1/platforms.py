@@ -7,6 +7,7 @@ from pathlib import Path
 from ...database import get_db
 from ...models.platform import Platform
 from ...models.media import MediaItem
+from ...models.plex_config import PlexConfig
 from ...schemas.platform import PlatformCreate, PlatformUpdate, PlatformResponse
 from ...services.auth import get_current_user, require_permission
 from ...services.asset_upload import save_asset, remove_asset
@@ -110,6 +111,12 @@ async def delete_platform(
     ).scalar_one()
     if count > 0:
         raise HTTPException(status_code=400, detail=f"Cannot delete: {count} item(s) use this platform")
+
+    plex_config = (
+        await db.execute(select(PlexConfig).where(PlexConfig.platform_id == platform_id))
+    ).scalar_one_or_none()
+    if plex_config is not None:
+        raise HTTPException(status_code=400, detail="Cannot delete: this platform is configured as the Plex sync platform")
 
     remove_asset(settings.platform_logos_dir, platform.logo_path)
     await db.delete(platform)

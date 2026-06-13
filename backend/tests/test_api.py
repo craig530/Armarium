@@ -1835,6 +1835,20 @@ async def _configure_plex(client, auth_headers):
     return platform
 
 
+async def test_delete_platform_used_by_plex_config_rejected(client, auth_headers):
+    """A platform configured as the Plex sync platform can't be deleted, even
+    if no media items use it yet — otherwise PlexConfig.platform_id would
+    dangle (and the FK's ON DELETE RESTRICT would surface as a 500)."""
+    plex_platform = await _configure_plex(client, auth_headers)
+
+    resp = await client.delete(f"/api/v1/platforms/{plex_platform['id']}", headers=auth_headers)
+    assert resp.status_code == 400
+
+    # Restore the unconfigured state for tests that follow.
+    resp = await client.delete("/api/v1/admin/plex/config", headers=auth_headers)
+    assert resp.status_code == 204
+
+
 async def test_plex_mappings_require_config(client, auth_headers):
     resp = await client.get("/api/v1/admin/plex/sections", headers=auth_headers)
     assert resp.status_code == 400
@@ -2071,6 +2085,54 @@ _PLEX_MOVIE_ITEM_EDGE = {
     "content_rating": "PG-13",
 }
 
+_PLEX_MOVIE_ITEM_NO_TMDB = {
+    "guid": "plex://movie/indiedarling",
+    "title": "Indie Darling",
+    "year": 2010,
+    "summary": "A tiny indie film with no TMDB listing.",
+    "genres": ["Drama"],
+    "studio": "Indie Studio",
+    "thumb": "/library/metadata/11/thumb/1",
+    "tmdb_id": None,
+    "musicbrainz_id": None,
+    "directors": ["Some Director"],
+    "cast": ["Some Actor"],
+    "duration_ms": 5400000,
+    "content_rating": "R",
+}
+
+_PLEX_MOVIE_ITEM_QUANTUM = {
+    "guid": "plex://movie/quantumheist",
+    "title": "The Quantum Heist",
+    "year": 2012,
+    "summary": "A crew of thieves attempt to steal a prototype quantum computer.",
+    "genres": ["Action", "Sci-Fi"],
+    "studio": "Fictional Studios",
+    "thumb": "/library/metadata/12/thumb/1",
+    "tmdb_id": 555444,
+    "musicbrainz_id": None,
+    "directors": ["A. Director"],
+    "cast": ["An Actor"],
+    "duration_ms": 6300000,
+    "content_rating": "PG-13",
+}
+
+_PLEX_MOVIE_ITEM_OUTPOST = {
+    "guid": "plex://movie/lastoutpost",
+    "title": "The Last Outpost",
+    "year": 2016,
+    "summary": "Survivors hold out at a remote research station.",
+    "genres": ["Sci-Fi", "Thriller"],
+    "studio": "Fictional Studios",
+    "thumb": "/library/metadata/13/thumb/1",
+    "tmdb_id": 778899,
+    "musicbrainz_id": None,
+    "directors": ["B. Director"],
+    "cast": ["Another Actor"],
+    "duration_ms": 6000000,
+    "content_rating": "PG-13",
+}
+
 _PLEX_ALBUM_ITEM = {
     "guid": "plex://album/xyz789",
     "title": "OK Computer",
@@ -2296,6 +2358,37 @@ async def test_plex_sync_links_other_platform_and_physical_matches(client, auth_
     assert plex_item["id"] in {li["id"] for li in resp.json()["linked_items"]}
 
 
+async def test_plex_sync_matches_by_title_and_year_without_tmdb_id(client, auth_headers):
+    """A Plex item with no tmdb_id falls back to a case-insensitive title +
+    year match against existing items — so a physical copy that predates any
+    TMDB metadata is linked rather than left as an unrelated duplicate."""
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "indie darling", "media_subtype_id": bluray_id, "year": 2010},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    physical_id = resp.json()["id"]
+    assert resp.json()["linked_items"] == []
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_NO_TMDB])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    result = resp.json()
+    assert result["created"] == 1
+    assert result["conflicts"] == []
+
+    resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
+    items = [i for i in resp.json()["items"] if i["title"].lower() == "indie darling"]
+    assert len(items) == 2
+    plex_item = next(i for i in items if i["source"] == "plex")
+    assert [li["id"] for li in plex_item["linked_items"]] == [physical_id]
+
+
 async def test_plex_sync_detects_stale_items(client, auth_headers):
     # Uses the TV-shows mapping (a distinct mapping id from the movie tests
     # above) so stale-detection's "{mapping.id}:" prefix scan doesn't pick up
@@ -2468,6 +2561,61 @@ async def test_plex_resolve_conflict_use_plex(client, auth_headers):
     assert item["cover_image_path"] is not None
 
 
+async def test_plex_resolve_conflict_links_other_platform_match(client, auth_headers):
+    """Resolving a conflict also links any physical/other-platform copies of
+    the same item that exist at sync time — not just the adopted item."""
+    mapping = await _create_movie_mapping(client, auth_headers)
+    plex_platform = await _ensure_plex_platform(client, auth_headers)
+
+    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "The Quantum Heist",
+            "media_subtype_id": film_subtype_id,
+            "year": 2012,
+            "tmdb_id": 555444,
+            "platform_id": plex_platform["id"],
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    manual_item_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "The Quantum Heist", "media_subtype_id": bluray_id, "year": 2012, "tmdb_id": 555444},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    physical_id = resp.json()["id"]
+
+    # The two were auto-linked on creation (same tmdb_id) — unlink them to
+    # simulate copies added before linking existed.
+    resp = await client.delete(f"/api/v1/media/{manual_item_id}/link/{physical_id}", headers=auth_headers)
+    assert resp.status_code == 204, resp.text
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_QUANTUM])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    conflicts = resp.json()["conflicts"]
+    assert len(conflicts) == 1
+    plex_item = conflicts[0]["plex_item"]
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
+        json={"resolutions": [{"existing_item_id": manual_item_id, "plex_item": plex_item, "resolution": "keep_mine"}]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"resolved": 1}
+
+    resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
+    assert [li["id"] for li in resp.json()["linked_items"]] == [physical_id]
+
+
 async def test_plex_resolve_conflict_unknown_item_404(client, auth_headers):
     mapping = await _create_movie_mapping(client, auth_headers)
 
@@ -2527,6 +2675,58 @@ async def test_plex_remove_stale_items(client, auth_headers):
 
     resp = await client.get(f"/api/v1/media/{stale_item['id']}", headers=auth_headers)
     assert resp.status_code == 404
+
+
+async def test_plex_remove_stale_item_delinks_without_damaging_partner(client, auth_headers):
+    """Removing a stale Plex item that's linked to a physical copy deletes
+    only the Plex item and its link — the physical record is left intact
+    (link or delink, but don't damage the physical record)."""
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "The Last Outpost", "media_subtype_id": bluray_id, "year": 2016, "tmdb_id": 778899},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    physical_id = resp.json()["id"]
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_OUTPOST])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["created"] == 1
+
+    resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
+    items = [i for i in resp.json()["items"] if i["title"] == "The Last Outpost"]
+    plex_item = next(i for i in items if i["source"] == "plex")
+    assert [li["id"] for li in plex_item["linked_items"]] == [physical_id]
+
+    # Removed from Plex entirely — the next sync flags the Plex item as stale.
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    stale_item = next(i for i in resp.json()["stale_items"] if i["title"] == "The Last Outpost")
+    assert stale_item["id"] == plex_item["id"]
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/remove-stale",
+        json={"item_ids": [stale_item["id"]]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"removed": 1}
+
+    # The Plex item is gone...
+    resp = await client.get(f"/api/v1/media/{plex_item['id']}", headers=auth_headers)
+    assert resp.status_code == 404
+
+    # ...but the physical copy survives, delinked.
+    resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["linked_items"] == []
 
 
 async def test_plex_remove_stale_defensive_checks(client, auth_headers):
