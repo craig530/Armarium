@@ -1875,6 +1875,38 @@ _PLEX_MOVIE_ITEM_REVOLUTIONS = {
     "content_rating": "R",
 }
 
+_PLEX_MOVIE_ITEM_JOHN_WICK = {
+    "guid": "plex://movie/johnwick",
+    "title": "John Wick",
+    "year": 2014,
+    "summary": "An ex-hitman comes out of retirement to track down the gangsters that took everything from him.",
+    "genres": ["Action", "Thriller"],
+    "studio": "Summit Entertainment",
+    "thumb": "/library/metadata/7/thumb/1",
+    "tmdb_id": 606,
+    "musicbrainz_id": None,
+    "directors": ["Chad Stahelski", "David Leitch"],
+    "cast": ["Keanu Reeves"],
+    "duration_ms": 6120000,
+    "content_rating": "R",
+}
+
+_PLEX_MOVIE_ITEM_RESURRECTIONS = {
+    "guid": "plex://movie/resurrections",
+    "title": "The Matrix Resurrections",
+    "year": 2021,
+    "summary": "Plex synopsis: Neo must choose to follow the white rabbit once more.",
+    "genres": ["Action", "Sci-Fi"],
+    "studio": "Warner Bros.",
+    "thumb": "/library/metadata/8/thumb/1",
+    "tmdb_id": 607,
+    "musicbrainz_id": None,
+    "directors": ["Lana Wachowski"],
+    "cast": ["Keanu Reeves", "Carrie-Anne Moss"],
+    "duration_ms": 8520000,
+    "content_rating": "R",
+}
+
 _PLEX_MOVIE_ITEM_3 = {
     "guid": "plex://movie/speed",
     "title": "Speed",
@@ -2101,4 +2133,147 @@ async def test_plex_sync_permission_enforced(client, auth_headers):
     assert resp.status_code == 403
 
     resp = await client.delete("/api/v1/admin/plex/mappings/1", headers=headers)
+    assert resp.status_code == 403
+
+
+# Plex conflict resolution ──────────────────────────────────────────────────
+
+
+async def test_plex_resolve_conflict_keep_mine(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Apple TV 2"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    platform_id = resp.json()["id"]
+
+    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
+    resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "John Wick",
+            "media_subtype_id": film_subtype_id,
+            "year": 2014,
+            "tmdb_id": 606,
+            "description": "My manual notes",
+            "platform_id": platform_id,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    manual_item_id = resp.json()["id"]
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_JOHN_WICK])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    conflicts = resp.json()["conflicts"]
+    assert len(conflicts) == 1
+    plex_item = conflicts[0]["plex_item"]
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
+        json={"resolutions": [{"existing_item_id": manual_item_id, "plex_item": plex_item, "resolution": "keep_mine"}]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"resolved": 1}
+
+    resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
+    item = resp.json()
+    assert item["source"] == "plex"
+    assert item["source_id"] == f"{mapping['id']}:plex://movie/johnwick"
+    assert item["platform"]["name"] == "Plex"
+    assert item["media_subtype"]["name"] == "Film"
+    # "keep_mine" leaves content untouched.
+    assert item["description"] == "My manual notes"
+
+    # Re-syncing now updates the adopted item in place instead of flagging it
+    # as a conflict again, and doesn't create a duplicate.
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_JOHN_WICK])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    result = resp.json()
+    assert result["conflicts"] == []
+    assert result["created"] == 0
+    assert result["updated"] == 1
+
+    resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
+    matches = [i for i in resp.json()["items"] if i["title"] == "John Wick"]
+    assert len(matches) == 1
+
+
+async def test_plex_resolve_conflict_use_plex(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Apple TV 3"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    platform_id = resp.json()["id"]
+
+    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
+    resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "The Matrix Resurrections",
+            "media_subtype_id": film_subtype_id,
+            "year": 2021,
+            "tmdb_id": 607,
+            "description": "My manual notes",
+            "genres": "Comedy",
+            "platform_id": platform_id,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    manual_item_id = resp.json()["id"]
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_RESURRECTIONS])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+    conflicts = resp.json()["conflicts"]
+    assert len(conflicts) == 1
+    plex_item = conflicts[0]["plex_item"]
+
+    with patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=PNG_1X1)):
+        resp = await client.post(
+            f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
+            json={"resolutions": [{"existing_item_id": manual_item_id, "plex_item": plex_item, "resolution": "use_plex"}]},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"resolved": 1}
+
+    resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
+    item = resp.json()
+    assert item["source"] == "plex"
+    assert item["source_id"] == f"{mapping['id']}:plex://movie/resurrections"
+    assert item["platform"]["name"] == "Plex"
+    # "use_plex" overwrites content fields and the cover with Plex's data.
+    assert item["description"].startswith("Plex synopsis")
+    assert item["genres"] == "Action, Sci-Fi"
+    assert item["cover_image_path"] is not None
+
+
+async def test_plex_resolve_conflict_unknown_item_404(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
+        json={
+            "resolutions": [
+                {"existing_item_id": 999999, "plex_item": {"guid": "plex://movie/missing", "title": "Missing"}, "resolution": "keep_mine"}
+            ]
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404
+
+
+async def test_plex_resolve_conflicts_permission_enforced(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+    _, headers = await _create_user_and_login(client, auth_headers, "plexresolveuser", can_add_items=False)
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
+        json={"resolutions": []},
+        headers=headers,
+    )
     assert resp.status_code == 403

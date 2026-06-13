@@ -19,6 +19,7 @@ from ...schemas.plex import (
     PlexConfigUpdate,
     PlexMappingCreate,
     PlexMappingResponse,
+    PlexResolveRequest,
     PlexSectionResponse,
     PlexSyncItem,
     PlexSyncResult,
@@ -379,3 +380,49 @@ async def sync_mapping(
         conflicts=conflicts,
         stale_items=await _build_responses(db, stale_items) if stale_items else [],
     )
+
+
+# Fields a `PlexSyncItem` carries over onto an adopted `MediaItem` when the
+# user chooses "use_plex" for a conflict.
+_SYNC_CONTENT_FIELDS = [
+    "title", "year", "genres", "description", "director", "studio",
+    "runtime_minutes", "rating", "cast_list", "seasons_owned", "episode_count",
+    "artist", "label", "track_count", "tmdb_id", "musicbrainz_id",
+]
+
+
+@router.post("/mappings/{mapping_id}/resolve-conflicts")
+async def resolve_conflicts(
+    mapping_id: int,
+    payload: PlexResolveRequest,
+    _=Depends(require_permission("can_add_items")),
+    db: AsyncSession = Depends(get_db),
+):
+    mapping = await _get_mapping_or_404(db, mapping_id)
+    config = await _require_plex_config(db)
+    subtype = await _resolve_target_subtype(db, mapping)
+
+    resolved = 0
+    for res in payload.resolutions:
+        item = (
+            await db.execute(select(MediaItem).where(MediaItem.id == res.existing_item_id))
+        ).scalar_one_or_none()
+        if item is None:
+            raise HTTPException(status_code=404, detail=f"Item {res.existing_item_id} not found")
+
+        # Adopt the existing item: tag it as Plex-sourced so it stops
+        # re-appearing as a conflict and becomes eligible for stale-detection.
+        item.source = "plex"
+        item.source_id = f"{mapping.id}:{res.plex_item.guid}"
+        item.media_subtype_id = subtype.id
+        item.platform_id = mapping.platform_id
+
+        if res.resolution == "use_plex":
+            for field in _SYNC_CONTENT_FIELDS:
+                setattr(item, field, getattr(res.plex_item, field))
+            await _apply_cover(db, config, item, res.plex_item.cover_thumb)
+
+        resolved += 1
+
+    await db.commit()
+    return {"resolved": resolved}

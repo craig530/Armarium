@@ -11,4 +11,6 @@ export const plexApi = {
   createMapping: (data) => client.post('/admin/plex/mappings', data).then((r) => r.data),
   deleteMapping: (id) => client.delete(`/admin/plex/mappings/${id}`),
   syncMapping: (id) => client.post(`/admin/plex/mappings/${id}/sync`).then((r) => r.data),
+  resolveConflicts: (id, resolutions) =>
+    client.post(`/admin/plex/mappings/${id}/resolve-conflicts`, { resolutions }).then((r) => r.data),
 }

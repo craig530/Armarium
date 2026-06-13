@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from ..models.enums import MediaCategory
 from .media import MediaItemResponse, PlatformSummary
@@ -83,3 +83,19 @@ class PlexSyncResult(BaseModel):
     updated: int
     conflicts: List[PlexConflict]
     stale_items: List[MediaItemResponse]
+
+
+class PlexConflictResolution(BaseModel):
+    """How to resolve one `PlexConflict` from a prior sync. Either way, the
+    existing item is "adopted" — tagged as Plex-sourced so it stops
+    re-appearing as a conflict and becomes eligible for stale-detection.
+    `use_plex` additionally overwrites its content fields and cover with the
+    Plex data; `keep_mine` leaves them untouched."""
+
+    existing_item_id: int
+    plex_item: PlexSyncItem
+    resolution: Literal["keep_mine", "use_plex"]
+
+
+class PlexResolveRequest(BaseModel):
+    resolutions: List[PlexConflictResolution]
