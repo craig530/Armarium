@@ -17,6 +17,7 @@ from app.migrations import (
     run_additive_migrations,
     create_missing_indexes,
     add_location_sort_order_column,
+    reset_mismatched_plex_tables,
     _MISSING_INDEXES,
 )
 from app.services.search import setup_fts, _fts_columns_from_sql, FTS_COLUMNS
@@ -134,6 +135,72 @@ async def test_add_location_sort_order_column():
 
             # Re-running on an already-migrated database is a no-op.
             await add_location_sort_order_column(conn)
+    finally:
+        await engine.dispose()
+
+
+async def test_reset_mismatched_plex_tables_recreates_outdated_schema():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            # Simulate the pre-Phase-3 schema: `plex_config` predates
+            # `platform_id` (now required), and `plex_library_mappings` still
+            # has the `platform_id` column that moved to `plex_config`.
+            await conn.execute(text(
+                "CREATE TABLE plex_config ("
+                "id INTEGER PRIMARY KEY, "
+                "base_url VARCHAR(500) NOT NULL, "
+                "token VARCHAR(500) NOT NULL, "
+                "enabled BOOLEAN NOT NULL DEFAULT 0, "
+                "created_at DATETIME, "
+                "updated_at DATETIME"
+                ")"
+            ))
+            await conn.execute(text(
+                "CREATE TABLE plex_library_mappings ("
+                "id INTEGER PRIMARY KEY, "
+                "section_key VARCHAR(50) NOT NULL UNIQUE, "
+                "section_title VARCHAR(300) NOT NULL, "
+                "section_type VARCHAR(20) NOT NULL, "
+                "category VARCHAR(20) NOT NULL, "
+                "platform_id INTEGER NOT NULL, "
+                "last_synced_at DATETIME, "
+                "created_at DATETIME, "
+                "updated_at DATETIME"
+                ")"
+            ))
+
+            await reset_mismatched_plex_tables(conn)
+            await conn.run_sync(Base.metadata.create_all)
+
+            config_columns = {row[1] for row in (await conn.execute(
+                text('PRAGMA table_info("plex_config")')
+            )).fetchall()}
+            mapping_columns = {row[1] for row in (await conn.execute(
+                text('PRAGMA table_info("plex_library_mappings")')
+            )).fetchall()}
+    finally:
+        await engine.dispose()
+
+    assert "platform_id" in config_columns
+    assert "platform_id" not in mapping_columns
+
+
+async def test_reset_mismatched_plex_tables_is_noop_when_schema_matches():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("INSERT INTO platforms (id, name) VALUES (1, 'Plex')"))
+            await conn.execute(text(
+                "INSERT INTO plex_config (id, base_url, token, enabled, platform_id) "
+                "VALUES (1, 'https://plex.example.com', 'token', 0, 1)"
+            ))
+
+            await reset_mismatched_plex_tables(conn)
+
+            result = await conn.execute(text("SELECT base_url FROM plex_config WHERE id = 1"))
+            assert result.scalar() == "https://plex.example.com"
     finally:
         await engine.dispose()
 

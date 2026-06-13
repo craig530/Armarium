@@ -21,6 +21,7 @@ from .migrations import (
     add_user_permission_columns,
     add_location_sort_order_column,
     drop_legacy_media_type_column,
+    reset_mismatched_plex_tables,
 )
 from .services.search import setup_fts
 from .api.v1.router import router
@@ -55,6 +56,7 @@ async def _ensure_admin():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
+        await reset_mismatched_plex_tables(conn)
         await conn.run_sync(Base.metadata.create_all)
         await run_additive_migrations(conn)
         await create_missing_indexes(conn)

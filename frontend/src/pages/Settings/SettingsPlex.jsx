@@ -148,180 +148,187 @@ export default function SettingsPlex() {
     }
   }
 
-  if (loading) {
-    return <p className="text-sm text-gray-400 animate-pulse">Loading…</p>
-  }
-
-  if (!config?.configured || !config?.enabled) {
-    return (
-      <div className="text-center py-8 space-y-3">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Plex isn't configured yet. Set up the connection in Admin to enable library sync.
-        </p>
-        <Link to="/admin">
-          <Button size="sm" variant="secondary">Go to Admin</Button>
-        </Link>
-      </div>
-    )
-  }
-
   const unmapped = sections.filter((s) => !s.mapped)
 
   return (
-    <div className="space-y-6">
-      {config.platform && (
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          <PlatformLogo platform={config.platform} className="h-5 w-5" />
-          Synced media is filed under <span className="font-medium text-gray-700 dark:text-gray-300">{config.platform.name}</span>
-        </div>
-      )}
-      <section>
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Synced libraries</h3>
-        {mappings.length === 0 ? (
-          <p className="text-sm text-gray-400">No libraries added yet.</p>
-        ) : (
-          <div className="space-y-1">
-            {mappings.map((m) => (
-              <div key={m.id} className="flex items-center gap-3 py-1.5">
-                <MediaSubtypeBadge subtype={{ category: m.category, name: categoryLabel(m.category) }} />
-                <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{m.section_title}</span>
-                <span className="text-xs text-gray-400">
-                  {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
-                </span>
-                <Button size="sm" variant="ghost" loading={syncingId === m.id} onClick={() => handleSync(m)}>
-                  <RefreshCw size={13} /> Sync now
-                </Button>
-                <button
-                  onClick={() => handleDelete(m)}
-                  className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Plex Sync</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Match Plex libraries to your Films & TV and Music collections and sync them in.
+        </p>
+      </div>
 
-      {syncResult && (syncResult.conflicts.length > 0 || syncResult.stale_items.length > 0) && (
-        <section className="space-y-4">
-          {syncResult.conflicts.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                Possible duplicates from "{syncResult.mapping.section_title}" ({syncResult.conflicts.length})
-              </h3>
-              <p className="text-xs text-gray-400 mb-2">
-                These items already exist in your library. Choose whether to keep your version or
-                replace it with Plex's info — either way it'll be tracked as synced from this library.
-              </p>
-              <div className="space-y-1">
-                {syncResult.conflicts.map((c) => {
-                  const choice = resolutions[c.existing_item.id]
-                  return (
-                    <div key={c.existing_item.id} className="flex items-center gap-3 py-1.5">
-                      <CoverImage
-                        src={c.existing_item.cover_thumb_url}
-                        category={c.existing_item.category}
-                        title={c.existing_item.title}
-                        size="sm"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{c.existing_item.title}</p>
-                        <p className="text-xs text-gray-400">
-                          {c.existing_item.year}
-                          {c.plex_item.year && c.plex_item.year !== c.existing_item.year ? ` · Plex: ${c.plex_item.year}` : ''}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant={choice === 'keep_mine' ? 'primary' : 'outline'}
-                        onClick={() => handleStageResolution(c.existing_item.id, 'keep_mine')}
-                      >
-                        Keep mine
+      <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5">
+        {loading ? (
+          <p className="text-sm text-gray-400 animate-pulse">Loading…</p>
+        ) : !config?.configured || !config?.enabled ? (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Plex isn't configured yet. Set up the connection in Admin to enable library sync.
+            </p>
+            <Link to="/admin">
+              <Button size="sm" variant="secondary">Go to Admin</Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {config.platform && (
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <PlatformLogo platform={config.platform} className="h-5 w-5" />
+                Synced media is filed under <span className="font-medium text-gray-700 dark:text-gray-300">{config.platform.name}</span>
+              </div>
+            )}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Synced libraries</h3>
+              {mappings.length === 0 ? (
+                <p className="text-sm text-gray-400">No libraries added yet.</p>
+              ) : (
+                <div className="space-y-1">
+                  {mappings.map((m) => (
+                    <div key={m.id} className="flex items-center gap-3 py-1.5">
+                      <MediaSubtypeBadge subtype={{ category: m.category, name: categoryLabel(m.category) }} />
+                      <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{m.section_title}</span>
+                      <span className="text-xs text-gray-400">
+                        {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
+                      </span>
+                      <Button size="sm" variant="ghost" loading={syncingId === m.id} onClick={() => handleSync(m)}>
+                        <RefreshCw size={13} /> Sync now
                       </Button>
-                      <Button
-                        size="sm"
-                        variant={choice === 'use_plex' ? 'primary' : 'outline'}
-                        onClick={() => handleStageResolution(c.existing_item.id, 'use_plex')}
+                      <button
+                        onClick={() => handleDelete(m)}
+                        className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                       >
-                        Use Plex info
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {syncResult && (syncResult.conflicts.length > 0 || syncResult.stale_items.length > 0) && (
+              <section className="space-y-4">
+                {syncResult.conflicts.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                      Possible duplicates from "{syncResult.mapping.section_title}" ({syncResult.conflicts.length})
+                    </h3>
+                    <p className="text-xs text-gray-400 mb-2">
+                      These items already exist in your library. Choose whether to keep your version or
+                      replace it with Plex's info — either way it'll be tracked as synced from this library.
+                    </p>
+                    <div className="space-y-1">
+                      {syncResult.conflicts.map((c) => {
+                        const choice = resolutions[c.existing_item.id]
+                        return (
+                          <div key={c.existing_item.id} className="flex items-center gap-3 py-1.5">
+                            <CoverImage
+                              src={c.existing_item.cover_thumb_url}
+                              category={c.existing_item.category}
+                              title={c.existing_item.title}
+                              size="sm"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{c.existing_item.title}</p>
+                              <p className="text-xs text-gray-400">
+                                {c.existing_item.year}
+                                {c.plex_item.year && c.plex_item.year !== c.existing_item.year ? ` · Plex: ${c.plex_item.year}` : ''}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={choice === 'keep_mine' ? 'primary' : 'outline'}
+                              onClick={() => handleStageResolution(c.existing_item.id, 'keep_mine')}
+                            >
+                              Keep mine
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={choice === 'use_plex' ? 'primary' : 'outline'}
+                              onClick={() => handleStageResolution(c.existing_item.id, 'use_plex')}
+                            >
+                              Use Plex info
+                            </Button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="pt-2">
+                      <Button size="sm" variant="secondary" loading={resolving} onClick={handleResolveDone}>
+                        Done
                       </Button>
                     </div>
-                  )
-                })}
-              </div>
-              <div className="pt-2">
-                <Button size="sm" variant="secondary" loading={resolving} onClick={handleResolveDone}>
-                  Done
-                </Button>
-              </div>
-            </div>
-          )}
+                  </div>
+                )}
 
-          {syncResult.stale_items.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                No longer in "{syncResult.mapping.section_title}" ({syncResult.stale_items.length})
-              </h3>
-              <p className="text-xs text-gray-400 mb-2">
-                These items were previously synced from Plex but no longer exist there. Checked
-                items will be removed from your library.
-              </p>
-              <div className="space-y-1">
-                {syncResult.stale_items.map((item) => (
-                  <label key={item.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!staleSelection[item.id]}
-                      onChange={() => handleToggleStale(item.id)}
-                      className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                    />
-                    <CoverImage
-                      src={item.cover_thumb_url}
-                      category={item.category}
-                      title={item.title}
-                      size="sm"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.title}</p>
-                      <p className="text-xs text-gray-400">{item.year}</p>
+                {syncResult.stale_items.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                      No longer in "{syncResult.mapping.section_title}" ({syncResult.stale_items.length})
+                    </h3>
+                    <p className="text-xs text-gray-400 mb-2">
+                      These items were previously synced from Plex but no longer exist there. Checked
+                      items will be removed from your library.
+                    </p>
+                    <div className="space-y-1">
+                      {syncResult.stale_items.map((item) => (
+                        <label key={item.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!staleSelection[item.id]}
+                            onChange={() => handleToggleStale(item.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                          />
+                          <CoverImage
+                            src={item.cover_thumb_url}
+                            category={item.category}
+                            title={item.title}
+                            size="sm"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.title}</p>
+                            <p className="text-xs text-gray-400">{item.year}</p>
+                          </div>
+                        </label>
+                      ))}
                     </div>
-                  </label>
-                ))}
-              </div>
-              <div className="pt-2 flex gap-2">
-                <Button size="sm" variant="danger" loading={removingStale} onClick={handleRemoveStale}>
-                  Remove selected
-                </Button>
-                <Button size="sm" variant="secondary" onClick={handleKeepAllStale}>
-                  Keep all
-                </Button>
-              </div>
-            </div>
-          )}
-        </section>
-      )}
+                    <div className="pt-2 flex gap-2">
+                      <Button size="sm" variant="danger" loading={removingStale} onClick={handleRemoveStale}>
+                        Remove selected
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={handleKeepAllStale}>
+                        Keep all
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
 
-      <section>
-        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Available libraries</h3>
-        {unmapped.length === 0 ? (
-          <p className="text-sm text-gray-400">No additional libraries found on the Plex server.</p>
-        ) : (
-          <div className="space-y-1">
-            {unmapped.map((s) => (
-              <div key={s.key} className="flex items-center gap-3 py-1.5">
-                <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{s.title}</span>
-                <span className="text-xs text-gray-400 capitalize">{s.type}</span>
-                <Button size="sm" variant="ghost" onClick={() => handleAdd(s.key)}>
-                  <Plus size={14} /> Add
-                </Button>
-              </div>
-            ))}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Available libraries</h3>
+              {unmapped.length === 0 ? (
+                <p className="text-sm text-gray-400">No additional libraries found on the Plex server.</p>
+              ) : (
+                <div className="space-y-1">
+                  {unmapped.map((s) => (
+                    <div key={s.key} className="flex items-center gap-3 py-1.5">
+                      <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{s.title}</span>
+                      <span className="text-xs text-gray-400 capitalize">{s.type}</span>
+                      <Button size="sm" variant="ghost" onClick={() => handleAdd(s.key)}>
+                        <Plus size={14} /> Add
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {confirmDialog}
           </div>
         )}
-      </section>
-
-      {confirmDialog}
+      </div>
     </div>
   )
 }

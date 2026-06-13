@@ -59,8 +59,8 @@ export default function App() {
               <Route path="locations" element={<SettingsLocations />} />
               <Route path="platforms" element={<SettingsPlatforms />} />
               <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
-              <Route path="plex" element={<SettingsPlex />} />
             </Route>
+            <Route path="settings/plex" element={<SettingsPlex />} />
             <Route
               path="admin"
               element={

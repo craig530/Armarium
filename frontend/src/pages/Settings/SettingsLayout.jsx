@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { MapPin, Tv, Tags, Cast } from 'lucide-react'
+import { MapPin, Tv, Tags } from 'lucide-react'
 import clsx from 'clsx'
 
 const TABS = [
@@ -23,13 +23,6 @@ const TABS = [
     icon: Tags,
     title: 'Manage Media Types',
     description: 'Subtypes within each category and format, e.g. CD, Blu-ray, Streaming Film.',
-  },
-  {
-    to: '/settings/plex',
-    label: 'Plex Sync',
-    icon: Cast,
-    title: 'Plex Sync',
-    description: 'Match Plex libraries to your Films & TV and Music collections and sync them in.',
   },
 ]
 

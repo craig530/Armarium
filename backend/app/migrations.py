@@ -307,6 +307,39 @@ async def add_location_sort_order_column(conn: AsyncConnection) -> None:
     logger.info("Added locations.sort_order column")
 
 
+async def reset_mismatched_plex_tables(conn: AsyncConnection) -> None:
+    """Drop `plex_config`/`plex_library_mappings` if their columns don't match
+    the current models, so `create_all()` (which runs right after this) can
+    recreate them.
+
+    `platform_id` moved from `PlexLibraryMapping` to `PlexConfig` (and became
+    required there) after these tables were already created on some installs —
+    `create_all()` only creates missing tables, so those installs are left with
+    the old columns and every Plex endpoint fails with "no such column" on
+    `plex_config.platform_id`. Both tables hold only admin-configured sync
+    settings (no media data), so on mismatch they're dropped and recreated
+    fresh — the admin re-enters the Plex URL/token, platform and library
+    mappings. Must run *before* `create_all()`.
+    """
+    if conn.engine.dialect.name != "sqlite":
+        return
+
+    from .models.plex_config import PlexConfig
+    from .models.plex_library_mapping import PlexLibraryMapping
+
+    for model in (PlexConfig, PlexLibraryMapping):
+        table_name = model.__tablename__
+        result = await conn.execute(text(f'PRAGMA table_info("{table_name}")'))
+        existing_columns = {row[1] for row in result.fetchall()}
+        if not existing_columns:
+            continue  # table doesn't exist yet — create_all will make it
+
+        expected_columns = {c.name for c in model.__table__.columns}
+        if existing_columns != expected_columns:
+            await conn.execute(text(f'DROP TABLE "{table_name}"'))
+            logger.info("Dropped outdated %s table (schema changed) — will be recreated", table_name)
+
+
 async def drop_legacy_media_type_column(conn: AsyncConnection) -> None:
     """Drop the orphaned NOT NULL `media_type` column from `media_items`.
 

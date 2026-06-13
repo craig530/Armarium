@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Sun, Moon, Plus, LayoutGrid, Music, Clapperboard, BookOpen, Settings, ShieldCheck, LogOut, User, Download, ChevronDown, MapPin, Tv, Tags } from 'lucide-react'
+import { Sun, Moon, Plus, LayoutGrid, Music, Clapperboard, BookOpen, Settings, ShieldCheck, LogOut, User, Download, ChevronDown, MapPin, Tv, Tags, Cast } from 'lucide-react'
 import { useThemeStore, useAuthStore, hasPermission } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -28,6 +28,7 @@ export const MANAGE_LINKS = [
   { to: '/settings/locations', label: 'Manage Locations', icon: MapPin },
   { to: '/settings/platforms', label: 'Manage Platforms', icon: Tv },
   { to: '/settings/media-subtypes', label: 'Manage Media Types', icon: Tags },
+  { to: '/settings/plex', label: 'Plex Sync', icon: Cast },
 ]
 
 export default function Navbar({ stats }) {
