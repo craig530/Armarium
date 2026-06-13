@@ -13,3 +13,14 @@ export async function exportLibrary(format) {
   URL.revokeObjectURL(url)
   return ext
 }
+
+// Downloads a zip of all locally-stored cover images.
+export async function exportCovers() {
+  const resp = await client.get('/library/export/covers', { responseType: 'blob' })
+  const url = URL.createObjectURL(resp.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'armarium-covers.zip'
+  a.click()
+  URL.revokeObjectURL(url)
+}

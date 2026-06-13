@@ -666,3 +666,28 @@ async def upload_cover(
     await db.commit()
     item = await _reload_item(db, item.id)
     return await _build_response(db, item)
+
+
+@router.post("/{item_id}/cover/refresh", response_model=MediaItemResponse)
+async def refresh_cover(
+    item_id: int,
+    _=Depends(require_permission("can_add_items")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-download and re-optimise an item's cover from its `cover_image_url`."""
+    stmt = select(MediaItem).where(MediaItem.id == item_id).options(selectinload(MediaItem.location))
+    item = (await db.execute(stmt)).scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    if not item.cover_image_url:
+        raise HTTPException(status_code=400, detail="Item has no cover URL to refresh from")
+
+    local_path = await download_cover(item.cover_image_url, item_id, force=True)
+    if local_path is None:
+        raise HTTPException(status_code=502, detail="Failed to download cover image")
+
+    item.cover_image_path = local_path
+    await db.commit()
+    item = await _reload_item(db, item.id)
+    return await _build_response(db, item)

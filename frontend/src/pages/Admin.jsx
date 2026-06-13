@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download } from 'lucide-react'
 import client from '../api/client'
 import { adminApi } from '../api/admin'
+import { exportCovers } from '../lib/export'
 import { useAuthStore } from '../store'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -378,6 +379,9 @@ export default function Admin() {
       {/* Backup card */}
       <BackupPanel />
 
+      {/* Cover images card */}
+      <CoverImagesPanel />
+
       {/* Danger zone */}
       <DangerZonePanel />
     </div>
@@ -464,6 +468,75 @@ function BackupPanel() {
           <li>Restart the containers (<code className="font-mono">docker compose up -d</code>).</li>
         </ol>
       </div>
+    </div>
+  )
+}
+
+function CoverImagesPanel() {
+  const [redownloading, setRedownloading] = useState(false)
+  const [purging, setPurging] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
+
+  const handleRedownload = async () => {
+    if (!await confirm(
+      'This re-downloads and re-processes every cover image fetched from a URL, ' +
+      'fixing any that were saved with the previous image processing. It runs in ' +
+      'the background and may take a while for large libraries. Continue?'
+    )) return
+    setRedownloading(true)
+    try {
+      const r = await adminApi.redownloadCovers()
+      toast.success(`Redownloading ${r.queued} cover${r.queued === 1 ? '' : 's'}…`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setRedownloading(false)
+    }
+  }
+
+  const handlePurge = async () => {
+    if (!await confirm(
+      'This permanently deletes any cover image files on disk that are no longer ' +
+      'referenced by an item. Continue?'
+    )) return
+    setPurging(true)
+    try {
+      const r = await adminApi.purgeOrphanCovers()
+      toast.success(`Deleted ${r.deleted} orphaned file${r.deleted === 1 ? '' : 's'}`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setPurging(false)
+    }
+  }
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      await exportCovers()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Cover Images</h2>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" loading={redownloading} onClick={handleRedownload}>
+          <RefreshCw size={14} /> Redownload all
+        </Button>
+        <Button size="sm" variant="secondary" loading={purging} onClick={handlePurge}>
+          <Trash2 size={14} /> Purge orphans
+        </Button>
+        <Button size="sm" variant="secondary" loading={exporting} onClick={handleExport}>
+          <Download size={14} /> Export covers
+        </Button>
+      </div>
+      {confirmDialog}
     </div>
   )
 }

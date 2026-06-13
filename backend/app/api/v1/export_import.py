@@ -7,6 +7,7 @@ import csv
 import io
 import json
 import re
+import zipfile
 from datetime import datetime
 from pathlib import Path
 import shutil
@@ -94,6 +95,26 @@ async def export_library(
         io.BytesIO(output.getvalue().encode()),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=armarium-export.csv"},
+    )
+
+
+@router.get("/export/covers")
+async def export_covers(_=Depends(get_current_admin)):
+    """Export all user-downloaded/uploaded cover images as a zip (admin only)."""
+    covers_dir = Path(settings.covers_dir)
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        if covers_dir.exists():
+            for file in covers_dir.rglob("*"):
+                if file.is_file():
+                    zf.write(file, file.relative_to(covers_dir))
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=armarium-covers.zip"},
     )
 
 

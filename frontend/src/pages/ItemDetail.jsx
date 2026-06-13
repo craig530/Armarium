@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink, RefreshCw } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { useReferenceDataStore } from '../store'
 import { MediaSubtypeIcon, OwnershipIcon } from '../components/ui/Badge'
@@ -130,6 +130,7 @@ export default function ItemDetail() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showLinkSearch, setShowLinkSearch] = useState(false)
+  const [refreshingCover, setRefreshingCover] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
 
   const load = () => {
@@ -205,6 +206,20 @@ export default function ItemDetail() {
       toast.success('Cover updated')
     } catch (err) {
       toast.error(err.message)
+    }
+  }
+
+  const handleRefreshCover = async () => {
+    setRefreshingCover(true)
+    try {
+      const updated = await mediaApi.refreshCover(id)
+      setItem(updated)
+      setForm(updated)
+      toast.success('Cover refreshed')
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setRefreshingCover(false)
     }
   }
 
@@ -393,7 +408,21 @@ export default function ItemDetail() {
           )}
 
           <Input label="Barcode" value={form.barcode || ''} onChange={(e) => set('barcode', e.target.value)} />
-          <Input label="Cover URL" value={form.cover_image_url || ''} onChange={(e) => set('cover_image_url', e.target.value)} className="col-span-2" />
+          <div className="col-span-2 flex items-end gap-2">
+            <Input label="Cover URL" value={form.cover_image_url || ''} onChange={(e) => set('cover_image_url', e.target.value)} className="flex-1" />
+            {item.cover_image_url && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Redownload cover from URL"
+                loading={refreshingCover}
+                onClick={handleRefreshCover}
+              >
+                <RefreshCw size={14} />
+              </Button>
+            )}
+          </div>
           <Textarea label="Description" value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={3} className="col-span-2" />
           <Textarea label="Notes" value={form.notes || ''} onChange={(e) => set('notes', e.target.value)} rows={2} className="col-span-2" />
         </div>

@@ -144,9 +144,14 @@ async def _is_safe_url(url: str) -> bool:
     return True
 
 
-async def download_cover(url: str, item_id: int) -> Optional[str]:
+async def download_cover(url: str, item_id: int, force: bool = False) -> Optional[str]:
     """Download a cover image, optimise it (medium + thumbnail), and return
-    the local serve path for the medium image."""
+    the local serve path for the medium image.
+
+    If `force` is True, re-download and re-optimise even if a file for this
+    URL already exists — used to retroactively apply optimisation changes
+    (e.g. letterbox trimming) to previously-saved covers.
+    """
     if not url:
         return None
 
@@ -161,7 +166,7 @@ async def download_cover(url: str, item_id: int) -> Optional[str]:
     stem = f"{item_id}_{url_hash}"
     rel_url = f"/covers/{subdir}/{stem}.jpg"
 
-    if (dest_dir / f"{stem}.jpg").exists():
+    if not force and (dest_dir / f"{stem}.jpg").exists():
         return rel_url
 
     # Redirects are not followed: a "safe" URL could redirect to an internal
