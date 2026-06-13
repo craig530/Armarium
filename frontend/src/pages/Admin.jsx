@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle } from 'lucide-react'
 import client from '../api/client'
+import { adminApi } from '../api/admin'
 import { useAuthStore } from '../store'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -376,6 +377,9 @@ export default function Admin() {
 
       {/* Backup card */}
       <BackupPanel />
+
+      {/* Danger zone */}
+      <DangerZonePanel />
     </div>
   )
 }
@@ -428,6 +432,46 @@ function BackupPanel() {
       <p className="mt-3 text-xs text-gray-400">
         Backups are stored in the <code className="font-mono">app_data</code> volume. The last 30 are retained automatically.
       </p>
+    </div>
+  )
+}
+
+function DangerZonePanel() {
+  const [resetting, setResetting] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
+
+  const handleReset = async () => {
+    if (!await confirm(
+      'This will permanently delete all media, locations, and platforms, and restore the default media types. ' +
+      'User accounts are kept.\n\nMake sure you’ve taken a backup first. Continue?'
+    )) return
+
+    setResetting(true)
+    try {
+      await adminApi.resetDatabase()
+      toast.success('Database reset to default')
+      window.location.reload()
+    } catch (err) {
+      toast.error(err.message)
+      setResetting(false)
+    }
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-red-200 dark:border-red-900/40 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <AlertTriangle size={18} className="text-red-500" />
+        <h2 className="font-semibold text-gray-900 dark:text-white">Danger Zone</h2>
+      </div>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+        Reset the database to its default state — all media, locations, and platforms will be
+        permanently deleted, and the default media types will be restored. User accounts are
+        not affected.
+      </p>
+      <Button size="sm" variant="danger" loading={resetting} onClick={handleReset}>
+        <Trash2 size={14} /> Reset database
+      </Button>
+      {confirmDialog}
     </div>
   )
 }

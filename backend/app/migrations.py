@@ -256,30 +256,6 @@ async def add_books_digital_subtypes(session: AsyncSession) -> None:
         logger.info("Added %d Books/Digital media subtype(s)", added)
 
 
-# Default platforms seeded for digital Books items (Kindle eBooks, Audible
-# audiobooks). Idempotent insert-if-missing-by-name.
-_DEFAULT_PLATFORMS = [
-    ("Kindle", "kindle"),
-    ("Audible", "audible"),
-]
-
-
-async def seed_default_platforms(session: AsyncSession) -> None:
-    from .models.platform import Platform
-
-    added = 0
-    for name, logo_key in _DEFAULT_PLATFORMS:
-        existing = (await session.execute(select(Platform.id).where(Platform.name == name))).first()
-        if existing is not None:
-            continue
-        session.add(Platform(name=name, logo_key=logo_key))
-        added += 1
-
-    if added:
-        await session.commit()
-        logger.info("Seeded %d default platform(s)", added)
-
-
 # (column name, SQL default literal) — granular per-user permission flags.
 # These are NOT NULL with a default, so they can't go through
 # `run_additive_migrations` (which skips non-nullable columns); added here

@@ -18,7 +18,6 @@ from .migrations import (
     remove_unused_default_subtypes,
     rename_default_subtypes,
     add_books_digital_subtypes,
-    seed_default_platforms,
     add_user_permission_columns,
     add_location_sort_order_column,
     drop_legacy_media_type_column,
@@ -74,7 +73,6 @@ async def lifespan(app: FastAPI):
         await remove_unused_default_subtypes(db)
         await rename_default_subtypes(db)
         await add_books_digital_subtypes(db)
-        await seed_default_platforms(db)
 
     async with engine.begin() as conn:
         await drop_legacy_media_type_column(conn)
