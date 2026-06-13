@@ -17,7 +17,8 @@ export default function BatchStatusBar({ supertype, locationId, platformId, loca
       <button
         type="button"
         onClick={onChangeLocation}
-        className="flex flex-1 items-center gap-2 min-w-0 text-left"
+        title={isPhysical ? 'Tap to change location' : 'Tap to change platform'}
+        className="flex flex-1 items-center gap-2 min-w-0 text-left -m-1 p-1 rounded-lg hover:bg-brand-100 active:bg-brand-200 dark:hover:bg-brand-900/50 dark:active:bg-brand-900/80 transition-colors"
       >
         {isPhysical ? (
           <LocationIcon location={location} size={16} className="shrink-0 text-brand-600 dark:text-brand-400" />

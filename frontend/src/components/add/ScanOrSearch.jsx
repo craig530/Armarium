@@ -114,7 +114,7 @@ export default function ScanOrSearch({ category, onResults, batchMode, query, on
         placeholder={SEARCH_PLACEHOLDERS[category]}
         className="flex-1"
       />
-      <Button type="submit" loading={loading} size="icon">
+      <Button type="submit" disabled={loading} size="icon">
         {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
       </Button>
     </form>
