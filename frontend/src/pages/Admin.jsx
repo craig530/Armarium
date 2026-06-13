@@ -391,6 +391,7 @@ export default function Admin() {
 function BackupPanel() {
   const [backups, setBackups] = useState([])
   const [triggering, setTriggering] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
 
   const loadBackups = () => {
     client.get('/library/backup/list').then((r) => setBackups(r.data.backups)).catch(() => {})
@@ -425,6 +426,16 @@ function BackupPanel() {
     }
   }
 
+  const deleteBackup = async (name) => {
+    if (!await confirm(`Delete backup ${name}? This cannot be undone.`)) return
+    try {
+      await client.delete(`/library/backup/${name}`)
+      loadBackups()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
   return (
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-center justify-between mb-4">
@@ -451,6 +462,13 @@ function BackupPanel() {
                 >
                   <Download size={13} />
                 </button>
+                <button
+                  onClick={() => deleteBackup(b.name)}
+                  title="Delete backup"
+                  className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
             </div>
           ))}
@@ -468,6 +486,7 @@ function BackupPanel() {
           <li>Restart the containers (<code className="font-mono">docker compose up -d</code>).</li>
         </ol>
       </div>
+      {confirmDialog}
     </div>
   )
 }

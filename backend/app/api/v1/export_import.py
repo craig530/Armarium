@@ -225,3 +225,16 @@ async def download_backup(name: str, _=Depends(get_current_admin)):
         raise HTTPException(status_code=404, detail="Backup not found")
 
     return FileResponse(path, media_type="application/octet-stream", filename=name)
+
+
+@router.delete("/backup/{name}", status_code=204)
+async def delete_backup(name: str, _=Depends(get_current_admin)):
+    """Delete a database backup (admin only)."""
+    if not BACKUP_NAME_PATTERN.match(name):
+        raise HTTPException(status_code=400, detail="Invalid backup name")
+
+    path = Path(settings.backup_dir) / name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Backup not found")
+
+    path.unlink()

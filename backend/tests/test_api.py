@@ -1482,3 +1482,42 @@ async def test_list_endpoint_stays_fast_with_large_catalogue(client, auth_header
         async with AsyncSessionLocal() as db:
             await db.execute(delete(MediaItem).where(MediaItem.title.like("Perf Item %")))
             await db.commit()
+
+
+async def test_backup_list_download_delete(client, auth_headers):
+    from pathlib import Path
+    from app.config import settings
+
+    backup_dir = Path(settings.backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    name = "armarium_20260101_120000.db"
+    (backup_dir / name).write_bytes(b"fake-db-contents")
+
+    resp = await client.get("/api/v1/library/backup/list", headers=auth_headers)
+    assert resp.status_code == 200
+    assert any(b["name"] == name for b in resp.json()["backups"])
+
+    resp = await client.get(f"/api/v1/library/backup/{name}/download", headers=auth_headers)
+    assert resp.status_code == 200
+
+    resp = await client.delete(f"/api/v1/library/backup/{name}", headers=auth_headers)
+    assert resp.status_code == 204
+
+    resp = await client.get("/api/v1/library/backup/list", headers=auth_headers)
+    assert resp.status_code == 200
+    assert not any(b["name"] == name for b in resp.json()["backups"])
+
+
+async def test_backup_delete_unknown_or_invalid_name(client, auth_headers):
+    resp = await client.delete("/api/v1/library/backup/does_not_exist.db", headers=auth_headers)
+    assert resp.status_code == 400
+
+    resp = await client.delete("/api/v1/library/backup/armarium_20260101_000000.db", headers=auth_headers)
+    assert resp.status_code == 404
+
+
+async def test_backup_delete_requires_admin(client, auth_headers):
+    _, headers = await _create_user_and_login(client, auth_headers, "backupuser")
+
+    resp = await client.delete("/api/v1/library/backup/armarium_20260101_000000.db", headers=headers)
+    assert resp.status_code == 403
