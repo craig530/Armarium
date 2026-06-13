@@ -56,7 +56,13 @@ services:
     # See the backend service above: point Uptime Kuma's "Docker Container"
     # monitor at "armarium-frontend" for this container's health status.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8765/nginx-health"]
+      # 127.0.0.1, not localhost: nginx's `listen 8765` binds the IPv4
+      # wildcard only, but Alpine's busybox wget tries every address
+      # `localhost` resolves to (including ::1) and doesn't fall back on a
+      # refused connection the way curl does — against `localhost` this can
+      # make the healthcheck (and thus Docker's reported container health)
+      # fail even though nginx is up and serving fine.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8765/nginx-health"]
       interval: 30s
       timeout: 5s
       retries: 3
