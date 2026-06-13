@@ -262,9 +262,21 @@ export default function BarcodeScanner({ onDetected, onClose, restartSignal, loa
       // autofocus that doesn't refocus once the stream starts, which makes
       // it hard to read a barcode held close to the lens. Ask for
       // continuous autofocus where supported.
+      const advanced = []
       if (capabilities?.focusMode?.includes('continuous')) {
-        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
+        advanced.push({ focusMode: 'continuous' })
       }
+
+      // To fill enough of the frame to decode, users often have to hold a
+      // barcode closer than the lens's minimum focus distance — right where
+      // autofocus struggles most. Where the camera exposes a zoom range,
+      // apply a modest zoom so the barcode reads large enough at a more
+      // comfortable distance the camera can actually focus on.
+      if (capabilities?.zoom?.max > capabilities.zoom.min) {
+        advanced.push({ zoom: Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, 2)) })
+      }
+
+      if (advanced.length) track.applyConstraints({ advanced }).catch(() => {})
 
       setScanning(true)
       intervalRef.current = setInterval(scanFrame, SCAN_INTERVAL_MS)
