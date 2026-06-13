@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download } from 'lucide-react'
 import client from '../api/client'
 import { adminApi } from '../api/admin'
+import { plexApi } from '../api/plex'
 import { exportCovers } from '../lib/export'
 import { useAuthStore } from '../store'
 import Button from '../components/ui/Button'
@@ -379,6 +380,9 @@ export default function Admin() {
       {/* Backup card */}
       <BackupPanel />
 
+      {/* Plex integration card */}
+      <PlexIntegrationPanel />
+
       {/* Cover images card */}
       <CoverImagesPanel />
 
@@ -486,6 +490,131 @@ function BackupPanel() {
           <li>Restart the containers (<code className="font-mono">docker compose up -d</code>).</li>
         </ol>
       </div>
+      {confirmDialog}
+    </div>
+  )
+}
+
+function PlexIntegrationPanel() {
+  const [config, setConfig] = useState(null)
+  const [baseUrl, setBaseUrl] = useState('')
+  const [token, setToken] = useState('')
+  const [enabled, setEnabled] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [testing, setTesting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [confirm, confirmDialog] = useConfirm()
+
+  useEffect(() => {
+    plexApi.getConfig()
+      .then((c) => {
+        setConfig(c)
+        setBaseUrl(c.base_url || '')
+        setEnabled(c.configured ? c.enabled : true)
+      })
+      .catch((err) => toast.error(err.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleTest = async () => {
+    if (!baseUrl || !token) {
+      toast.error('Enter both the server URL and token to test the connection')
+      return
+    }
+    setTesting(true)
+    try {
+      const r = await plexApi.testConnection({ base_url: baseUrl, token })
+      toast.success(`Connected to ${r.name || 'Plex server'} (v${r.version})`)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!baseUrl) {
+      toast.error('Server URL is required')
+      return
+    }
+    setSaving(true)
+    try {
+      const r = await plexApi.updateConfig({ base_url: baseUrl, token: token || undefined, enabled })
+      setConfig(r)
+      setToken('')
+      toast.success('Plex configuration saved')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemove = async () => {
+    if (!await confirm(
+      'Remove the Plex integration? Existing Plex-sourced items are left in place, ' +
+      'but library sync mappings will stop working until reconfigured.'
+    )) return
+    try {
+      await plexApi.deleteConfig()
+      setConfig({ configured: false, enabled: false, base_url: null })
+      setBaseUrl('')
+      setToken('')
+      setEnabled(true)
+      toast.success('Plex integration removed')
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Plex Integration</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Connect a local Plex Media Server to sync your Films &amp; TV and Music libraries.
+        Once configured, set up library mappings in Settings → Plex Sync.
+      </p>
+      {loading ? (
+        <p className="text-sm text-gray-400 animate-pulse">Loading…</p>
+      ) : (
+        <div className="space-y-3 max-w-md">
+          <Input
+            label="Server URL"
+            placeholder="http://192.168.1.10:32400"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+          />
+          <Input
+            label="Token"
+            type="password"
+            placeholder={config?.configured ? 'Unchanged' : 'Plex authentication token'}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className="rounded"
+            />
+            Enabled
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" loading={testing} onClick={handleTest}>
+              Test connection
+            </Button>
+            <Button size="sm" loading={saving} onClick={handleSave}>
+              Save
+            </Button>
+            {config?.configured && (
+              <Button size="sm" variant="danger" onClick={handleRemove}>
+                <Trash2 size={14} /> Remove integration
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       {confirmDialog}
     </div>
   )

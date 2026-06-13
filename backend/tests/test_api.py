@@ -1552,3 +1552,99 @@ async def test_media_item_source_fields(client, auth_headers):
     assert resp.status_code == 200
     assert resp.json()["source"] == "plex"
     assert resp.json()["source_id"] == "1:plex://abc123"
+
+
+# Plex integration config ──────────────────────────────────────────────────
+
+async def test_plex_config_not_configured_by_default(client, auth_headers):
+    resp = await client.get("/api/v1/admin/plex/config", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["configured"] is False
+    assert body["enabled"] is False
+    assert body["base_url"] is None
+
+
+async def test_plex_config_create_update_delete(client, auth_headers):
+    from app.database import AsyncSessionLocal
+
+    # Initial setup requires a token.
+    resp = await client.put(
+        "/api/v1/admin/plex/config",
+        json={"base_url": "http://192.168.1.10:32400", "enabled": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    resp = await client.put(
+        "/api/v1/admin/plex/config",
+        json={"base_url": "http://192.168.1.10:32400", "token": "secret-token", "enabled": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["configured"] is True
+    assert body["enabled"] is True
+    assert body["base_url"] == "http://192.168.1.10:32400"
+    assert "token" not in body
+
+    # GET never returns the token either.
+    resp = await client.get("/api/v1/admin/plex/config", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "token" not in resp.json()
+
+    # Omitting the token on update preserves the existing one — just toggling `enabled`.
+    resp = await client.put(
+        "/api/v1/admin/plex/config",
+        json={"base_url": "http://192.168.1.10:32400", "enabled": False},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["enabled"] is False
+    assert resp.json()["base_url"] == "http://192.168.1.10:32400"
+
+    async with AsyncSessionLocal() as db:
+        from app.models.plex_config import PlexConfig
+        from sqlalchemy import select
+        config = (await db.execute(select(PlexConfig))).scalar_one()
+        assert config.token == "secret-token"
+
+    resp = await client.delete("/api/v1/admin/plex/config", headers=auth_headers)
+    assert resp.status_code == 204
+
+    resp = await client.get("/api/v1/admin/plex/config", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["configured"] is False
+
+
+async def test_plex_test_connection(client, auth_headers):
+    with patch("app.services.plex.test_connection", new=AsyncMock(return_value={"ok": True, "name": "My Plex", "version": "1.2.3"})):
+        resp = await client.post(
+            "/api/v1/admin/plex/test",
+            json={"base_url": "http://192.168.1.10:32400", "token": "secret-token"},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["name"] == "My Plex"
+
+    with patch("app.services.plex.test_connection", new=AsyncMock(side_effect=Exception("connection refused"))):
+        resp = await client.post(
+            "/api/v1/admin/plex/test",
+            json={"base_url": "http://192.168.1.10:32400", "token": "bad-token"},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 400
+
+
+async def test_plex_config_requires_admin(client, auth_headers):
+    _, headers = await _create_user_and_login(client, auth_headers, "plexuser")
+
+    resp = await client.get("/api/v1/admin/plex/config", headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.put(
+        "/api/v1/admin/plex/config",
+        json={"base_url": "http://example.com", "token": "x"},
+        headers=headers,
+    )
+    assert resp.status_code == 403
