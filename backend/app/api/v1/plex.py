@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
@@ -5,7 +6,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
-from ...database import get_db
+from ...database import AsyncSessionLocal, get_db
 from ...models.enums import MediaCategory, Supertype
 from ...models.item_link import ItemLink
 from ...models.media import MediaItem
@@ -27,11 +28,13 @@ from ...schemas.plex import (
     PlexSectionResponse,
     PlexSyncItem,
     PlexSyncResult,
+    PlexSyncStatus,
     PlexTestRequest,
 )
 from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
 from ...services.cover_art import delete_cover_files, optimise_and_save
+from ...services.plex_sync_jobs import PlexSyncJob, get_job, set_job
 from .media import _build_response, _build_responses, _link_unlinked
 
 router = APIRouter()
@@ -322,90 +325,189 @@ async def _apply_cover(db: AsyncSession, config: PlexConfig, item: MediaItem, th
         item.cover_image_url = None
 
 
-@router.post("/mappings/{mapping_id}/sync", response_model=PlexSyncResult)
+async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
+    """Runs a full library sync in the background, updating `job` so
+    `GET /mappings/{id}/sync/status` can report progress. Runs detached from
+    the request that started it, so it opens its own session and re-loads
+    everything it needs."""
+    async with AsyncSessionLocal() as db:
+        try:
+            mapping = (
+                await db.execute(select(PlexLibraryMapping).where(PlexLibraryMapping.id == mapping_id))
+            ).scalar_one_or_none()
+            config = await _get_config(db)
+            if mapping is None or config is None or not config.enabled:
+                job.status = "error"
+                job.error = "Plex integration is not configured or not enabled"
+                return
+            if mapping.media_subtype_id is None:
+                job.status = "error"
+                job.error = "No media type configured for this library — an admin must set one in Plex Sync settings"
+                return
+
+            section_key = mapping.section_key
+            section_type = mapping.section_type
+            media_subtype_id = mapping.media_subtype_id
+            platform_id = config.platform_id
+
+            plex_items = await plex_service.list_section_items(config.base_url, config.token, section_key, section_type)
+            job.total = len(plex_items)
+
+            conflicts: list[PlexConflict] = []
+            seen_source_ids: set[str] = set()
+
+            for raw_item in plex_items:
+                if job.cancel_requested:
+                    job.status = "cancelled"
+                    break
+
+                guid = raw_item.get("guid")
+                if not guid or not raw_item.get("title"):
+                    job.processed += 1
+                    continue
+
+                source_id = f"{mapping_id}:{guid}"
+                seen_source_ids.add(source_id)
+                fields = _to_sync_fields(raw_item, section_type)
+                sync_item = PlexSyncItem(guid=guid, cover_thumb=raw_item.get("thumb"), **fields)
+
+                existing = (
+                    await db.execute(
+                        select(MediaItem).where(MediaItem.source == "plex", MediaItem.source_id == source_id)
+                    )
+                ).scalar_one_or_none()
+
+                if existing is not None:
+                    for field_name, value in fields.items():
+                        setattr(existing, field_name, value)
+                    await _apply_cover(db, config, existing, raw_item.get("thumb"))
+                    job.updated += 1
+                    job.processed += 1
+                    await db.commit()
+                    continue
+
+                matches = await _find_matches(db, mapping, sync_item)
+                # A duplicate is when platform and item match — same identity, same
+                # configured Plex platform. Anything else (a different digital
+                # platform, or a physical copy) is a related copy to link, not a
+                # conflict.
+                duplicate = next((m for m in matches if m.platform_id == platform_id), None)
+                if duplicate is not None:
+                    conflicts.append(PlexConflict(existing_item=await _build_response(db, duplicate), plex_item=sync_item))
+                    job.processed += 1
+                    await db.commit()
+                    continue
+
+                item = MediaItem(
+                    media_subtype_id=media_subtype_id,
+                    platform_id=platform_id,
+                    source="plex",
+                    source_id=source_id,
+                    **fields,
+                )
+                db.add(item)
+                await db.flush()
+                await _apply_cover(db, config, item, raw_item.get("thumb"))
+                await db.flush()
+                await _link_unlinked(db, item, matches)
+                job.created += 1
+                job.processed += 1
+                await db.commit()
+
+            job.conflicts = conflicts
+
+            if job.status == "cancelled":
+                # seen_source_ids is incomplete, so stale-item detection
+                # would incorrectly flag items the loop hasn't reached yet.
+                job.stale_items = []
+                return
+
+            stale_items = (
+                await db.execute(
+                    select(MediaItem).where(MediaItem.source == "plex", MediaItem.source_id.like(f"{mapping_id}:%"))
+                )
+            ).scalars().all()
+            stale_items = [i for i in stale_items if i.source_id not in seen_source_ids]
+            job.stale_items = await _build_responses(db, stale_items) if stale_items else []
+
+            mapping.last_synced_at = datetime.utcnow()
+            await db.commit()
+            job.status = "completed"
+        except Exception as e:
+            job.status = "error"
+            job.error = str(e)
+
+
+def _job_status(job: Optional[PlexSyncJob]) -> PlexSyncStatus:
+    if job is None:
+        return PlexSyncStatus(status="idle")
+    result = None
+    if job.status in ("completed", "cancelled"):
+        result = PlexSyncResult(created=job.created, updated=job.updated, conflicts=job.conflicts, stale_items=job.stale_items)
+    return PlexSyncStatus(
+        status=job.status,
+        total=job.total,
+        processed=job.processed,
+        created=job.created,
+        updated=job.updated,
+        error=job.error,
+        result=result,
+    )
+
+
+# Keeps a strong reference to in-flight sync tasks so they aren't garbage
+# collected mid-run — asyncio only weakly tracks tasks created this way.
+_background_tasks: set[asyncio.Task] = set()
+
+
+@router.post("/mappings/{mapping_id}/sync", response_model=PlexSyncStatus, status_code=202)
 async def sync_mapping(
     mapping_id: int,
     _=Depends(require_permission("can_add_items")),
     db: AsyncSession = Depends(get_db),
 ):
     mapping = await _get_mapping_or_404(db, mapping_id)
-    config = await _require_plex_config(db)
+    await _require_plex_config(db)
     if mapping.media_subtype_id is None:
         raise HTTPException(
             status_code=400,
             detail="No media type configured for this library — an admin must set one in Plex Sync settings",
         )
 
-    plex_items = await plex_service.list_section_items(config.base_url, config.token, mapping.section_key, mapping.section_type)
+    existing_job = get_job(mapping_id)
+    if existing_job is not None and existing_job.status == "running":
+        raise HTTPException(status_code=409, detail="A sync is already running for this library")
 
-    created = 0
-    updated = 0
-    conflicts: list[PlexConflict] = []
-    seen_source_ids: set[str] = set()
+    job = PlexSyncJob()
+    set_job(mapping_id, job)
+    task = asyncio.create_task(_run_sync(mapping_id, job))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return _job_status(job)
 
-    for raw_item in plex_items:
-        guid = raw_item.get("guid")
-        if not guid or not raw_item.get("title"):
-            continue
 
-        source_id = f"{mapping.id}:{guid}"
-        seen_source_ids.add(source_id)
-        fields = _to_sync_fields(raw_item, mapping.section_type)
-        sync_item = PlexSyncItem(guid=guid, cover_thumb=raw_item.get("thumb"), **fields)
+@router.get("/mappings/{mapping_id}/sync/status", response_model=PlexSyncStatus)
+async def get_sync_status(
+    mapping_id: int,
+    _=Depends(require_permission("can_add_items")),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_mapping_or_404(db, mapping_id)
+    return _job_status(get_job(mapping_id))
 
-        existing = (
-            await db.execute(
-                select(MediaItem).where(MediaItem.source == "plex", MediaItem.source_id == source_id)
-            )
-        ).scalar_one_or_none()
 
-        if existing is not None:
-            for field, value in fields.items():
-                setattr(existing, field, value)
-            await _apply_cover(db, config, existing, raw_item.get("thumb"))
-            updated += 1
-            continue
-
-        matches = await _find_matches(db, mapping, sync_item)
-        # A duplicate is when platform and item match — same identity, same
-        # configured Plex platform. Anything else (a different digital
-        # platform, or a physical copy) is a related copy to link, not a
-        # conflict.
-        duplicate = next((m for m in matches if m.platform_id == config.platform_id), None)
-        if duplicate is not None:
-            conflicts.append(PlexConflict(existing_item=await _build_response(db, duplicate), plex_item=sync_item))
-            continue
-
-        item = MediaItem(
-            media_subtype_id=mapping.media_subtype_id,
-            platform_id=config.platform_id,
-            source="plex",
-            source_id=source_id,
-            **fields,
-        )
-        db.add(item)
-        await db.flush()
-        await _apply_cover(db, config, item, raw_item.get("thumb"))
-        await db.flush()
-        await _link_unlinked(db, item, matches)
-        created += 1
-
-    stale_items = (
-        await db.execute(
-            select(MediaItem).where(MediaItem.source == "plex", MediaItem.source_id.like(f"{mapping.id}:%"))
-        )
-    ).scalars().all()
-    stale_items = [i for i in stale_items if i.source_id not in seen_source_ids]
-
-    mapping.last_synced_at = datetime.utcnow()
-    await db.commit()
-
-    return PlexSyncResult(
-        created=created,
-        updated=updated,
-        conflicts=conflicts,
-        stale_items=await _build_responses(db, stale_items) if stale_items else [],
-    )
+@router.post("/mappings/{mapping_id}/sync/cancel", response_model=PlexSyncStatus)
+async def cancel_sync(
+    mapping_id: int,
+    _=Depends(require_permission("can_add_items")),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_mapping_or_404(db, mapping_id)
+    job = get_job(mapping_id)
+    if job is None or job.status != "running":
+        raise HTTPException(status_code=409, detail="No sync is currently running for this library")
+    job.cancel_requested = True
+    return _job_status(job)
 
 
 # Fields a `PlexSyncItem` carries over onto an adopted `MediaItem` when the

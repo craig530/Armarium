@@ -3,6 +3,7 @@ Basic smoke tests for the Armarium API.
 Run: cd backend && pip install -r requirements.txt && pytest
 """
 import pytest
+import asyncio
 import os
 import io
 import base64
@@ -2242,12 +2243,57 @@ async def _find_item_by_title(client, auth_headers, title: str) -> dict:
     raise AssertionError(f"No item titled {title!r} found")
 
 
+class _SyncResult:
+    """Wraps a settled `PlexSyncStatus` payload so existing assertions
+    written against the old synchronous `PlexSyncResult` response
+    (`resp.status_code`, `resp.json()["created"]`, etc.) keep working
+    against `result["created"]` of the background job."""
+
+    def __init__(self, status_payload: dict):
+        self._status_payload = status_payload
+        self.status_code = 200 if status_payload["status"] == "completed" else 500
+        self.text = str(status_payload)
+
+    def json(self):
+        return self._status_payload["result"]
+
+
+async def _sync_and_wait(client, auth_headers, mapping_id, max_polls=10000):
+    """Starts a background sync via the async job endpoints and waits for it
+    to settle, returning a `_SyncResult` for the finished job. Must be called
+    inside any `patch(...)` blocks mocking the Plex service, since the
+    background task runs while this waits.
+
+    Polls the in-process job object directly rather than the `/sync/status`
+    endpoint — an HTTP request here would open a second session on the
+    test database's single shared in-memory connection while the sync's
+    session has an uncommitted transaction open, corrupting its writes."""
+    from app.services.plex_sync_jobs import get_job
+
+    resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping_id}/sync", headers=auth_headers)
+    assert resp.status_code == 202, resp.text
+    for _ in range(max_polls):
+        job = get_job(mapping_id)
+        if job.status != "running":
+            break
+        await asyncio.sleep(0)
+    else:
+        raise AssertionError(f"Sync did not complete after {max_polls} polls: {job}")
+
+    if job.status == "error":
+        raise AssertionError(f"Sync failed: {job.error}")
+
+    resp = await client.get(f"/api/v1/admin/plex/mappings/{mapping_id}/sync/status", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    return _SyncResult(resp.json())
+
+
 async def test_plex_sync_creates_items(client, auth_headers):
     mapping = await _create_movie_mapping(client, auth_headers)
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=PNG_1X1)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 1
@@ -2280,13 +2326,13 @@ async def test_plex_sync_rerun_updates_not_duplicates(client, auth_headers):
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_RELOADED])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.json()["created"] == 1
 
     updated_item = dict(_PLEX_MOVIE_ITEM_RELOADED, summary="Updated description")
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[updated_item])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 0
@@ -2322,7 +2368,7 @@ async def test_plex_sync_detects_conflict_with_same_platform_item(client, auth_h
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_REVOLUTIONS])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 0
@@ -2376,7 +2422,7 @@ async def test_plex_sync_links_other_platform_and_physical_matches(client, auth_
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_EDGE])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 1
@@ -2415,7 +2461,7 @@ async def test_plex_sync_matches_by_title_and_year_without_tmdb_id(client, auth_
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_NO_TMDB])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 1
@@ -2436,13 +2482,13 @@ async def test_plex_sync_detects_stale_items(client, auth_headers):
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_3, _PLEX_MOVIE_ITEM_2])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.json()["created"] == 2
 
     # "Inception" removed from Plex.
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_3])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 0
@@ -2460,7 +2506,7 @@ async def test_plex_sync_music_mapping(client, auth_headers):
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_ALBUM_ITEM])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     assert resp.json()["created"] == 1
 
@@ -2515,7 +2561,7 @@ async def test_plex_resolve_conflict_keep_mine(client, auth_headers):
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_JOHN_WICK])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     conflicts = resp.json()["conflicts"]
     assert len(conflicts) == 1
     plex_item = conflicts[0]["plex_item"]
@@ -2541,7 +2587,7 @@ async def test_plex_resolve_conflict_keep_mine(client, auth_headers):
     # as a conflict again, and doesn't create a duplicate.
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_JOHN_WICK])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     result = resp.json()
     assert result["conflicts"] == []
     assert result["created"] == 0
@@ -2575,7 +2621,7 @@ async def test_plex_resolve_conflict_use_plex(client, auth_headers):
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_RESURRECTIONS])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     conflicts = resp.json()["conflicts"]
     assert len(conflicts) == 1
     plex_item = conflicts[0]["plex_item"]
@@ -2638,7 +2684,7 @@ async def test_plex_resolve_conflict_links_other_platform_match(client, auth_hea
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_QUANTUM])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     conflicts = resp.json()["conflicts"]
     assert len(conflicts) == 1
     plex_item = conflicts[0]["plex_item"]
@@ -2690,7 +2736,7 @@ async def test_plex_remove_stale_items(client, auth_headers):
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_TVSHOW_ITEM_REMOVE])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=PNG_1X1)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     assert resp.json()["created"] == 1
 
@@ -2700,7 +2746,7 @@ async def test_plex_remove_stale_items(client, auth_headers):
     # Removed from Plex entirely — the next sync flags it as stale.
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     stale_item = next(i for i in resp.json()["stale_items"] if i["title"] == "Quietly Cancelled Show")
 
@@ -2733,7 +2779,7 @@ async def test_plex_remove_stale_item_delinks_without_damaging_partner(client, a
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_OUTPOST])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     assert resp.json()["created"] == 1
 
@@ -2745,7 +2791,7 @@ async def test_plex_remove_stale_item_delinks_without_damaging_partner(client, a
     # Removed from Plex entirely — the next sync flags the Plex item as stale.
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     stale_item = next(i for i in resp.json()["stale_items"] if i["title"] == "The Last Outpost")
     assert stale_item["id"] == plex_item["id"]
@@ -2987,3 +3033,103 @@ async def test_media_subtype_locked_by_plex_mapping(client, auth_headers):
 
     resp = await client.delete(f"/api/v1/media-subtypes/{custom_id}", headers=auth_headers)
     assert resp.status_code == 204
+
+
+# Plex sync progress & cancel ─────────────────────────────────────────────────
+
+
+async def test_plex_sync_returns_running_then_completes(client, auth_headers):
+    from app.services.plex_sync_jobs import get_job
+
+    mapping = await _create_music_mapping(client, auth_headers)
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_ALBUM_ITEM])), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        assert resp.status_code == 202, resp.text
+        assert resp.json()["status"] == "running"
+
+        for _ in range(10000):
+            job = get_job(mapping['id'])
+            if job.status != "running":
+                break
+            await asyncio.sleep(0)
+        else:
+            raise AssertionError(f"Sync did not complete: {job}")
+
+    assert job.status == "completed"
+
+    resp = await client.get(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync/status", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    status = resp.json()
+    assert status["status"] == "completed"
+    assert status["total"] == 1
+    assert status["processed"] == 1
+    assert status["result"]["created"] + status["result"]["updated"] == 1
+
+
+async def test_plex_sync_cancel_mid_sync(client, auth_headers):
+    from app.api.v1.plex import _run_sync
+    from app.services.plex_sync_jobs import PlexSyncJob, set_job
+
+    mapping = await _create_tvshow_mapping(client, auth_headers)
+
+    cancel_items = [
+        {"guid": f"plex://show/cancel-test-{i}", "title": f"Cancel Test Show {i}", "thumb": "/thumb"}
+        for i in range(1, 4)
+    ]
+
+    job = PlexSyncJob()
+    call_count = 0
+
+    async def _fetch_thumbnail(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            job.cancel_requested = True
+        return None
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=cancel_items)), \
+            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(side_effect=_fetch_thumbnail)):
+        await _run_sync(mapping['id'], job)
+
+    assert job.status == "cancelled"
+    assert job.total == 3
+    assert job.processed == 2
+    assert job.created == 2
+    assert job.updated == 0
+    assert job.stale_items == []
+
+    set_job(mapping['id'], job)
+    resp = await client.get(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync/status", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    status = resp.json()
+    assert status["status"] == "cancelled"
+    assert status["result"]["created"] == 2
+    assert status["result"]["stale_items"] == []
+
+
+async def test_plex_sync_double_sync_returns_409(client, auth_headers):
+    from app.services.plex_sync_jobs import PlexSyncJob, set_job
+
+    mapping = await _create_movie_mapping(client, auth_headers)
+    set_job(mapping['id'], PlexSyncJob(status="running"))
+
+    try:
+        resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
+        assert resp.status_code == 409
+        assert "already running" in resp.json()["detail"].lower()
+    finally:
+        # Don't leave a "running" job behind for later tests on this mapping.
+        set_job(mapping['id'], PlexSyncJob(status="completed"))
+
+
+async def test_plex_sync_cancel_when_not_running_returns_409(client, auth_headers):
+    from app.services.plex_sync_jobs import PlexSyncJob, set_job
+
+    mapping = await _create_movie_mapping(client, auth_headers)
+    set_job(mapping['id'], PlexSyncJob(status="completed"))
+
+    resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync/cancel", headers=auth_headers)
+    assert resp.status_code == 409
+    assert "no sync is currently running" in resp.json()["detail"].lower()

@@ -97,6 +97,18 @@ class PlexSyncResult(BaseModel):
     stale_items: List[MediaItemResponse]
 
 
+class PlexSyncStatus(BaseModel):
+    """Snapshot of an in-flight or just-finished background sync job."""
+
+    status: Literal["idle", "running", "completed", "cancelled", "error"]
+    total: Optional[int] = None
+    processed: int = 0
+    created: int = 0
+    updated: int = 0
+    error: Optional[str] = None
+    result: Optional[PlexSyncResult] = None
+
+
 class PlexConflictResolution(BaseModel):
     """How to resolve one `PlexConflict` from a prior sync. Either way, the
     existing item is "adopted" — tagged as Plex-sourced so it stops
