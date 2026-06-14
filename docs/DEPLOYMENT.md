@@ -6,6 +6,10 @@ build toolchain, or development environment required. It's the fastest path
 to a production instance, and lets you pin or roll back to a specific
 version.
 
+`craig530/Armarium` is currently a **private** repository, so both pulling
+the images and downloading the deployment files require a GitHub personal
+access token — see step 2.
+
 If you'd rather build the images yourself from source (e.g. to make local
 changes), use the root [README.md](../README.md) Quick Start with
 `docker-compose.yml` instead. For local development, see
@@ -21,8 +25,8 @@ Tagging a commit `vX.Y.Z` and pushing the tag triggers
    `latest`.
 2. Creates a [GitHub Release](https://github.com/craig530/Armarium/releases)
    with the matching section of [CHANGELOG.md](../CHANGELOG.md) as its
-   description, with `docker-compose.prod.yml` and `.env.example` attached as
-   downloadable assets.
+   description, with `docker-compose.prod.yml` and `env.example` (a copy of
+   `.env.example`) attached as downloadable assets.
 
 This is an ad-hoc step run when a version is declared — not on every push to
 `main`.
@@ -50,20 +54,53 @@ sudo usermod -aG docker "$USER"
 (Other distributions / macOS / Windows: any host with Docker Desktop or
 Docker Engine + the Compose plugin works the same way from step 2 onward.)
 
-## 2. Get the deployment files
+## 2. Authenticate to GitHub
 
-You only need two files — download them from the
-[latest release](https://github.com/craig530/Armarium/releases/latest)'s
-assets, or fetch them directly:
+Because the repo is private, you need a GitHub
+[personal access token](https://github.com/settings/tokens) with:
+
+- A classic token with the `repo` scope, or a fine-grained token with
+  **Contents: Read-only** access to `craig530/Armarium` — to download the
+  deployment files below.
+- The `read:packages` scope — to pull the `ghcr.io/craig530/armarium-*`
+  images.
+
+```bash
+export GH_TOKEN=<your-token>
+```
+
+Use it to authenticate Docker to GHCR:
+
+```bash
+echo "$GH_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin
+```
+
+> Never paste the token directly into a command line that gets saved to
+> shell history in a shared location, or into a file that gets committed.
+> `export GH_TOKEN=...` keeps it out of `docker login`'s argument list.
+
+## 3. Get the deployment files
+
+Download `docker-compose.prod.yml` and `.env.example`, pinned to the release
+you're deploying (`v1.0.0` here — substitute the tag of the version you're
+installing):
 
 ```bash
 mkdir armarium && cd armarium
-curl -fsSLO https://raw.githubusercontent.com/craig530/Armarium/main/docker-compose.prod.yml
-curl -fsSLO https://raw.githubusercontent.com/craig530/Armarium/main/.env.example
+for f in docker-compose.prod.yml .env.example; do
+  curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Accept: application/vnd.github.raw+json" \
+    "https://api.github.com/repos/craig530/Armarium/contents/$f?ref=v1.0.0" -o "$f"
+done
 mv .env.example .env
 ```
 
-## 3. Configure `.env`
+(Both files are also attached to the
+[release](https://github.com/craig530/Armarium/releases) itself —
+`docker-compose.prod.yml` and `env.example` — viewable/downloadable from the
+GitHub UI if you're logged in with access to the repo.)
+
+## 4. Configure `.env`
 
 Edit `.env` and set at minimum:
 
@@ -82,7 +119,7 @@ ARMARIUM_VERSION=v1.0.0
 
 Omit it (or set `ARMARIUM_VERSION=latest`) to track the most recent release.
 
-## 4. Pull and start
+## 5. Pull and start
 
 ```bash
 docker compose -f docker-compose.prod.yml pull
@@ -91,13 +128,6 @@ docker compose -f docker-compose.prod.yml up -d
 
 Visit `http://<host>:8080` (or your configured `PORT`) and log in with the
 admin credentials from `.env`.
-
-> If `ghcr.io/craig530/armarium-*` packages are private, authenticate first
-> with a GitHub [personal access token](https://github.com/settings/tokens)
-> that has the `read:packages` scope:
-> `echo "$GHCR_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin`
-> — never paste the token directly into the command or a file that gets
-> committed.
 
 ## Upgrading or rolling back
 

@@ -65,6 +65,11 @@ jobs:
           ' CHANGELOG.md > release-notes.md
           cat release-notes.md
 
+      - name: Prepare .env.example asset
+        # GitHub renames release assets whose filename starts with "." (e.g.
+        # ".env.example" -> "default.env.example"), so attach a dotless copy.
+        run: cp .env.example env.example
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -72,4 +77,4 @@ jobs:
           body_path: release-notes.md
           files: |
             docker-compose.prod.yml
-            .env.example
+            env.example
