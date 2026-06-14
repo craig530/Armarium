@@ -49,8 +49,6 @@ async def setup_fts(conn: AsyncConnection) -> None:
         FTS5_ENABLED = False
         return
 
-    # FTS_COLUMNS is a fixed module-level constant (not user input), so the
-    # f-string DDL/trigger SQL below is not an injection risk. # nosec B608
     columns_sql = ", ".join(FTS_COLUMNS)
     new_values = ", ".join(f"new.{c}" for c in FTS_COLUMNS)
     old_values = ", ".join(f"old.{c}" for c in FTS_COLUMNS)
@@ -72,27 +70,37 @@ async def setup_fts(conn: AsyncConnection) -> None:
         await conn.execute(text("DROP TABLE IF EXISTS media_items_fts"))
         table_existed = False
 
+    # The DDL/trigger SQL below is built from FTS_COLUMNS, a fixed
+    # module-level constant — never user input. bandit's B608 can't
+    # distinguish this from a runtime string-built query, so each statement
+    # is suppressed individually on the line bandit reports (the opening
+    # literal of each assignment) rather than blanket-disabled.
+    create_table_sql = (
+        f"CREATE VIRTUAL TABLE IF NOT EXISTS media_items_fts USING fts5("
+        f"{columns_sql}, content='media_items', content_rowid='id')"
+    )
+    create_insert_trigger_sql = (
+        "CREATE TRIGGER IF NOT EXISTS media_items_fts_ai AFTER INSERT ON media_items BEGIN\n"  # nosec B608
+        f"  INSERT INTO media_items_fts(rowid, {columns_sql}) VALUES (new.id, {new_values});\n"
+        "END"
+    )
+    create_delete_trigger_sql = (
+        "CREATE TRIGGER IF NOT EXISTS media_items_fts_ad AFTER DELETE ON media_items BEGIN\n"  # nosec B608
+        f"  INSERT INTO media_items_fts(media_items_fts, rowid, {columns_sql}) VALUES ('delete', old.id, {old_values});\n"
+        "END"
+    )
+    create_update_trigger_sql = (
+        "CREATE TRIGGER IF NOT EXISTS media_items_fts_au AFTER UPDATE ON media_items BEGIN\n"  # nosec B608
+        f"  INSERT INTO media_items_fts(media_items_fts, rowid, {columns_sql}) VALUES ('delete', old.id, {old_values});\n"
+        f"  INSERT INTO media_items_fts(rowid, {columns_sql}) VALUES (new.id, {new_values});\n"
+        "END"
+    )
+
     try:
-        await conn.execute(text(
-            f"CREATE VIRTUAL TABLE IF NOT EXISTS media_items_fts USING fts5("
-            f"{columns_sql}, content='media_items', content_rowid='id')"
-        ))
-        await conn.execute(text(f"""
-            CREATE TRIGGER IF NOT EXISTS media_items_fts_ai AFTER INSERT ON media_items BEGIN
-              INSERT INTO media_items_fts(rowid, {columns_sql}) VALUES (new.id, {new_values});
-            END
-        """))
-        await conn.execute(text(f"""
-            CREATE TRIGGER IF NOT EXISTS media_items_fts_ad AFTER DELETE ON media_items BEGIN
-              INSERT INTO media_items_fts(media_items_fts, rowid, {columns_sql}) VALUES ('delete', old.id, {old_values});
-            END
-        """))
-        await conn.execute(text(f"""
-            CREATE TRIGGER IF NOT EXISTS media_items_fts_au AFTER UPDATE ON media_items BEGIN
-              INSERT INTO media_items_fts(media_items_fts, rowid, {columns_sql}) VALUES ('delete', old.id, {old_values});
-              INSERT INTO media_items_fts(rowid, {columns_sql}) VALUES (new.id, {new_values});
-            END
-        """))
+        await conn.execute(text(create_table_sql))
+        await conn.execute(text(create_insert_trigger_sql))
+        await conn.execute(text(create_delete_trigger_sql))
+        await conn.execute(text(create_update_trigger_sql))
 
         # The FTS index starts empty when the virtual table is first created
         # (CREATE VIRTUAL TABLE doesn't backfill it), so on the first run after
