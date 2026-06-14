@@ -80,6 +80,10 @@ export default function Library() {
       if (searchInput !== filters.q) setFilter('q', searchInput)
     }, 300)
     return () => clearTimeout(handle)
+    // Only re-run when the local input changes — filters.q is the effect's
+    // own write target (see the sync effect below) and re-triggering on it
+    // would restart the debounce on every external filter change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput])
 
   // Keep the input in sync if filters.q changes elsewhere (e.g. "Clear filters").
@@ -90,9 +94,12 @@ export default function Library() {
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
 
   // Subtype ids are category-specific — drop a stale subtype filter when the
-  // user switches Music/Films & TV/Books via the top nav.
+  // user switches Music/Films & TV/Books via the top nav. Must not depend on
+  // filters.media_subtype_id itself, or selecting a subtype filter would
+  // immediately clear it again.
   useEffect(() => {
     if (filters.media_subtype_id) setFilter('media_subtype_id', '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category])
 
   if (!category) {

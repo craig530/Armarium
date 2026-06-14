@@ -89,6 +89,10 @@ export default function SettingsPlex() {
     }
   }
 
+  // load is recreated every render (it closes over state setters), so it
+  // can't be a dependency without re-running on every render — run once on
+  // mount only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [])
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
   useEffect(() => () => {
@@ -198,7 +202,7 @@ export default function SettingsPlex() {
         ) : !config?.configured || !config?.enabled ? (
           <div className="text-center py-8 space-y-3">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Plex isn't configured yet. Set up the connection in Admin to enable library sync.
+              Plex isn&apos;t configured yet. Set up the connection in Admin to enable library sync.
             </p>
             <Link to="/admin">
               <Button size="sm" variant="secondary">Go to Admin</Button>
@@ -308,7 +312,7 @@ export default function SettingsPlex() {
               <section className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                    No longer in "{syncResult.mapping.section_title}" ({syncResult.stale_items.length})
+                    No longer in &quot;{syncResult.mapping.section_title}&quot; ({syncResult.stale_items.length})
                   </h3>
                   <p className="text-xs text-gray-400 mb-2">
                     These items were previously synced from Plex but no longer exist there. Checked

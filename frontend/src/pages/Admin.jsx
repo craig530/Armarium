@@ -455,7 +455,7 @@ function BackupPanel() {
         </Button>
       </div>
       {backups.length === 0 ? (
-        <p className="text-sm text-gray-400">No backups yet. Click "Backup now" to create one.</p>
+        <p className="text-sm text-gray-400">No backups yet. Click &quot;Backup now&quot; to create one.</p>
       ) : (
         <div className="space-y-1.5 max-h-48 overflow-y-auto">
           {backups.map((b) => (
@@ -524,7 +524,7 @@ function PlexIntegrationPanel() {
       })
       .catch((err) => toast.error(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [ensureLoaded])
 
   // Pre-select a platform literally named "Plex" once the reference data has
   // loaded, but only if there's no configured platform to prefer already.
@@ -758,7 +758,7 @@ function LibraryMaintenancePanel() {
       <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Library Maintenance</h2>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
         Find and link copies of the same item across different platforms or locations
-        that aren't linked yet.
+        that aren&apos;t linked yet.
       </p>
       <Button size="sm" variant="secondary" loading={linking} onClick={handleAutoLink}>
         <Link2 size={14} /> Scan &amp; link duplicate copies
