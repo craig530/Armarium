@@ -3,15 +3,12 @@ import io
 from fastapi import APIRouter, Query, HTTPException, Depends, Request, UploadFile, File
 from fastapi.responses import Response
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import select, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
-from ...database import get_db
-from ...models.media import MediaItem
 from ...models.enums import MediaCategory
 from ...schemas.media import LookupCandidate
 from ...models.user import User
+from ...repositories.media_item import MediaItemRepository, get_media_item_repository
 from ...services import openlibrary, musicbrainz, tmdb
 from ...services.barcode import process_barcode
 from ...services.cache import lookup_cache
@@ -53,17 +50,14 @@ async def _scan_rate_limited_user(current_user: User = Depends(get_current_user)
     return current_user
 
 
-async def _library_count(db: AsyncSession, processed: dict) -> int:
+async def _library_count(repo: MediaItemRepository, processed: dict) -> int:
     """Count items already catalogued under this barcode (or ISBN)."""
     lookups = processed["lookups"]
     values = {processed["raw_cleaned"]}
     for key in ("isbn13", "upc_a", "ean13", "ean13_from_upc"):
         if lookups.get(key):
             values.add(lookups[key])
-    stmt = select(func.count(MediaItem.id)).where(
-        or_(MediaItem.barcode.in_(values), MediaItem.isbn.in_(values))
-    )
-    return (await db.execute(stmt)).scalar_one()
+    return await repo.count_by_barcode_or_isbn(values)
 
 
 @router.post("/scan")
@@ -128,7 +122,7 @@ async def lookup_barcode(
     barcode: str,
     category: Optional[MediaCategory] = Query(None),
     _=Depends(_rate_limited_user),
-    db: AsyncSession = Depends(get_db),
+    repo: MediaItemRepository = Depends(get_media_item_repository),
 ):
     processed = process_barcode(barcode)
     if not processed["valid"]:
@@ -169,7 +163,7 @@ async def lookup_barcode(
     if candidates:
         # Computed fresh on every call (not cached) so it reflects items
         # added to the library since the lookup result was first cached.
-        count = await _library_count(db, processed)
+        count = await _library_count(repo, processed)
         for c in candidates:
             c.metadata["library_count"] = count
 

@@ -91,7 +91,7 @@ def _item_to_response(
     linked = link_summaries.get(item.id, [])
 
     own_supertype = subtype_info["supertype"] if subtype_info else None
-    group_supertypes = {l.supertype for l in linked}
+    group_supertypes = {link.supertype for link in linked}
     if own_supertype is not None:
         group_supertypes.add(own_supertype)
 

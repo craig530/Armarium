@@ -4,9 +4,10 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -46,7 +47,7 @@ async def _ensure_admin():
             )
             repo.add(admin)
             await repo.commit()
-            if settings.admin_password == "changeme":
+            if settings.admin_password == "changeme":  # nosec B105 - detecting the unchanged default, not a credential
                 logger.warning(
                     "⚠️  Default admin password in use — set ADMIN_PASSWORD in .env before exposing to network."
                 )
@@ -121,6 +122,18 @@ class AssetExemptGZipMiddleware(GZipMiddleware):
 
 
 app.add_middleware(AssetExemptGZipMiddleware, minimum_size=500)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Log unhandled exceptions to the app logger (visible in `docker logs`
+    for self-hosted deployments) and return a generic 500 — never leak
+    internals/tracebacks to the client. FastAPI's built-in handlers for
+    HTTPException and validation errors take precedence over this, since
+    they're registered for more specific exception types."""
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
 
 app.include_router(router)
 

@@ -309,6 +309,15 @@ class MediaItemRepository(BaseRepository[MediaItem]):
     async def count_total(self) -> int:
         return (await self.db.execute(select(func.count(MediaItem.id)))).scalar_one()
 
+    async def count_by_barcode_or_isbn(self, values: set) -> int:
+        """Count items already catalogued under any of the given
+        barcode/ISBN values (used to flag library duplicates in lookup
+        results)."""
+        stmt = select(func.count(MediaItem.id)).where(
+            or_(MediaItem.barcode.in_(values), MediaItem.isbn.in_(values))
+        )
+        return (await self.db.execute(stmt)).scalar_one()
+
     async def count_by_subtype(self) -> dict:
         rows = await self.db.execute(
             select(MediaSubtype.name, func.count(MediaItem.id))

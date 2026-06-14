@@ -49,6 +49,8 @@ async def setup_fts(conn: AsyncConnection) -> None:
         FTS5_ENABLED = False
         return
 
+    # FTS_COLUMNS is a fixed module-level constant (not user input), so the
+    # f-string DDL/trigger SQL below is not an injection risk. # nosec B608
     columns_sql = ", ".join(FTS_COLUMNS)
     new_values = ", ".join(f"new.{c}" for c in FTS_COLUMNS)
     old_values = ", ".join(f"old.{c}" for c in FTS_COLUMNS)

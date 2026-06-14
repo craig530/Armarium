@@ -85,7 +85,7 @@ def _item_subdir(item_id: int) -> str:
     """Two-level hashed subdirectory for an item's cover files, so a
     catalogue with tens of thousands of items doesn't end up with tens of
     thousands of files in a single flat `covers/` directory."""
-    h = hashlib.md5(str(item_id).encode()).hexdigest()
+    h = hashlib.md5(str(item_id).encode(), usedforsecurity=False).hexdigest()
     return f"{h[:2]}/{h[2:4]}"
 
 
@@ -188,7 +188,7 @@ async def download_cover(url: str, item_id: int, force: bool = False) -> Optiona
     subdir = _item_subdir(item_id)
     dest_dir = covers_dir / subdir
 
-    url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+    url_hash = hashlib.md5(url.encode(), usedforsecurity=False).hexdigest()[:12]
     stem = f"{item_id}_{url_hash}"
     rel_url = f"/covers/{subdir}/{stem}.jpg"
 
@@ -281,7 +281,7 @@ async def optimise_and_save(data: bytes, item_id: int, suffix: str = "upload") -
     covers_dir = Path(settings.covers_dir)
     subdir = _item_subdir(item_id)
     dest_dir = covers_dir / subdir
-    content_hash = hashlib.md5(data).hexdigest()[:12]
+    content_hash = hashlib.md5(data, usedforsecurity=False).hexdigest()[:12]
     stem = f"{item_id}_{suffix}_{content_hash}"
 
     if not _save_sized(data, dest_dir, stem):
