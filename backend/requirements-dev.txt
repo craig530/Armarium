@@ -1,0 +1,13 @@
+# Dev/test/CI-only dependencies — not installed in the production image
+# (see Dockerfile, which only installs requirements.txt). Install with:
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+# Testing
+pytest==9.1.0
+pytest-asyncio==1.4.0
+anyio==4.13.0
+
+# SAST / lint / dependency-CVE scanning — see ARCHITECTURE.md §7.
+ruff==0.15.17
+bandit==1.9.4
+pip-audit==2.10.1

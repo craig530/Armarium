@@ -866,7 +866,7 @@ async def test_plex_remove_stale_item_delinks_without_damaging_partner(client, a
 
 
 async def test_plex_remove_stale_defensive_checks(client, auth_headers):
-    movie_mapping = await _create_movie_mapping(client, auth_headers)
+    await _create_movie_mapping(client, auth_headers)
     tvshow_mapping = await _create_tvshow_mapping(client, auth_headers)
 
     # A manually-added item on a different platform is never removed, even if selected.

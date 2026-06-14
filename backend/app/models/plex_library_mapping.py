@@ -16,7 +16,11 @@ class PlexLibraryMapping(Base):
     section_key = Column(String(50), nullable=False, unique=True)
     section_title = Column(String(300), nullable=False)
     section_type = Column(String(20), nullable=False)  # movie | show | artist
-    category = Column(SQLEnum(MediaCategory), nullable=False)
+    # create_type=False: the `mediacategory` Postgres enum type is already
+    # created by MediaSubtype.category (the first table in creation order to
+    # use it) — without this, Alembic would try to CREATE TYPE it again here
+    # and fail with "type already exists" on PostgreSQL. No effect on SQLite.
+    category = Column(SQLEnum(MediaCategory, create_type=False), nullable=False)
 
     # The media subtype synced items are filed under. Admin-set only — locked
     # (undeletable) on the media subtype while referenced here, so a sync can't

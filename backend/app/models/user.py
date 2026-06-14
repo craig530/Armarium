@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, text, func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, false, true, func
 from datetime import datetime
 from ..database import Base
 
@@ -15,11 +15,11 @@ class User(Base):
     # Granular permissions for non-admin users. Admins bypass all of these.
     # `is_read_only` overrides the others — when set, every write action is
     # blocked regardless of the can_* flags.
-    is_read_only = Column(Boolean, nullable=False, default=False, server_default=text("0"))
-    can_add_items = Column(Boolean, nullable=False, default=True, server_default=text("1"))
-    can_manage_locations = Column(Boolean, nullable=False, default=True, server_default=text("1"))
-    can_manage_platforms = Column(Boolean, nullable=False, default=True, server_default=text("1"))
-    can_manage_media_types = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    is_read_only = Column(Boolean, nullable=False, default=False, server_default=false())
+    can_add_items = Column(Boolean, nullable=False, default=True, server_default=true())
+    can_manage_locations = Column(Boolean, nullable=False, default=True, server_default=true())
+    can_manage_platforms = Column(Boolean, nullable=False, default=True, server_default=true())
+    can_manage_media_types = Column(Boolean, nullable=False, default=False, server_default=false())
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

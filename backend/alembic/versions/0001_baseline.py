@@ -87,11 +87,11 @@ def upgrade() -> None:
     sa.Column('hashed_password', sa.String(length=200), nullable=False),
     sa.Column('is_admin', sa.Boolean(), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('is_read_only', sa.Boolean(), server_default=sa.text('0'), nullable=False),
-    sa.Column('can_add_items', sa.Boolean(), server_default=sa.text('1'), nullable=False),
-    sa.Column('can_manage_locations', sa.Boolean(), server_default=sa.text('1'), nullable=False),
-    sa.Column('can_manage_platforms', sa.Boolean(), server_default=sa.text('1'), nullable=False),
-    sa.Column('can_manage_media_types', sa.Boolean(), server_default=sa.text('0'), nullable=False),
+    sa.Column('is_read_only', sa.Boolean(), server_default=sa.false(), nullable=False),
+    sa.Column('can_add_items', sa.Boolean(), server_default=sa.true(), nullable=False),
+    sa.Column('can_manage_locations', sa.Boolean(), server_default=sa.true(), nullable=False),
+    sa.Column('can_manage_platforms', sa.Boolean(), server_default=sa.true(), nullable=False),
+    sa.Column('can_manage_media_types', sa.Boolean(), server_default=sa.false(), nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.PrimaryKeyConstraint('id')
@@ -172,7 +172,11 @@ def upgrade() -> None:
     sa.Column('section_key', sa.String(length=50), nullable=False),
     sa.Column('section_title', sa.String(length=300), nullable=False),
     sa.Column('section_type', sa.String(length=20), nullable=False),
-    sa.Column('category', sa.Enum('MUSIC', 'FILMS_TV', 'BOOKS', name='mediacategory'), nullable=False),
+    # create_type=False — the `mediacategory` Postgres enum type is already
+    # created above by media_subtypes.category; re-declaring it here without
+    # this would emit a second `CREATE TYPE mediacategory` and fail with
+    # "type already exists" on PostgreSQL. No effect on SQLite.
+    sa.Column('category', sa.Enum('MUSIC', 'FILMS_TV', 'BOOKS', name='mediacategory', create_type=False), nullable=False),
     sa.Column('media_subtype_id', sa.Integer(), nullable=True),
     sa.Column('last_synced_at', sa.DateTime(), nullable=True),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
@@ -203,11 +207,17 @@ def upgrade() -> None:
 
     # ### end Alembic commands ###
 
+    # category/supertype use the real Enum types (create_type=False — both
+    # types already exist from the create_table calls above) rather than
+    # plain String columns: on PostgreSQL, SQLAlchemy wraps Enum-typed bind
+    # parameters in a `CAST(... AS mediacategory/supertype)`, which a plain
+    # String column would not do — without it, asyncpg sends these values as
+    # text and Postgres rejects the INSERT with a type mismatch.
     media_subtypes = sa.table(
         'media_subtypes',
         sa.column('name', sa.String),
-        sa.column('category', sa.String),
-        sa.column('supertype', sa.String),
+        sa.column('category', sa.Enum('MUSIC', 'FILMS_TV', 'BOOKS', name='mediacategory', create_type=False)),
+        sa.column('supertype', sa.Enum('PHYSICAL', 'DIGITAL', name='supertype', create_type=False)),
         sa.column('sort_order', sa.Integer),
     )
     op.bulk_insert(media_subtypes, _DEFAULT_MEDIA_SUBTYPES)
