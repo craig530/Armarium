@@ -410,6 +410,82 @@ class MediaItemRepository(BaseRepository[MediaItem]):
 
         return await self.link_unlinked(item, candidates)
 
+    # ---- Plex sync ----
+
+    @staticmethod
+    def _identity_filter(stmt, tmdb_id, musicbrainz_id, title, year):
+        """Narrow a `select(MediaItem)` statement to items matching the given
+        identity — tmdb_id/musicbrainz_id when present, otherwise
+        case-insensitive title + year."""
+        if tmdb_id is not None:
+            return stmt.where(MediaItem.tmdb_id == tmdb_id)
+        if musicbrainz_id is not None:
+            return stmt.where(MediaItem.musicbrainz_id == musicbrainz_id)
+        return stmt.where(MediaItem.title.ilike(title), MediaItem.year == year)
+
+    async def find_plex_duplicate(
+        self,
+        *,
+        platform_id: int,
+        media_subtype_id: Optional[int],
+        tmdb_id: Optional[int],
+        musicbrainz_id: Optional[str],
+        title: str,
+        year: Optional[int],
+    ) -> Optional[MediaItem]:
+        """The item that *is* the Plex copy of a synced item: filed under the
+        configured Plex platform and library's media subtype, with a matching
+        identity. This is the item to update in place."""
+        stmt = select(MediaItem).where(
+            MediaItem.platform_id == platform_id,
+            MediaItem.media_subtype_id == media_subtype_id,
+        )
+        stmt = self._identity_filter(stmt, tmdb_id, musicbrainz_id, title, year)
+        return (await self.db.execute(stmt)).scalars().first()
+
+    async def find_link_candidates(
+        self,
+        *,
+        category: MediaCategory,
+        platform_id: int,
+        media_subtype_id: Optional[int],
+        tmdb_id: Optional[int],
+        musicbrainz_id: Optional[str],
+        title: str,
+        year: Optional[int],
+        exclude_id: Optional[int] = None,
+    ) -> Sequence[MediaItem]:
+        """Other items matching the given identity that are *not* the Plex
+        copy — other-platform digital copies or physical copies the user
+        already owns, to be linked to the Plex copy."""
+        stmt = (
+            select(MediaItem)
+            .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
+            .where(
+                MediaSubtype.category == category,
+                or_(
+                    MediaItem.platform_id != platform_id,
+                    MediaItem.platform_id.is_(None),
+                    MediaItem.media_subtype_id != media_subtype_id,
+                ),
+            )
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(MediaItem.id != exclude_id)
+        stmt = self._identity_filter(stmt, tmdb_id, musicbrainz_id, title, year)
+        return (await self.db.execute(stmt)).scalars().all()
+
+    async def list_by_platform_and_subtype(
+        self, platform_id: int, media_subtype_id: Optional[int], exclude_ids: Optional[set] = None
+    ) -> Sequence[MediaItem]:
+        stmt = select(MediaItem).where(
+            MediaItem.platform_id == platform_id,
+            MediaItem.media_subtype_id == media_subtype_id,
+        )
+        if exclude_ids:
+            stmt = stmt.where(MediaItem.id.notin_(exclude_ids))
+        return (await self.db.execute(stmt)).scalars().all()
+
     # ---- Bulk ----
 
     async def delete_all(self) -> None:

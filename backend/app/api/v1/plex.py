@@ -2,15 +2,11 @@ import asyncio
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
-from sqlalchemy import or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
-from ...database import AsyncSessionLocal, get_db
+from ...database import AsyncSessionLocal
 from ...models.enums import MediaCategory, Supertype
-from ...models.item_link import ItemLink
 from ...models.media import MediaItem
-from ...models.media_subtype import MediaSubtype
 from ...models.platform import Platform
 from ...models.plex_config import PlexConfig
 from ...models.plex_library_mapping import PlexLibraryMapping
@@ -33,7 +29,15 @@ from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
 from ...services.cover_art import delete_cover_files, optimise_and_save
 from ...services.plex_sync_jobs import PlexSyncJob, get_job, set_job
-from ...repositories.media_item import MediaItemRepository
+from ...repositories.media_item import MediaItemRepository, get_media_item_repository
+from ...repositories.media_subtype import MediaSubtypeRepository, get_media_subtype_repository
+from ...repositories.platform import PlatformRepository, get_platform_repository
+from ...repositories.plex import (
+    PlexConfigRepository,
+    PlexLibraryMappingRepository,
+    get_plex_config_repository,
+    get_plex_library_mapping_repository,
+)
 from .media import _build_responses
 
 router = APIRouter()
@@ -54,17 +58,6 @@ _SECTION_SUBTYPE_NAME = {
     "show": "TV Series",
     "artist": "Music",
 }
-
-
-async def _get_config(db: AsyncSession) -> PlexConfig | None:
-    return (await db.execute(select(PlexConfig))).scalars().first()
-
-
-async def _require_plex_config(db: AsyncSession) -> PlexConfig:
-    config = await _get_config(db)
-    if config is None or not config.enabled:
-        raise HTTPException(status_code=400, detail="Plex integration is not configured or not enabled")
-    return config
 
 
 def _platform_summary(platform: Platform) -> PlatformSummary:
@@ -89,8 +82,8 @@ def _to_mapping_response(mapping: PlexLibraryMapping) -> PlexMappingResponse:
 
 
 @router.get("/config", response_model=PlexConfigResponse)
-async def get_config(_=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
-    config = await _get_config(db)
+async def get_config(_=Depends(get_current_admin), repo: PlexConfigRepository = Depends(get_plex_config_repository)):
+    config = await repo.get_singleton()
     if config is None:
         return PlexConfigResponse(configured=False, enabled=False, base_url=None)
     return PlexConfigResponse(
@@ -105,35 +98,23 @@ async def get_config(_=Depends(get_current_admin), db: AsyncSession = Depends(ge
 async def update_config(
     payload: PlexConfigUpdate,
     _=Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
+    config_repo: PlexConfigRepository = Depends(get_plex_config_repository),
+    platform_repo: PlatformRepository = Depends(get_platform_repository),
 ):
-    platform = (await db.execute(select(Platform).where(Platform.id == payload.platform_id))).scalar_one_or_none()
+    platform = await platform_repo.get(payload.platform_id)
     if platform is None:
         raise HTTPException(status_code=404, detail="Platform not found")
 
-    config = await _get_config(db)
-    if config is None:
-        if not payload.token:
-            raise HTTPException(status_code=400, detail="Token is required for initial setup")
-        config = PlexConfig(base_url=payload.base_url, token=payload.token, enabled=payload.enabled, platform_id=platform.id)
-        db.add(config)
-    else:
-        config.base_url = payload.base_url
-        config.enabled = payload.enabled
-        config.platform_id = platform.id
-        if payload.token:
-            config.token = payload.token
-
-    await db.commit()
+    config = await config_repo.upsert(
+        base_url=payload.base_url, token=payload.token, enabled=payload.enabled, platform_id=platform.id
+    )
+    await config_repo.commit()
     return PlexConfigResponse(configured=True, enabled=config.enabled, base_url=config.base_url, platform=_platform_summary(platform))
 
 
 @router.delete("/config", status_code=204)
-async def delete_config(_=Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
-    config = await _get_config(db)
-    if config is not None:
-        await db.delete(config)
-        await db.commit()
+async def delete_config(_=Depends(get_current_admin), repo: PlexConfigRepository = Depends(get_plex_config_repository)):
+    await repo.delete_singleton()
 
 
 @router.post("/test")
@@ -147,14 +128,13 @@ async def test_connection(payload: PlexTestRequest, _=Depends(get_current_admin)
 @router.get("/sections", response_model=List[PlexSectionResponse])
 async def get_sections(
     _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
+    config_repo: PlexConfigRepository = Depends(get_plex_config_repository),
+    mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
 ):
-    config = await _require_plex_config(db)
+    config = await config_repo.require_enabled()
     sections = await plex_service.list_sections(config.base_url, config.token)
 
-    mapped_keys = set(
-        (await db.execute(select(PlexLibraryMapping.section_key))).scalars().all()
-    )
+    mapped_keys = await mapping_repo.mapped_section_keys()
     return [
         PlexSectionResponse(key=s["key"], title=s["title"], type=s["type"], mapped=s["key"] in mapped_keys)
         for s in sections
@@ -164,9 +144,9 @@ async def get_sections(
 @router.get("/mappings", response_model=List[PlexMappingResponse])
 async def list_mappings(
     _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
+    repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
 ):
-    mappings = (await db.execute(select(PlexLibraryMapping))).scalars().all()
+    mappings = await repo.list_all()
     return [_to_mapping_response(m) for m in mappings]
 
 
@@ -174,14 +154,13 @@ async def list_mappings(
 async def create_mapping(
     payload: PlexMappingCreate,
     _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
+    config_repo: PlexConfigRepository = Depends(get_plex_config_repository),
+    mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    subtype_repo: MediaSubtypeRepository = Depends(get_media_subtype_repository),
 ):
-    config = await _require_plex_config(db)
+    config = await config_repo.require_enabled()
 
-    existing = (
-        await db.execute(select(PlexLibraryMapping).where(PlexLibraryMapping.section_key == payload.section_key))
-    ).scalar_one_or_none()
-    if existing is not None:
+    if await mapping_repo.find_by_section_key(payload.section_key) is not None:
         raise HTTPException(status_code=409, detail="This library is already mapped")
 
     sections = await plex_service.list_sections(config.base_url, config.token)
@@ -190,26 +169,20 @@ async def create_mapping(
         raise HTTPException(status_code=404, detail="Plex library section not found")
 
     category = _SECTION_CATEGORY[section["type"]]
-    default_subtype = (
-        await db.execute(
-            select(MediaSubtype).where(
-                MediaSubtype.category == category,
-                MediaSubtype.supertype == Supertype.DIGITAL,
-                MediaSubtype.name == _SECTION_SUBTYPE_NAME[section["type"]],
-            )
-        )
-    ).scalar_one_or_none()
+    default_subtype_id = await subtype_repo.find_by_name_in_category(
+        category, Supertype.DIGITAL, _SECTION_SUBTYPE_NAME[section["type"]]
+    )
 
     mapping = PlexLibraryMapping(
         section_key=section["key"],
         section_title=section["title"],
         section_type=section["type"],
         category=category,
-        media_subtype_id=default_subtype.id if default_subtype else None,
+        media_subtype_id=default_subtype_id,
     )
-    db.add(mapping)
-    await db.commit()
-    await db.refresh(mapping)
+    mapping_repo.add(mapping)
+    await mapping_repo.commit()
+    await mapping_repo.refresh(mapping)
     return _to_mapping_response(mapping)
 
 
@@ -217,21 +190,11 @@ async def create_mapping(
 async def delete_mapping(
     mapping_id: int,
     _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
+    repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
 ):
-    mapping = (await db.execute(select(PlexLibraryMapping).where(PlexLibraryMapping.id == mapping_id))).scalar_one_or_none()
-    if mapping is None:
-        raise HTTPException(status_code=404, detail="Mapping not found")
-
-    await db.delete(mapping)
-    await db.commit()
-
-
-async def _get_mapping_or_404(db: AsyncSession, mapping_id: int) -> PlexLibraryMapping:
-    mapping = (await db.execute(select(PlexLibraryMapping).where(PlexLibraryMapping.id == mapping_id))).scalar_one_or_none()
-    if mapping is None:
-        raise HTTPException(status_code=404, detail="Mapping not found")
-    return mapping
+    mapping = await repo.get_or_404(mapping_id)
+    await repo.delete(mapping)
+    await repo.commit()
 
 
 @router.put("/mappings/{mapping_id}", response_model=PlexMappingResponse)
@@ -239,13 +202,12 @@ async def update_mapping(
     mapping_id: int,
     payload: PlexMappingUpdate,
     _=Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
+    mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    subtype_repo: MediaSubtypeRepository = Depends(get_media_subtype_repository),
 ):
-    mapping = await _get_mapping_or_404(db, mapping_id)
+    mapping = await mapping_repo.get_or_404(mapping_id)
 
-    subtype = (
-        await db.execute(select(MediaSubtype).where(MediaSubtype.id == payload.media_subtype_id))
-    ).scalar_one_or_none()
+    subtype = await subtype_repo.get(payload.media_subtype_id)
     if subtype is None:
         raise HTTPException(status_code=404, detail="Media subtype not found")
     if subtype.category != mapping.category or subtype.supertype != Supertype.DIGITAL:
@@ -255,8 +217,8 @@ async def update_mapping(
         )
 
     mapping.media_subtype_id = subtype.id
-    await db.commit()
-    await db.refresh(mapping)
+    await mapping_repo.commit()
+    await mapping_repo.refresh(mapping)
     return _to_mapping_response(mapping)
 
 
@@ -289,58 +251,7 @@ def _to_sync_fields(item: dict, section_type: str) -> dict:
     return fields
 
 
-def _identity_filter(stmt, sync_item: PlexSyncItem):
-    """Narrow a `select(MediaItem)` statement to items matching `sync_item`'s
-    identity — tmdb_id/musicbrainz_id when the Plex item has one, otherwise
-    case-insensitive title + year."""
-    if sync_item.tmdb_id is not None:
-        return stmt.where(MediaItem.tmdb_id == sync_item.tmdb_id)
-    if sync_item.musicbrainz_id is not None:
-        return stmt.where(MediaItem.musicbrainz_id == sync_item.musicbrainz_id)
-    return stmt.where(MediaItem.title.ilike(sync_item.title), MediaItem.year == sync_item.year)
-
-
-async def _find_existing_plex_item(
-    db: AsyncSession, mapping: PlexLibraryMapping, config: PlexConfig, sync_item: PlexSyncItem
-) -> Optional[MediaItem]:
-    """The MediaItem that *is* the Plex copy of `sync_item`: filed under the
-    configured Plex platform and this mapping's media subtype, with a
-    matching identity. This is the item to update in place."""
-    stmt = select(MediaItem).where(
-        MediaItem.platform_id == config.platform_id,
-        MediaItem.media_subtype_id == mapping.media_subtype_id,
-    )
-    return (await db.execute(_identity_filter(stmt, sync_item))).scalars().first()
-
-
-async def _find_link_candidates(
-    db: AsyncSession,
-    mapping: PlexLibraryMapping,
-    config: PlexConfig,
-    sync_item: PlexSyncItem,
-    exclude_id: Optional[int] = None,
-) -> list[MediaItem]:
-    """Other items matching `sync_item`'s identity that are *not* the Plex
-    copy — other-platform digital copies or physical copies the user already
-    owns, to be linked to the Plex copy."""
-    stmt = (
-        select(MediaItem)
-        .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
-        .where(
-            MediaSubtype.category == mapping.category,
-            or_(
-                MediaItem.platform_id != config.platform_id,
-                MediaItem.platform_id.is_(None),
-                MediaItem.media_subtype_id != mapping.media_subtype_id,
-            ),
-        )
-    )
-    if exclude_id is not None:
-        stmt = stmt.where(MediaItem.id != exclude_id)
-    return (await db.execute(_identity_filter(stmt, sync_item))).scalars().all()
-
-
-async def _apply_cover(db: AsyncSession, config: PlexConfig, item: MediaItem, thumb: Optional[str]) -> None:
+async def _apply_cover(config: PlexConfig, item: MediaItem, thumb: Optional[str]) -> None:
     if not thumb:
         return
     data = await plex_service.fetch_thumbnail(config.base_url, config.token, thumb)
@@ -359,11 +270,11 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
     everything it needs."""
     async with AsyncSessionLocal() as db:
         repo = MediaItemRepository(db)
+        config_repo = PlexConfigRepository(db)
+        mapping_repo = PlexLibraryMappingRepository(db)
         try:
-            mapping = (
-                await db.execute(select(PlexLibraryMapping).where(PlexLibraryMapping.id == mapping_id))
-            ).scalar_one_or_none()
-            config = await _get_config(db)
+            mapping = await mapping_repo.get(mapping_id)
+            config = await config_repo.get_singleton()
             if mapping is None or config is None or not config.enabled:
                 job.status = "error"
                 job.error = "Plex integration is not configured or not enabled"
@@ -394,13 +305,29 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                 fields = _to_sync_fields(raw_item, section_type)
                 sync_item = PlexSyncItem(guid=guid, cover_thumb=raw_item.get("thumb"), **fields)
 
-                existing = await _find_existing_plex_item(db, mapping, config, sync_item)
+                existing = await repo.find_plex_duplicate(
+                    platform_id=config.platform_id,
+                    media_subtype_id=mapping.media_subtype_id,
+                    tmdb_id=sync_item.tmdb_id,
+                    musicbrainz_id=sync_item.musicbrainz_id,
+                    title=sync_item.title,
+                    year=sync_item.year,
+                )
 
                 if existing is not None:
                     for field_name, value in fields.items():
                         setattr(existing, field_name, value)
-                    await _apply_cover(db, config, existing, raw_item.get("thumb"))
-                    candidates = await _find_link_candidates(db, mapping, config, sync_item, exclude_id=existing.id)
+                    await _apply_cover(config, existing, raw_item.get("thumb"))
+                    candidates = await repo.find_link_candidates(
+                        category=mapping.category,
+                        platform_id=config.platform_id,
+                        media_subtype_id=mapping.media_subtype_id,
+                        tmdb_id=sync_item.tmdb_id,
+                        musicbrainz_id=sync_item.musicbrainz_id,
+                        title=sync_item.title,
+                        year=sync_item.year,
+                        exclude_id=existing.id,
+                    )
                     await repo.link_unlinked(existing, candidates)
                     seen_item_ids.add(existing.id)
                     job.updated += 1
@@ -408,7 +335,15 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                     await db.commit()
                     continue
 
-                candidates = await _find_link_candidates(db, mapping, config, sync_item)
+                candidates = await repo.find_link_candidates(
+                    category=mapping.category,
+                    platform_id=config.platform_id,
+                    media_subtype_id=mapping.media_subtype_id,
+                    tmdb_id=sync_item.tmdb_id,
+                    musicbrainz_id=sync_item.musicbrainz_id,
+                    title=sync_item.title,
+                    year=sync_item.year,
+                )
                 item = MediaItem(
                     media_subtype_id=mapping.media_subtype_id,
                     platform_id=config.platform_id,
@@ -416,7 +351,7 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                 )
                 db.add(item)
                 await db.flush()
-                await _apply_cover(db, config, item, raw_item.get("thumb"))
+                await _apply_cover(config, item, raw_item.get("thumb"))
                 await db.flush()
                 await repo.link_unlinked(item, candidates)
                 seen_item_ids.add(item.id)
@@ -430,13 +365,9 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                 job.stale_items = []
                 return
 
-            stale_stmt = select(MediaItem).where(
-                MediaItem.platform_id == config.platform_id,
-                MediaItem.media_subtype_id == mapping.media_subtype_id,
+            stale_items = await repo.list_by_platform_and_subtype(
+                config.platform_id, mapping.media_subtype_id, exclude_ids=seen_item_ids
             )
-            if seen_item_ids:
-                stale_stmt = stale_stmt.where(MediaItem.id.notin_(seen_item_ids))
-            stale_items = (await db.execute(stale_stmt)).scalars().all()
             job.stale_items = await _build_responses(repo, stale_items) if stale_items else []
 
             mapping.last_synced_at = datetime.utcnow()
@@ -473,10 +404,11 @@ _background_tasks: set[asyncio.Task] = set()
 async def sync_mapping(
     mapping_id: int,
     _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
+    mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    config_repo: PlexConfigRepository = Depends(get_plex_config_repository),
 ):
-    mapping = await _get_mapping_or_404(db, mapping_id)
-    await _require_plex_config(db)
+    mapping = await mapping_repo.get_or_404(mapping_id)
+    await config_repo.require_enabled()
     if mapping.media_subtype_id is None:
         raise HTTPException(
             status_code=400,
@@ -499,9 +431,9 @@ async def sync_mapping(
 async def get_sync_status(
     mapping_id: int,
     _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
+    repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
 ):
-    await _get_mapping_or_404(db, mapping_id)
+    await repo.get_or_404(mapping_id)
     return _job_status(get_job(mapping_id))
 
 
@@ -509,9 +441,9 @@ async def get_sync_status(
 async def cancel_sync(
     mapping_id: int,
     _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
+    repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
 ):
-    await _get_mapping_or_404(db, mapping_id)
+    await repo.get_or_404(mapping_id)
     job = get_job(mapping_id)
     if job is None or job.status != "running":
         raise HTTPException(status_code=409, detail="No sync is currently running for this library")
@@ -524,14 +456,16 @@ async def remove_stale_items(
     mapping_id: int,
     payload: PlexRemoveStaleRequest,
     _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
+    mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    config_repo: PlexConfigRepository = Depends(get_plex_config_repository),
+    repo: MediaItemRepository = Depends(get_media_item_repository),
 ):
-    mapping = await _get_mapping_or_404(db, mapping_id)
-    config = await _require_plex_config(db)
+    mapping = await mapping_repo.get_or_404(mapping_id)
+    config = await config_repo.require_enabled()
 
     removed = 0
     for item_id in payload.item_ids:
-        item = (await db.execute(select(MediaItem).where(MediaItem.id == item_id))).scalar_one_or_none()
+        item = await repo.get(item_id)
         if (
             item is None
             or item.platform_id != config.platform_id
@@ -539,17 +473,12 @@ async def remove_stale_items(
         ):
             continue
 
-        links = (
-            await db.execute(
-                select(ItemLink).where(or_(ItemLink.item_a_id == item_id, ItemLink.item_b_id == item_id))
-            )
-        ).scalars().all()
-        for link in links:
-            await db.delete(link)
+        for link in await repo.links_for_item(item_id):
+            await repo.delete_link(link)
 
         delete_cover_files(item.cover_image_path)
-        await db.delete(item)
+        await repo.delete(item)
         removed += 1
 
-    await db.commit()
+    await repo.commit()
     return {"removed": removed}
