@@ -14,7 +14,6 @@ class PlexSyncJob:
     processed: int = 0
     created: int = 0
     updated: int = 0
-    conflicts: list = field(default_factory=list)
     stale_items: list = field(default_factory=list)
     error: Optional[str] = None
     cancel_requested: bool = False

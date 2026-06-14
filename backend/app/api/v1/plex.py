@@ -17,14 +17,12 @@ from ...models.plex_library_mapping import PlexLibraryMapping
 from ...schemas.media import PlatformSummary
 from ...schemas.plex import (
     MediaSubtypeSummary,
-    PlexConflict,
     PlexConfigResponse,
     PlexConfigUpdate,
     PlexMappingCreate,
     PlexMappingResponse,
     PlexMappingUpdate,
     PlexRemoveStaleRequest,
-    PlexResolveRequest,
     PlexSectionResponse,
     PlexSyncItem,
     PlexSyncResult,
@@ -35,7 +33,7 @@ from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
 from ...services.cover_art import delete_cover_files, optimise_and_save
 from ...services.plex_sync_jobs import PlexSyncJob, get_job, set_job
-from .media import _build_response, _build_responses, _link_unlinked
+from .media import _build_responses, _link_unlinked
 
 router = APIRouter()
 
@@ -290,27 +288,55 @@ def _to_sync_fields(item: dict, section_type: str) -> dict:
     return fields
 
 
-async def _find_matches(db: AsyncSession, mapping: PlexLibraryMapping, sync_item: PlexSyncItem) -> list[MediaItem]:
-    """Look for existing, non-Plex-sourced items that look like the same
-    title — matched by tmdb_id/musicbrainz_id when the Plex item has one,
-    otherwise by case-insensitive title + year. Includes both digital
-    (other-platform) and physical items — both are link candidates; the
-    caller decides which (if any) is a same-platform duplicate."""
+def _identity_filter(stmt, sync_item: PlexSyncItem):
+    """Narrow a `select(MediaItem)` statement to items matching `sync_item`'s
+    identity — tmdb_id/musicbrainz_id when the Plex item has one, otherwise
+    case-insensitive title + year."""
+    if sync_item.tmdb_id is not None:
+        return stmt.where(MediaItem.tmdb_id == sync_item.tmdb_id)
+    if sync_item.musicbrainz_id is not None:
+        return stmt.where(MediaItem.musicbrainz_id == sync_item.musicbrainz_id)
+    return stmt.where(MediaItem.title.ilike(sync_item.title), MediaItem.year == sync_item.year)
+
+
+async def _find_existing_plex_item(
+    db: AsyncSession, mapping: PlexLibraryMapping, config: PlexConfig, sync_item: PlexSyncItem
+) -> Optional[MediaItem]:
+    """The MediaItem that *is* the Plex copy of `sync_item`: filed under the
+    configured Plex platform and this mapping's media subtype, with a
+    matching identity. This is the item to update in place."""
+    stmt = select(MediaItem).where(
+        MediaItem.platform_id == config.platform_id,
+        MediaItem.media_subtype_id == mapping.media_subtype_id,
+    )
+    return (await db.execute(_identity_filter(stmt, sync_item))).scalars().first()
+
+
+async def _find_link_candidates(
+    db: AsyncSession,
+    mapping: PlexLibraryMapping,
+    config: PlexConfig,
+    sync_item: PlexSyncItem,
+    exclude_id: Optional[int] = None,
+) -> list[MediaItem]:
+    """Other items matching `sync_item`'s identity that are *not* the Plex
+    copy — other-platform digital copies or physical copies the user already
+    owns, to be linked to the Plex copy."""
     stmt = (
         select(MediaItem)
         .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
         .where(
             MediaSubtype.category == mapping.category,
-            or_(MediaItem.source != "plex", MediaItem.source.is_(None)),
+            or_(
+                MediaItem.platform_id != config.platform_id,
+                MediaItem.platform_id.is_(None),
+                MediaItem.media_subtype_id != mapping.media_subtype_id,
+            ),
         )
     )
-    if sync_item.tmdb_id is not None:
-        stmt = stmt.where(MediaItem.tmdb_id == sync_item.tmdb_id)
-    elif sync_item.musicbrainz_id is not None:
-        stmt = stmt.where(MediaItem.musicbrainz_id == sync_item.musicbrainz_id)
-    else:
-        stmt = stmt.where(MediaItem.title.ilike(sync_item.title), MediaItem.year == sync_item.year)
-    return (await db.execute(stmt)).scalars().all()
+    if exclude_id is not None:
+        stmt = stmt.where(MediaItem.id != exclude_id)
+    return (await db.execute(_identity_filter(stmt, sync_item))).scalars().all()
 
 
 async def _apply_cover(db: AsyncSession, config: PlexConfig, item: MediaItem, thumb: Optional[str]) -> None:
@@ -347,14 +373,11 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
 
             section_key = mapping.section_key
             section_type = mapping.section_type
-            media_subtype_id = mapping.media_subtype_id
-            platform_id = config.platform_id
 
             plex_items = await plex_service.list_section_items(config.base_url, config.token, section_key, section_type)
             job.total = len(plex_items)
 
-            conflicts: list[PlexConflict] = []
-            seen_source_ids: set[str] = set()
+            seen_item_ids: set[int] = set()
 
             for raw_item in plex_items:
                 if job.cancel_requested:
@@ -366,68 +389,52 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                     job.processed += 1
                     continue
 
-                source_id = f"{mapping_id}:{guid}"
-                seen_source_ids.add(source_id)
                 fields = _to_sync_fields(raw_item, section_type)
                 sync_item = PlexSyncItem(guid=guid, cover_thumb=raw_item.get("thumb"), **fields)
 
-                existing = (
-                    await db.execute(
-                        select(MediaItem).where(MediaItem.source == "plex", MediaItem.source_id == source_id)
-                    )
-                ).scalar_one_or_none()
+                existing = await _find_existing_plex_item(db, mapping, config, sync_item)
 
                 if existing is not None:
                     for field_name, value in fields.items():
                         setattr(existing, field_name, value)
                     await _apply_cover(db, config, existing, raw_item.get("thumb"))
+                    candidates = await _find_link_candidates(db, mapping, config, sync_item, exclude_id=existing.id)
+                    await _link_unlinked(db, existing, candidates)
+                    seen_item_ids.add(existing.id)
                     job.updated += 1
                     job.processed += 1
                     await db.commit()
                     continue
 
-                matches = await _find_matches(db, mapping, sync_item)
-                # A duplicate is when platform and item match — same identity, same
-                # configured Plex platform. Anything else (a different digital
-                # platform, or a physical copy) is a related copy to link, not a
-                # conflict.
-                duplicate = next((m for m in matches if m.platform_id == platform_id), None)
-                if duplicate is not None:
-                    conflicts.append(PlexConflict(existing_item=await _build_response(db, duplicate), plex_item=sync_item))
-                    job.processed += 1
-                    await db.commit()
-                    continue
-
+                candidates = await _find_link_candidates(db, mapping, config, sync_item)
                 item = MediaItem(
-                    media_subtype_id=media_subtype_id,
-                    platform_id=platform_id,
-                    source="plex",
-                    source_id=source_id,
+                    media_subtype_id=mapping.media_subtype_id,
+                    platform_id=config.platform_id,
                     **fields,
                 )
                 db.add(item)
                 await db.flush()
                 await _apply_cover(db, config, item, raw_item.get("thumb"))
                 await db.flush()
-                await _link_unlinked(db, item, matches)
+                await _link_unlinked(db, item, candidates)
+                seen_item_ids.add(item.id)
                 job.created += 1
                 job.processed += 1
                 await db.commit()
 
-            job.conflicts = conflicts
-
             if job.status == "cancelled":
-                # seen_source_ids is incomplete, so stale-item detection
-                # would incorrectly flag items the loop hasn't reached yet.
+                # seen_item_ids is incomplete, so stale-item detection would
+                # incorrectly flag items the loop hasn't reached yet.
                 job.stale_items = []
                 return
 
-            stale_items = (
-                await db.execute(
-                    select(MediaItem).where(MediaItem.source == "plex", MediaItem.source_id.like(f"{mapping_id}:%"))
-                )
-            ).scalars().all()
-            stale_items = [i for i in stale_items if i.source_id not in seen_source_ids]
+            stale_stmt = select(MediaItem).where(
+                MediaItem.platform_id == config.platform_id,
+                MediaItem.media_subtype_id == mapping.media_subtype_id,
+            )
+            if seen_item_ids:
+                stale_stmt = stale_stmt.where(MediaItem.id.notin_(seen_item_ids))
+            stale_items = (await db.execute(stale_stmt)).scalars().all()
             job.stale_items = await _build_responses(db, stale_items) if stale_items else []
 
             mapping.last_synced_at = datetime.utcnow()
@@ -443,7 +450,7 @@ def _job_status(job: Optional[PlexSyncJob]) -> PlexSyncStatus:
         return PlexSyncStatus(status="idle")
     result = None
     if job.status in ("completed", "cancelled"):
-        result = PlexSyncResult(created=job.created, updated=job.updated, conflicts=job.conflicts, stale_items=job.stale_items)
+        result = PlexSyncResult(created=job.created, updated=job.updated, stale_items=job.stale_items)
     return PlexSyncStatus(
         status=job.status,
         total=job.total,
@@ -510,62 +517,6 @@ async def cancel_sync(
     return _job_status(job)
 
 
-# Fields a `PlexSyncItem` carries over onto an adopted `MediaItem` when the
-# user chooses "use_plex" for a conflict.
-_SYNC_CONTENT_FIELDS = [
-    "title", "year", "genres", "description", "director", "studio",
-    "runtime_minutes", "rating", "cast_list", "seasons_owned", "episode_count",
-    "artist", "label", "track_count", "tmdb_id", "musicbrainz_id",
-]
-
-
-@router.post("/mappings/{mapping_id}/resolve-conflicts")
-async def resolve_conflicts(
-    mapping_id: int,
-    payload: PlexResolveRequest,
-    _=Depends(require_permission("can_add_items")),
-    db: AsyncSession = Depends(get_db),
-):
-    mapping = await _get_mapping_or_404(db, mapping_id)
-    config = await _require_plex_config(db)
-    if mapping.media_subtype_id is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No media type configured for this library — an admin must set one in Plex Sync settings",
-        )
-
-    resolved = 0
-    for res in payload.resolutions:
-        item = (
-            await db.execute(select(MediaItem).where(MediaItem.id == res.existing_item_id))
-        ).scalar_one_or_none()
-        if item is None:
-            raise HTTPException(status_code=404, detail=f"Item {res.existing_item_id} not found")
-
-        # Adopt the existing item: tag it as Plex-sourced so it stops
-        # re-appearing as a conflict and becomes eligible for stale-detection.
-        item.source = "plex"
-        item.source_id = f"{mapping.id}:{res.plex_item.guid}"
-        item.media_subtype_id = mapping.media_subtype_id
-        item.platform_id = config.platform_id
-
-        if res.resolution == "use_plex":
-            for field in _SYNC_CONTENT_FIELDS:
-                setattr(item, field, getattr(res.plex_item, field))
-            await _apply_cover(db, config, item, res.plex_item.cover_thumb)
-
-        # The user may also own this item on other digital platforms or
-        # physically — link those copies to the now-adopted Plex item.
-        await db.flush()
-        matches = await _find_matches(db, mapping, res.plex_item)
-        await _link_unlinked(db, item, [m for m in matches if m.platform_id != config.platform_id])
-
-        resolved += 1
-
-    await db.commit()
-    return {"resolved": resolved}
-
-
 @router.post("/mappings/{mapping_id}/remove-stale")
 async def remove_stale_items(
     mapping_id: int,
@@ -574,12 +525,16 @@ async def remove_stale_items(
     db: AsyncSession = Depends(get_db),
 ):
     mapping = await _get_mapping_or_404(db, mapping_id)
-    prefix = f"{mapping.id}:"
+    config = await _require_plex_config(db)
 
     removed = 0
     for item_id in payload.item_ids:
         item = (await db.execute(select(MediaItem).where(MediaItem.id == item_id))).scalar_one_or_none()
-        if item is None or item.source != "plex" or not (item.source_id or "").startswith(prefix):
+        if (
+            item is None
+            or item.platform_id != config.platform_id
+            or item.media_subtype_id != mapping.media_subtype_id
+        ):
             continue
 
         links = (

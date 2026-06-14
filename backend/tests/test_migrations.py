@@ -17,6 +17,7 @@ from app.migrations import (
     run_additive_migrations,
     create_missing_indexes,
     add_location_sort_order_column,
+    drop_plex_source_columns,
     reset_mismatched_plex_tables,
     _MISSING_INDEXES,
 )
@@ -52,8 +53,6 @@ async def test_adds_missing_nullable_columns():
     assert "barcode" in after_columns
     assert "notes" in after_columns
     assert "location_id" in after_columns
-    assert "source" in after_columns
-    assert "source_id" in after_columns
     # Pre-existing columns are untouched.
     assert "title" in after_columns
     assert "media_type" in after_columns
@@ -135,6 +134,47 @@ async def test_add_location_sort_order_column():
 
             # Re-running on an already-migrated database is a no-op.
             await add_location_sort_order_column(conn)
+    finally:
+        await engine.dispose()
+
+
+async def test_drop_plex_source_columns():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            # Simulate an older on-disk schema that predates removal of
+            # `source`/`source_id`.
+            await conn.execute(text(
+                "CREATE TABLE media_items ("
+                "id INTEGER PRIMARY KEY, "
+                "title VARCHAR(500) NOT NULL, "
+                "source VARCHAR(20), "
+                "source_id VARCHAR(200)"
+                ")"
+            ))
+            await conn.execute(text(
+                "INSERT INTO media_items (id, title, source, source_id) "
+                "VALUES (1, 'The Matrix', 'plex', '1:plex://movie/matrix')"
+            ))
+
+            before = await conn.execute(text('PRAGMA table_info("media_items")'))
+            before_columns = {row[1] for row in before.fetchall()}
+            assert "source" in before_columns
+            assert "source_id" in before_columns
+
+            await drop_plex_source_columns(conn)
+
+            after = await conn.execute(text('PRAGMA table_info("media_items")'))
+            after_columns = {row[1] for row in after.fetchall()}
+            assert "source" not in after_columns
+            assert "source_id" not in after_columns
+
+            # Existing rows survive with their other data intact.
+            result = await conn.execute(text("SELECT title FROM media_items WHERE id = 1"))
+            assert result.scalar() == "The Matrix"
+
+            # Re-running on an already-migrated database is a no-op.
+            await drop_plex_source_columns(conn)
     finally:
         await engine.dispose()
 

@@ -61,9 +61,8 @@ class PlexMappingUpdate(BaseModel):
 
 
 class PlexSyncItem(BaseModel):
-    """Normalized fields for a single Plex library item, used both to
-    create/update a MediaItem during sync and to show conflicting Plex data
-    alongside an existing item for the user to compare."""
+    """Normalized fields for a single Plex library item, used to create or
+    update a MediaItem during sync."""
 
     guid: str
     title: str
@@ -85,15 +84,9 @@ class PlexSyncItem(BaseModel):
     cover_thumb: Optional[str] = None
 
 
-class PlexConflict(BaseModel):
-    existing_item: MediaItemResponse
-    plex_item: PlexSyncItem
-
-
 class PlexSyncResult(BaseModel):
     created: int
     updated: int
-    conflicts: List[PlexConflict]
     stale_items: List[MediaItemResponse]
 
 
@@ -107,22 +100,6 @@ class PlexSyncStatus(BaseModel):
     updated: int = 0
     error: Optional[str] = None
     result: Optional[PlexSyncResult] = None
-
-
-class PlexConflictResolution(BaseModel):
-    """How to resolve one `PlexConflict` from a prior sync. Either way, the
-    existing item is "adopted" — tagged as Plex-sourced so it stops
-    re-appearing as a conflict and becomes eligible for stale-detection.
-    `use_plex` additionally overwrites its content fields and cover with the
-    Plex data; `keep_mine` leaves them untouched."""
-
-    existing_item_id: int
-    plex_item: PlexSyncItem
-    resolution: Literal["keep_mine", "use_plex"]
-
-
-class PlexResolveRequest(BaseModel):
-    resolutions: List[PlexConflictResolution]
 
 
 class PlexRemoveStaleRequest(BaseModel):

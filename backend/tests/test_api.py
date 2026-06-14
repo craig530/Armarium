@@ -1693,37 +1693,6 @@ async def test_backup_delete_requires_admin(client, auth_headers):
     assert resp.status_code == 403
 
 
-async def test_media_item_source_fields(client, auth_headers):
-    """`source`/`source_id` are nullable provenance columns set by external
-    syncs (e.g. Plex) — not part of MediaItemCreate/Update, but round-trip
-    through MediaItemResponse once set directly on the row."""
-    from sqlalchemy import select
-    from app.database import AsyncSessionLocal
-    from app.models.media import MediaItem
-
-    cd_id = await _subtype_id(client, auth_headers, "CD")
-    resp = await client.post(
-        "/api/v1/media",
-        json={"title": "Synced Album", "media_subtype_id": cd_id},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201
-    item_id = resp.json()["id"]
-    assert resp.json()["source"] is None
-    assert resp.json()["source_id"] is None
-
-    async with AsyncSessionLocal() as db:
-        item = (await db.execute(select(MediaItem).where(MediaItem.id == item_id))).scalar_one()
-        item.source = "plex"
-        item.source_id = "1:plex://abc123"
-        await db.commit()
-
-    resp = await client.get(f"/api/v1/media/{item_id}", headers=auth_headers)
-    assert resp.status_code == 200
-    assert resp.json()["source"] == "plex"
-    assert resp.json()["source_id"] == "1:plex://abc123"
-
-
 # Plex integration config ──────────────────────────────────────────────────
 
 async def test_plex_config_not_configured_by_default(client, auth_headers):
@@ -2061,38 +2030,6 @@ _PLEX_MOVIE_ITEM_REVOLUTIONS = {
     "content_rating": "R",
 }
 
-_PLEX_MOVIE_ITEM_JOHN_WICK = {
-    "guid": "plex://movie/johnwick",
-    "title": "John Wick",
-    "year": 2014,
-    "summary": "An ex-hitman comes out of retirement to track down the gangsters that took everything from him.",
-    "genres": ["Action", "Thriller"],
-    "studio": "Summit Entertainment",
-    "thumb": "/library/metadata/7/thumb/1",
-    "tmdb_id": 606,
-    "musicbrainz_id": None,
-    "directors": ["Chad Stahelski", "David Leitch"],
-    "cast": ["Keanu Reeves"],
-    "duration_ms": 6120000,
-    "content_rating": "R",
-}
-
-_PLEX_MOVIE_ITEM_RESURRECTIONS = {
-    "guid": "plex://movie/resurrections",
-    "title": "The Matrix Resurrections",
-    "year": 2021,
-    "summary": "Plex synopsis: Neo must choose to follow the white rabbit once more.",
-    "genres": ["Action", "Sci-Fi"],
-    "studio": "Warner Bros.",
-    "thumb": "/library/metadata/8/thumb/1",
-    "tmdb_id": 607,
-    "musicbrainz_id": None,
-    "directors": ["Lana Wachowski"],
-    "cast": ["Keanu Reeves", "Carrie-Anne Moss"],
-    "duration_ms": 8520000,
-    "content_rating": "R",
-}
-
 _PLEX_MOVIE_ITEM_3 = {
     "guid": "plex://movie/speed",
     "title": "Speed",
@@ -2139,22 +2076,6 @@ _PLEX_MOVIE_ITEM_NO_TMDB = {
     "cast": ["Some Actor"],
     "duration_ms": 5400000,
     "content_rating": "R",
-}
-
-_PLEX_MOVIE_ITEM_QUANTUM = {
-    "guid": "plex://movie/quantumheist",
-    "title": "The Quantum Heist",
-    "year": 2012,
-    "summary": "A crew of thieves attempt to steal a prototype quantum computer.",
-    "genres": ["Action", "Sci-Fi"],
-    "studio": "Fictional Studios",
-    "thumb": "/library/metadata/12/thumb/1",
-    "tmdb_id": 555444,
-    "musicbrainz_id": None,
-    "directors": ["A. Director"],
-    "cast": ["An Actor"],
-    "duration_ms": 6300000,
-    "content_rating": "PG-13",
 }
 
 _PLEX_MOVIE_ITEM_OUTPOST = {
@@ -2207,7 +2128,9 @@ _PLEX_TVSHOW_ITEM_REMOVE = {
 async def _get_or_create_mapping_for_section(client, auth_headers, section_key):
     """Reuse a mapping left over from earlier tests for `section_key`, or
     create one. Reusing keeps mapping ids stable across tests, which matters
-    because stale-item detection scopes by `source_id` prefix `"{mapping.id}:"`."""
+    because stale-item detection scopes by `MediaItem.platform_id` (the
+    configured Plex platform) and `MediaItem.media_subtype_id` (this
+    mapping's media subtype)."""
     await _configure_plex(client, auth_headers)
     resp = await client.get("/api/v1/admin/plex/mappings", headers=auth_headers)
     for existing in resp.json():
@@ -2298,12 +2221,9 @@ async def test_plex_sync_creates_items(client, auth_headers):
     result = resp.json()
     assert result["created"] == 1
     assert result["updated"] == 0
-    assert result["conflicts"] == []
     assert result["stale_items"] == []
 
     item = await _find_item_by_title(client, auth_headers, "The Matrix")
-    assert item["source"] == "plex"
-    assert item["source_id"] == f"{mapping['id']}:plex://movie/abc123"
     assert item["platform"]["name"] == "Plex"
     assert item["media_subtype"]["name"] == "Film"
     assert item["category"] == "films_tv"
@@ -2344,14 +2264,17 @@ async def test_plex_sync_rerun_updates_not_duplicates(client, auth_headers):
     assert matches[0]["description"] == "Updated description"
 
 
-async def test_plex_sync_detects_conflict_with_same_platform_item(client, auth_headers):
-    """A duplicate is when platform and item match: an existing item on the
-    admin-configured Plex platform with the same identity is a conflict, just
-    like before this item ever appeared on a different platform."""
+async def test_plex_sync_adopts_manually_created_plex_platform_item(client, auth_headers):
+    """A MediaItem manually created with platform = the Plex sync platform and
+    a matching identity is recognized as the Plex copy on the next sync —
+    updated in place, not duplicated — and any other-platform/physical copies
+    of the same identity get linked to it too."""
     mapping = await _create_movie_mapping(client, auth_headers)
     plex_platform = await _ensure_plex_platform(client, auth_headers)
 
     film_subtype_id = await _subtype_id(client, auth_headers, "Film")
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+
     resp = await client.post(
         "/api/v1/media",
         json={
@@ -2359,6 +2282,7 @@ async def test_plex_sync_detects_conflict_with_same_platform_item(client, auth_h
             "media_subtype_id": film_subtype_id,
             "year": 2003,
             "tmdb_id": 605,
+            "description": "My manual notes",
             "platform_id": plex_platform["id"],
         },
         headers=auth_headers,
@@ -2366,23 +2290,32 @@ async def test_plex_sync_detects_conflict_with_same_platform_item(client, auth_h
     assert resp.status_code == 201, resp.text
     manual_item_id = resp.json()["id"]
 
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "The Matrix Revolutions", "media_subtype_id": bluray_id, "year": 2003, "tmdb_id": 605},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    physical_id = resp.json()["id"]
+
+    # The two were auto-linked on creation (same tmdb_id) — unlink to simulate
+    # copies added before linking existed.
+    resp = await client.delete(f"/api/v1/media/{manual_item_id}/link/{physical_id}", headers=auth_headers)
+    assert resp.status_code == 204, resp.text
+
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_REVOLUTIONS])), \
             patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
         resp = await _sync_and_wait(client, auth_headers, mapping['id'])
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 0
-    assert result["updated"] == 0
-    assert len(result["conflicts"]) == 1
+    assert result["updated"] == 1
 
-    conflict = result["conflicts"][0]
-    assert conflict["existing_item"]["id"] == manual_item_id
-    assert conflict["plex_item"]["guid"] == _PLEX_MOVIE_ITEM_REVOLUTIONS["guid"]
-    assert conflict["plex_item"]["title"] == "The Matrix Revolutions"
-
-    # The manual item is untouched and not adopted.
     resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
-    assert resp.json()["source"] is None
+    item = resp.json()
+    assert item["description"] == _PLEX_MOVIE_ITEM_REVOLUTIONS["summary"]
+    assert item["platform"]["name"] == "Plex"
+    assert physical_id in {li["id"] for li in item["linked_items"]}
 
 
 async def test_plex_sync_links_other_platform_and_physical_matches(client, auth_headers):
@@ -2426,12 +2359,11 @@ async def test_plex_sync_links_other_platform_and_physical_matches(client, auth_
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 1
-    assert result["conflicts"] == []
 
     resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
     items = [i for i in resp.json()["items"] if i["title"] == "Edge of Tomorrow"]
     assert len(items) == 3
-    plex_item = next(i for i in items if i["source"] == "plex")
+    plex_item = next(i for i in items if i["platform"] and i["platform"]["name"] == "Plex")
     assert plex_item["platform"]["name"] == "Plex"
     assert {li["id"] for li in plex_item["linked_items"]} == {physical_id, amazon_id}
     assert plex_item["ownership"] == "both"
@@ -2465,18 +2397,17 @@ async def test_plex_sync_matches_by_title_and_year_without_tmdb_id(client, auth_
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 1
-    assert result["conflicts"] == []
 
     resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
     items = [i for i in resp.json()["items"] if i["title"].lower() == "indie darling"]
     assert len(items) == 2
-    plex_item = next(i for i in items if i["source"] == "plex")
+    plex_item = next(i for i in items if i["platform"] and i["platform"]["name"] == "Plex")
     assert [li["id"] for li in plex_item["linked_items"]] == [physical_id]
 
 
 async def test_plex_sync_detects_stale_items(client, auth_headers):
-    # Uses the TV-shows mapping (a distinct mapping id from the movie tests
-    # above) so stale-detection's "{mapping.id}:" prefix scan doesn't pick up
+    # Uses the TV-shows mapping (a distinct media subtype from the movie tests
+    # above) so stale-detection's platform/media_subtype scan doesn't pick up
     # Plex items created by those tests.
     mapping = await _create_tvshow_mapping(client, auth_headers)
 
@@ -2498,7 +2429,8 @@ async def test_plex_sync_detects_stale_items(client, auth_headers):
 
     # Still present in the library — Phase 7 removal isn't triggered by a sync.
     item = await _find_item_by_title(client, auth_headers, "Inception")
-    assert item["source"] == "plex"
+    assert item["platform"]["name"] == "Plex"
+    assert item["media_subtype"]["name"] == "TV Series"
 
 
 async def test_plex_sync_music_mapping(client, auth_headers):
@@ -2536,198 +2468,6 @@ async def test_plex_sync_permission_enforced(client, auth_headers):
     assert resp.status_code == 403
 
 
-# Plex conflict resolution ──────────────────────────────────────────────────
-
-
-async def test_plex_resolve_conflict_keep_mine(client, auth_headers):
-    mapping = await _create_movie_mapping(client, auth_headers)
-    plex_platform = await _ensure_plex_platform(client, auth_headers)
-
-    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
-    resp = await client.post(
-        "/api/v1/media",
-        json={
-            "title": "John Wick",
-            "media_subtype_id": film_subtype_id,
-            "year": 2014,
-            "tmdb_id": 606,
-            "description": "My manual notes",
-            "platform_id": plex_platform["id"],
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201, resp.text
-    manual_item_id = resp.json()["id"]
-
-    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_JOHN_WICK])), \
-            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
-    conflicts = resp.json()["conflicts"]
-    assert len(conflicts) == 1
-    plex_item = conflicts[0]["plex_item"]
-
-    resp = await client.post(
-        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
-        json={"resolutions": [{"existing_item_id": manual_item_id, "plex_item": plex_item, "resolution": "keep_mine"}]},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"resolved": 1}
-
-    resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
-    item = resp.json()
-    assert item["source"] == "plex"
-    assert item["source_id"] == f"{mapping['id']}:plex://movie/johnwick"
-    assert item["platform"]["name"] == "Plex"
-    assert item["media_subtype"]["name"] == "Film"
-    # "keep_mine" leaves content untouched.
-    assert item["description"] == "My manual notes"
-
-    # Re-syncing now updates the adopted item in place instead of flagging it
-    # as a conflict again, and doesn't create a duplicate.
-    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_JOHN_WICK])), \
-            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
-    result = resp.json()
-    assert result["conflicts"] == []
-    assert result["created"] == 0
-    assert result["updated"] == 1
-
-    resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
-    matches = [i for i in resp.json()["items"] if i["title"] == "John Wick"]
-    assert len(matches) == 1
-
-
-async def test_plex_resolve_conflict_use_plex(client, auth_headers):
-    mapping = await _create_movie_mapping(client, auth_headers)
-    plex_platform = await _ensure_plex_platform(client, auth_headers)
-
-    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
-    resp = await client.post(
-        "/api/v1/media",
-        json={
-            "title": "The Matrix Resurrections",
-            "media_subtype_id": film_subtype_id,
-            "year": 2021,
-            "tmdb_id": 607,
-            "description": "My manual notes",
-            "genres": "Comedy",
-            "platform_id": plex_platform["id"],
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201, resp.text
-    manual_item_id = resp.json()["id"]
-
-    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_RESURRECTIONS])), \
-            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
-    conflicts = resp.json()["conflicts"]
-    assert len(conflicts) == 1
-    plex_item = conflicts[0]["plex_item"]
-
-    with patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=PNG_1X1)):
-        resp = await client.post(
-            f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
-            json={"resolutions": [{"existing_item_id": manual_item_id, "plex_item": plex_item, "resolution": "use_plex"}]},
-            headers=auth_headers,
-        )
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"resolved": 1}
-
-    resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
-    item = resp.json()
-    assert item["source"] == "plex"
-    assert item["source_id"] == f"{mapping['id']}:plex://movie/resurrections"
-    assert item["platform"]["name"] == "Plex"
-    # "use_plex" overwrites content fields and the cover with Plex's data.
-    assert item["description"].startswith("Plex synopsis")
-    assert item["genres"] == "Action, Sci-Fi"
-    assert item["cover_image_path"] is not None
-
-
-async def test_plex_resolve_conflict_links_other_platform_match(client, auth_headers):
-    """Resolving a conflict also links any physical/other-platform copies of
-    the same item that exist at sync time — not just the adopted item."""
-    mapping = await _create_movie_mapping(client, auth_headers)
-    plex_platform = await _ensure_plex_platform(client, auth_headers)
-
-    film_subtype_id = await _subtype_id(client, auth_headers, "Film")
-    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
-
-    resp = await client.post(
-        "/api/v1/media",
-        json={
-            "title": "The Quantum Heist",
-            "media_subtype_id": film_subtype_id,
-            "year": 2012,
-            "tmdb_id": 555444,
-            "platform_id": plex_platform["id"],
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201, resp.text
-    manual_item_id = resp.json()["id"]
-
-    resp = await client.post(
-        "/api/v1/media",
-        json={"title": "The Quantum Heist", "media_subtype_id": bluray_id, "year": 2012, "tmdb_id": 555444},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201, resp.text
-    physical_id = resp.json()["id"]
-
-    # The two were auto-linked on creation (same tmdb_id) — unlink them to
-    # simulate copies added before linking existed.
-    resp = await client.delete(f"/api/v1/media/{manual_item_id}/link/{physical_id}", headers=auth_headers)
-    assert resp.status_code == 204, resp.text
-
-    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[_PLEX_MOVIE_ITEM_QUANTUM])), \
-            patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)):
-        resp = await _sync_and_wait(client, auth_headers, mapping['id'])
-    conflicts = resp.json()["conflicts"]
-    assert len(conflicts) == 1
-    plex_item = conflicts[0]["plex_item"]
-
-    resp = await client.post(
-        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
-        json={"resolutions": [{"existing_item_id": manual_item_id, "plex_item": plex_item, "resolution": "keep_mine"}]},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {"resolved": 1}
-
-    resp = await client.get(f"/api/v1/media/{manual_item_id}", headers=auth_headers)
-    assert [li["id"] for li in resp.json()["linked_items"]] == [physical_id]
-
-
-async def test_plex_resolve_conflict_unknown_item_404(client, auth_headers):
-    mapping = await _create_movie_mapping(client, auth_headers)
-
-    resp = await client.post(
-        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
-        json={
-            "resolutions": [
-                {"existing_item_id": 999999, "plex_item": {"guid": "plex://movie/missing", "title": "Missing"}, "resolution": "keep_mine"}
-            ]
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 404
-
-
-async def test_plex_resolve_conflicts_permission_enforced(client, auth_headers):
-    mapping = await _create_movie_mapping(client, auth_headers)
-    _, headers = await _create_user_and_login(client, auth_headers, "plexresolveuser", can_add_items=False)
-
-    resp = await client.post(
-        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
-        json={"resolutions": []},
-        headers=headers,
-    )
-    assert resp.status_code == 403
-
-
 # Plex stale-item removal ────────────────────────────────────────────────────
 
 
@@ -2741,7 +2481,7 @@ async def test_plex_remove_stale_items(client, auth_headers):
     assert resp.json()["created"] == 1
 
     item = await _find_item_by_title(client, auth_headers, "Quietly Cancelled Show")
-    assert item["source"] == "plex"
+    assert item["platform"]["name"] == "Plex"
 
     # Removed from Plex entirely — the next sync flags it as stale.
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[])), \
@@ -2785,7 +2525,7 @@ async def test_plex_remove_stale_item_delinks_without_damaging_partner(client, a
 
     resp = await client.get("/api/v1/media", params={"per_page": 100}, headers=auth_headers)
     items = [i for i in resp.json()["items"] if i["title"] == "The Last Outpost"]
-    plex_item = next(i for i in items if i["source"] == "plex")
+    plex_item = next(i for i in items if i["platform"] and i["platform"]["name"] == "Plex")
     assert [li["id"] for li in plex_item["linked_items"]] == [physical_id]
 
     # Removed from Plex entirely — the next sync flags the Plex item as stale.
@@ -2818,7 +2558,7 @@ async def test_plex_remove_stale_defensive_checks(client, auth_headers):
     movie_mapping = await _create_movie_mapping(client, auth_headers)
     tvshow_mapping = await _create_tvshow_mapping(client, auth_headers)
 
-    # A manually-added item (source=None) is never removed, even if selected.
+    # A manually-added item on a different platform is never removed, even if selected.
     resp = await client.post("/api/v1/platforms", json={"name": "Manual Removal Platform"}, headers=auth_headers)
     assert resp.status_code == 201, resp.text
     platform_id = resp.json()["id"]
@@ -2832,10 +2572,10 @@ async def test_plex_remove_stale_defensive_checks(client, auth_headers):
     assert resp.status_code == 201, resp.text
     manual_item_id = resp.json()["id"]
 
-    # An item sourced from a different mapping isn't removable via this one.
+    # An item belonging to a different mapping's media subtype isn't removable via this one.
     matrix_item = await _find_item_by_title(client, auth_headers, "The Matrix")
-    assert matrix_item["source"] == "plex"
-    assert matrix_item["source_id"].startswith(f"{movie_mapping['id']}:")
+    assert matrix_item["platform"]["name"] == "Plex"
+    assert matrix_item["media_subtype"]["name"] == "Film"
 
     resp = await client.post(
         f"/api/v1/admin/plex/mappings/{tvshow_mapping['id']}/remove-stale",
@@ -2944,8 +2684,8 @@ async def test_plex_mapping_update_media_subtype(client, auth_headers):
 
 
 async def test_plex_sync_requires_media_subtype(client, auth_headers):
-    """If a mapping has no media subtype configured, sync and conflict
-    resolution 400 with a clear message rather than crashing."""
+    """If a mapping has no media subtype configured, sync 400s with a clear
+    message rather than crashing."""
     from sqlalchemy import select
     from app.database import AsyncSessionLocal
     from app.models.plex_library_mapping import PlexLibraryMapping
@@ -2962,14 +2702,6 @@ async def test_plex_sync_requires_media_subtype(client, auth_headers):
 
     with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=[])):
         resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=auth_headers)
-    assert resp.status_code == 400
-    assert "media type" in resp.json()["detail"].lower()
-
-    resp = await client.post(
-        f"/api/v1/admin/plex/mappings/{mapping['id']}/resolve-conflicts",
-        json={"resolutions": []},
-        headers=auth_headers,
-    )
     assert resp.status_code == 400
     assert "media type" in resp.json()["detail"].lower()
 

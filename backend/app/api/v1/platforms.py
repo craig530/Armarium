@@ -23,13 +23,15 @@ def _logo_url(platform: Platform) -> Optional[str]:
     return f"/platform-logos/{Path(platform.logo_path).name}" if platform.logo_path else None
 
 
-def _to_response(platform: Platform, item_count: int = 0) -> PlatformResponse:
+def _to_response(platform: Platform, item_count: int = 0, locked_reason: str = None) -> PlatformResponse:
     return PlatformResponse(
         id=platform.id,
         name=platform.name,
         logo_key=platform.logo_key,
         logo_url=_logo_url(platform),
         item_count=item_count,
+        locked=locked_reason is not None,
+        locked_reason=locked_reason,
         created_at=platform.created_at,
         updated_at=platform.updated_at,
     )
@@ -44,11 +46,21 @@ async def _item_count_map(db: AsyncSession) -> dict:
     return {row[0]: row[1] for row in rows}
 
 
+async def _locked_map(db: AsyncSession) -> dict:
+    """The platform configured for Plex sync — locked (undeletable) until
+    the admin reconfigures or removes the Plex integration."""
+    platform_id = (await db.execute(select(PlexConfig.platform_id))).scalars().first()
+    if platform_id is None:
+        return {}
+    return {platform_id: "Configured as the Plex sync platform"}
+
+
 @router.get("", response_model=List[PlatformResponse])
 async def list_platforms(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(select(Platform).order_by(Platform.name))).scalars().all()
     counts = await _item_count_map(db)
-    return [_to_response(p, counts.get(p.id, 0)) for p in rows]
+    locked = await _locked_map(db)
+    return [_to_response(p, counts.get(p.id, 0), locked.get(p.id)) for p in rows]
 
 
 @router.post("", response_model=PlatformResponse, status_code=201)
@@ -112,11 +124,13 @@ async def delete_platform(
     if count > 0:
         raise HTTPException(status_code=400, detail=f"Cannot delete: {count} item(s) use this platform")
 
-    plex_config = (
-        await db.execute(select(PlexConfig).where(PlexConfig.platform_id == platform_id))
-    ).scalar_one_or_none()
-    if plex_config is not None:
-        raise HTTPException(status_code=400, detail="Cannot delete: this platform is configured as the Plex sync platform")
+    locked = await _locked_map(db)
+    reason = locked.get(platform_id)
+    if reason is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete: {reason}. Change it in Settings → Plex Sync first.",
+        )
 
     remove_asset(settings.platform_logos_dir, platform.logo_path)
     await db.delete(platform)

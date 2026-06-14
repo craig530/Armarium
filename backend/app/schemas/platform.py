@@ -19,6 +19,8 @@ class PlatformResponse(BaseModel):
     logo_key: Optional[str] = None
     logo_url: Optional[str] = None
     item_count: int = 0
+    locked: bool = False
+    locked_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

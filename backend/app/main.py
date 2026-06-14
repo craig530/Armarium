@@ -21,6 +21,7 @@ from .migrations import (
     add_user_permission_columns,
     add_location_sort_order_column,
     drop_legacy_media_type_column,
+    drop_plex_source_columns,
     reset_mismatched_plex_tables,
 )
 from .services.search import setup_fts
@@ -78,6 +79,7 @@ async def lifespan(app: FastAPI):
 
     async with engine.begin() as conn:
         await drop_legacy_media_type_column(conn)
+        await drop_plex_source_columns(conn)
 
     await _ensure_admin()
     yield

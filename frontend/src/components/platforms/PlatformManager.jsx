@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X, Lock } from 'lucide-react'
 import { platformsApi } from '../../api/platforms'
 import { matchPlatformLogo, PLATFORM_LOGOS } from '../../lib/platformLogos'
 import Input from '../ui/Input'
@@ -145,6 +145,9 @@ export default function PlatformManager() {
             <div key={platform.id} className="flex items-center gap-3 py-1.5">
               <PlatformLogo platform={platform} />
               <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{platform.name}</span>
+              {platform.locked && (
+                <Lock size={13} className="text-gray-400" title={platform.locked_reason} />
+              )}
               {platform.item_count > 0 && (
                 <span className="text-xs text-gray-400">{platform.item_count} items</span>
               )}
@@ -156,12 +159,14 @@ export default function PlatformManager() {
                   >
                     <Pencil size={13} />
                   </button>
-                  <button
-                    onClick={() => handleDelete(platform)}
-                    className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  {!platform.locked && (
+                    <button
+                      onClick={() => handleDelete(platform)}
+                      className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </>
               )}
             </div>

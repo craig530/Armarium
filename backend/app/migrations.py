@@ -57,8 +57,6 @@ _MISSING_INDEXES = [
     ("media_items", "isbn"),
     ("media_items", "media_subtype_id"),
     ("media_items", "platform_id"),
-    ("media_items", "source"),
-    ("media_items", "source_id"),
 ]
 
 
@@ -385,3 +383,33 @@ async def drop_legacy_media_type_column(conn: AsyncConnection) -> None:
 
     await conn.execute(text('ALTER TABLE "media_items" DROP COLUMN "media_type"'))
     logger.info("Dropped legacy media_items.media_type column")
+
+
+async def drop_plex_source_columns(conn: AsyncConnection) -> None:
+    """Drop the orphaned `media_items.source`/`source_id` columns.
+
+    These tagged items created/adopted by Plex sync so a `source_id` prefix
+    match could find "this mapping's items" for stale-item detection. Sync
+    now identifies its items via `platform_id`/`media_subtype_id` instead, so
+    these columns are unused. No-op once both columns are gone (fresh
+    databases never had them, since they're no longer in the model).
+    """
+    if conn.engine.dialect.name != "sqlite":
+        return
+
+    result = await conn.execute(text('PRAGMA table_info("media_items")'))
+    columns = {row[1] for row in result.fetchall()}
+    to_drop = [c for c in ("source", "source_id") if c in columns]
+    if not to_drop:
+        return
+
+    indexes = await conn.execute(text('PRAGMA index_list("media_items")'))
+    for idx in indexes.fetchall():
+        idx_name = idx[1]
+        idx_info = await conn.execute(text(f'PRAGMA index_info("{idx_name}")'))
+        if any(row[2] in to_drop for row in idx_info.fetchall()):
+            await conn.execute(text(f'DROP INDEX "{idx_name}"'))
+
+    for column in to_drop:
+        await conn.execute(text(f'ALTER TABLE "media_items" DROP COLUMN "{column}"'))
+    logger.info("Dropped legacy media_items columns: %s", ", ".join(to_drop))

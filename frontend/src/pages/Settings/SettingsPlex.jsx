@@ -23,8 +23,6 @@ export default function SettingsPlex() {
   const [loading, setLoading] = useState(true)
   const [syncStatus, setSyncStatus] = useState({})
   const [syncResult, setSyncResult] = useState(null)
-  const [resolutions, setResolutions] = useState({})
-  const [resolving, setResolving] = useState(false)
   const [staleSelection, setStaleSelection] = useState({})
   const [removingStale, setRemovingStale] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
@@ -45,14 +43,12 @@ export default function SettingsPlex() {
         if (status.status === 'completed') {
           toast.success(`"${mapping.section_title}": ${status.result.created} added, ${status.result.updated} updated`)
           setSyncResult({ mapping, ...status.result })
-          setResolutions({})
           setStaleSelection(Object.fromEntries(status.result.stale_items.map((i) => [i.id, true])))
           await load()
           useReferenceDataStore.getState().invalidate()
         } else if (status.status === 'cancelled') {
           toast(`"${mapping.section_title}" sync cancelled — ${status.result.created} added, ${status.result.updated} updated before stopping`)
           setSyncResult({ mapping, ...status.result })
-          setResolutions({})
           setStaleSelection({})
           await load()
           useReferenceDataStore.getState().invalidate()
@@ -128,7 +124,6 @@ export default function SettingsPlex() {
       toast.success('Library mapping removed')
       if (syncResult?.mapping.id === mapping.id) {
         setSyncResult(null)
-        setResolutions({})
         setStaleSelection({})
       }
       load()
@@ -153,37 +148,6 @@ export default function SettingsPlex() {
       setSyncStatus((prev) => ({ ...prev, [mapping.id]: status }))
     } catch (err) {
       toast.error(err.response?.data?.detail || err.message)
-    }
-  }
-
-  const handleStageResolution = (existingItemId, choice) => {
-    setResolutions((prev) => ({ ...prev, [existingItemId]: choice }))
-  }
-
-  const handleResolveDone = async () => {
-    const staged = syncResult.conflicts
-      .filter((c) => resolutions[c.existing_item.id])
-      .map((c) => ({
-        existing_item_id: c.existing_item.id,
-        plex_item: c.plex_item,
-        resolution: resolutions[c.existing_item.id],
-      }))
-    if (staged.length === 0) {
-      setSyncResult((prev) => ({ ...prev, conflicts: [] }))
-      return
-    }
-    setResolving(true)
-    try {
-      await plexApi.resolveConflicts(syncResult.mapping.id, staged)
-      toast.success(`Resolved ${staged.length} item${staged.length === 1 ? '' : 's'}`)
-      const remaining = syncResult.conflicts.filter((c) => !resolutions[c.existing_item.id])
-      setSyncResult((prev) => ({ ...prev, conflicts: remaining }))
-      setResolutions({})
-      useReferenceDataStore.getState().invalidate()
-    } catch (err) {
-      toast.error(err.response?.data?.detail || err.message)
-    } finally {
-      setResolving(false)
     }
   }
 
@@ -340,102 +304,47 @@ export default function SettingsPlex() {
               )}
             </section>
 
-            {syncResult && (syncResult.conflicts.length > 0 || syncResult.stale_items.length > 0) && (
+            {syncResult && syncResult.stale_items.length > 0 && (
               <section className="space-y-4">
-                {syncResult.conflicts.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                      Possible duplicates from "{syncResult.mapping.section_title}" ({syncResult.conflicts.length})
-                    </h3>
-                    <p className="text-xs text-gray-400 mb-2">
-                      These items already exist in your library. Choose whether to keep your version or
-                      replace it with Plex's info — either way it'll be tracked as synced from this library.
-                    </p>
-                    <div className="space-y-1">
-                      {syncResult.conflicts.map((c) => {
-                        const choice = resolutions[c.existing_item.id]
-                        return (
-                          <div key={c.existing_item.id} className="flex items-center gap-3 py-1.5">
-                            <CoverImage
-                              src={c.existing_item.cover_thumb_url}
-                              category={c.existing_item.category}
-                              title={c.existing_item.title}
-                              size="sm"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{c.existing_item.title}</p>
-                              <p className="text-xs text-gray-400">
-                                {c.existing_item.year}
-                                {c.plex_item.year && c.plex_item.year !== c.existing_item.year ? ` · Plex: ${c.plex_item.year}` : ''}
-                              </p>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant={choice === 'keep_mine' ? 'primary' : 'outline'}
-                              onClick={() => handleStageResolution(c.existing_item.id, 'keep_mine')}
-                            >
-                              Keep mine
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={choice === 'use_plex' ? 'primary' : 'outline'}
-                              onClick={() => handleStageResolution(c.existing_item.id, 'use_plex')}
-                            >
-                              Use Plex info
-                            </Button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <div className="pt-2">
-                      <Button size="sm" variant="secondary" loading={resolving} onClick={handleResolveDone}>
-                        Done
-                      </Button>
-                    </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                    No longer in "{syncResult.mapping.section_title}" ({syncResult.stale_items.length})
+                  </h3>
+                  <p className="text-xs text-gray-400 mb-2">
+                    These items were previously synced from Plex but no longer exist there. Checked
+                    items will be removed from your library.
+                  </p>
+                  <div className="space-y-1">
+                    {syncResult.stale_items.map((item) => (
+                      <label key={item.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!staleSelection[item.id]}
+                          onChange={() => handleToggleStale(item.id)}
+                          className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                        />
+                        <CoverImage
+                          src={item.cover_thumb_url}
+                          category={item.category}
+                          title={item.title}
+                          size="sm"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.title}</p>
+                          <p className="text-xs text-gray-400">{item.year}</p>
+                        </div>
+                      </label>
+                    ))}
                   </div>
-                )}
-
-                {syncResult.stale_items.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                      No longer in "{syncResult.mapping.section_title}" ({syncResult.stale_items.length})
-                    </h3>
-                    <p className="text-xs text-gray-400 mb-2">
-                      These items were previously synced from Plex but no longer exist there. Checked
-                      items will be removed from your library.
-                    </p>
-                    <div className="space-y-1">
-                      {syncResult.stale_items.map((item) => (
-                        <label key={item.id} className="flex items-center gap-3 py-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={!!staleSelection[item.id]}
-                            onChange={() => handleToggleStale(item.id)}
-                            className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                          />
-                          <CoverImage
-                            src={item.cover_thumb_url}
-                            category={item.category}
-                            title={item.title}
-                            size="sm"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.title}</p>
-                            <p className="text-xs text-gray-400">{item.year}</p>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="pt-2 flex gap-2">
-                      <Button size="sm" variant="danger" loading={removingStale} onClick={handleRemoveStale}>
-                        Remove selected
-                      </Button>
-                      <Button size="sm" variant="secondary" onClick={handleKeepAllStale}>
-                        Keep all
-                      </Button>
-                    </div>
+                  <div className="pt-2 flex gap-2">
+                    <Button size="sm" variant="danger" loading={removingStale} onClick={handleRemoveStale}>
+                      Remove selected
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={handleKeepAllStale}>
+                      Keep all
+                    </Button>
                   </div>
-                )}
+                </div>
               </section>
             )}
 
