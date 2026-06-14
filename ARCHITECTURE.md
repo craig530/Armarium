@@ -32,7 +32,7 @@ needs to be updated — keep them in sync.
 |---|---|
 | Backend | FastAPI (Python 3.11), SQLAlchemy 2.0 (async), Alembic |
 | Database | SQLite (default, with FTS5 full-text search) or PostgreSQL |
-| Frontend | React 18, Vite, Tailwind CSS, Zustand, react-router-dom 6 |
+| Frontend | React 19, Vite 8, Tailwind CSS 4, Zustand 5, react-router-dom 7 |
 | Auth | JWT (python-jose) + bcrypt via passlib |
 | Containerisation | Docker / Docker Compose, non-root multi-stage builds |
 
@@ -145,6 +145,14 @@ Current repositories: `MediaItemRepository`, `MediaSubtypeRepository`,
 - JWT access tokens (python-jose), bcrypt password hashing (passlib, pinned
   to `bcrypt==4.0.1` — newer bcrypt breaks passlib's self-test, see
   `requirements.txt` comment).
+- Dual-mode token transport: `POST /auth/login` both returns
+  `access_token` in the body (for API clients — see README import/backup
+  examples, sent as `Authorization: Bearer <token>`) and sets it as an
+  `httpOnly`, `SameSite=Lax`, `Secure` (unless `COOKIE_SECURE=false`) cookie
+  named `access_token` — this is what the browser SPA relies on.
+  `POST /auth/logout` clears the cookie. `services/auth.get_current_user`
+  checks the `Authorization` header first, then falls back to the cookie
+  (`ACCESS_TOKEN_COOKIE_NAME`).
 - `services/auth.py`: `get_current_user` (any authenticated user) and
   `require_permission("can_...")` (admins bypass all checks;
   `is_read_only` overrides every `can_*` flag — mirrored client-side by
@@ -201,10 +209,13 @@ Current repositories: `MediaItemRepository`, `MediaSubtypeRepository`,
 Zustand stores in `src/store/index.js`, one slice per concern:
 - `useThemeStore` — dark mode, persisted to `localStorage` +
   `<meta name="theme-color">` for PWA chrome.
-- `useAuthStore` — JWT + user object, persisted to `localStorage`
-  (`armarium-token` / `armarium-user`). `hasPermission(user, flag)` mirrors
-  the backend's permission logic and must be kept in sync with
-  `services/auth.require_permission` if permission semantics change.
+- `useAuthStore` — the access token itself lives in an `httpOnly` cookie the
+  frontend never reads; only the user profile is cached, in `localStorage`
+  (`armarium-user`), for an optimistic initial render before `refreshUser()`
+  (called on every `Layout` mount) confirms the cookie against `/auth/me`.
+  `hasPermission(user, flag)` mirrors the backend's permission logic and must
+  be kept in sync with `services/auth.require_permission` if permission
+  semantics change.
 - `useLibraryStore` — view mode + filters for the Library page.
 - `useReferenceDataStore` — lazily-loaded, shared cache of
   locations/platforms/media subtypes (`ensureLoaded()` / `invalidate()`).
@@ -214,11 +225,12 @@ Zustand stores in `src/store/index.js`, one slice per concern:
 ### 5.2 API layer
 
 All HTTP calls go through `src/api/client.js` (axios instance):
-- attaches `Authorization: Bearer <token>` from `localStorage`
+- relies on the browser sending the `access_token` httpOnly cookie
+  automatically (same-origin) — no token handling in JS
 - formats FastAPI's `{"detail": ...}` error payloads (including 422
   validation-error arrays) into readable `Error` messages
-- on 401: clears stored credentials, tells the service worker to drop cached
-  `/api/` responses, and redirects to `/login`
+- on 401: clears the cached user profile, tells the service worker to drop
+  cached `/api/` responses, and redirects to `/login`
 
 Each resource gets a thin wrapper module in `src/api/` (`media.js`,
 `locations.js`, etc.) — these are the only files that should import `client`
@@ -269,33 +281,40 @@ secrets/tokens — `.gitignore` already excludes `.env`.
 
 ## 7. Quality gates
 
-Run these before committing structural changes:
+CI (`.github/workflows/ci.yml`) runs all of this on every push to `main` and
+every PR. Run locally before committing structural changes:
 
 **Backend** (from `backend/`, with `.venv` activated):
 ```bash
-python -m pytest -q          # full test suite (116 tests)
+pip install -r requirements.txt -r requirements-dev.txt   # requirements-dev.txt: test/lint/SAST tools, not in the production image
+python -m pytest -q          # full test suite (119 tests)
 ruff check app                # lint
 bandit -r app -ll              # SAST — see "accepted findings" below
 pip-audit                       # dependency CVEs
 ```
+
+A separate `backend-postgres` CI job runs `alembic upgrade head` against a
+real `postgres:16-alpine` service container via
+`scripts/verify_postgres_baseline.py` — SQLite is the default and primary
+target (§1), but this catches Postgres-only DDL/seed-data regressions in
+`alembic/versions/0001_baseline.py`.
 
 **Frontend** (from `frontend/`):
 ```bash
 npm run build                  # production build must succeed
 npm test -- --run               # vitest
 npm run lint                     # eslint
-npm audit                          # dependency CVEs
+npm audit                        # dependency CVEs
 ```
 
 ### Accepted/suppressed findings
 
-- **bandit B608** (3 findings in `app/services/search.py`): low-confidence
-  "possible SQL injection" on the FTS5 trigger-creation SQL. The
-  interpolated value (`FTS_COLUMNS`) is a fixed module-level constant, not
-  user input — a false positive. `# nosec B608` can't be placed on the exact
-  flagged line for multi-line triple-quoted f-strings, so there's an
-  explanatory comment above instead; don't restructure this code purely to
-  satisfy bandit.
+- **bandit B608** (`app/services/search.py`): the FTS5 trigger-creation SQL
+  interpolates `FTS_COLUMNS`, a fixed module-level constant, not user input —
+  a false positive. The trigger SQL is built into named variables before
+  `text()`/`execute()`, and each of the 3 flagged assignment lines carries a
+  precise `# nosec B608`; don't blanket-disable or restructure this code
+  further to satisfy bandit.
 - **bandit B105** (`app/main.py`, admin password check): comparing
   `settings.admin_password == "changeme"` to *detect* the unchanged default
   and warn — not a hardcoded credential. Suppressed inline with
@@ -343,25 +362,11 @@ npm audit                          # dependency CVEs
 These are intentional-for-now decisions or known gaps, not bugs — listed so
 future work can revisit them deliberately rather than rediscover them:
 
-- **JWT stored in `localStorage`** (not an `httpOnly` cookie). Simpler for a
-  same-origin SPA + API behind a single reverse proxy, but vulnerable to
-  token theft via XSS. Revisit if/when the app introduces any
-  user-generated-content rendering that isn't strictly sanitised.
-- **Frontend major-version upgrades** (React 19, react-router 7, Vite 8,
-  Tailwind 4, Zustand 5, lucide-react 1.x) are deliberately *not* bundled
-  into routine maintenance — each is a breaking-change migration deserving
-  its own PR and manual UI testing pass. Note `npm audit` currently reports
-  an esbuild/vite/vitest advisory chain (dev-server-only CORS issue, not
-  present in production builds) whose fix requires the Vite 8 jump.
 - **Large page/component files** (`Admin.jsx`, `ItemDetail.jsx`,
   `BarcodeScanner.jsx`, `AddFlow.jsx`) mix multiple concerns (several
   settings panels, multiple modals/steps). Splitting these into smaller
   components would improve readability but touches a lot of working code —
   do incrementally, one panel/step at a time, with manual UI verification.
-- **No CI workflow** (`.github/workflows/`) currently runs the backend/
-  frontend test+lint+build commands from §7 on PRs. Adding one (re-using
-  exactly those commands) would catch regressions before merge — good
-  first issue for a contributor.
 - **Frontend test coverage is light** — only `lib/reorder.js` and
   `hooks/useStepHistory.js` have tests. Page-level tests (Library filters,
   AddFlow steps, Admin panels) would catch regressions from future

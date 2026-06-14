@@ -62,7 +62,7 @@ instead of illuminated manuscripts.
 |---|---|
 | Backend | [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11), [SQLAlchemy 2.0](https://www.sqlalchemy.org/) (async) |
 | Database | [SQLite](https://www.sqlite.org/) by default — [PostgreSQL](#advanced-using-postgresql) also supported |
-| Frontend | [React 18](https://react.dev/), [Vite](https://vitejs.dev/), [Tailwind CSS](https://tailwindcss.com/), [Zustand](https://github.com/pmndrs/zustand) |
+| Frontend | [React 19](https://react.dev/), [Vite](https://vitejs.dev/), [Tailwind CSS 4](https://tailwindcss.com/), [Zustand](https://github.com/pmndrs/zustand) |
 | Auth | JWT access tokens ([python-jose](https://github.com/mpdavis/python-jose)) with [bcrypt](https://github.com/pyca/bcrypt) password hashing |
 | Containerisation | [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/) — non-root containers, multi-stage builds |
 
@@ -128,6 +128,7 @@ is already excluded via `.gitignore`.
 | `TMDB_API_KEY` | No | *(none)* | Free API key from [TMDB](https://www.themoviedb.org/settings/api), needed for Films & TV metadata lookup. Without it, Music and Books lookup still work. |
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///./data/armarium.db` | Database connection string. Defaults to a SQLite file stored in the persistent data volume. See [Advanced: Using PostgreSQL](#advanced-using-postgresql) to use a different database. |
 | `CORS_ORIGINS` | No | *(same-origin only)* | Comma-separated list of extra origins allowed to call the API directly. Not needed for the default setup, where the frontend and backend share an origin via the bundled reverse proxy. |
+| `COOKIE_SECURE` | No | `true` | Whether the browser login session cookie requires HTTPS. Only set to `false` for HTTP-only deployments (e.g. an internal network without TLS) — otherwise the browser won't send the cookie back and login won't work. |
 
 ## Supported Media Types
 
@@ -302,18 +303,19 @@ fit for most self-hosted deployments. If you'd prefer PostgreSQL:
      pg_data:
    ```
 
-2. Add `asyncpg` to `backend/requirements.txt`.
-
-3. Set `DATABASE_URL` in `.env`:
+2. Set `DATABASE_URL` in `.env`:
 
    ```
    DATABASE_URL=postgresql+asyncpg://armarium:changeme@db:5432/armarium
    ```
 
-4. Make the `backend` service depend on `db` with
+   The `asyncpg` driver is included in the backend image already, so no
+   rebuild is needed for this step.
+
+3. Make the `backend` service depend on `db` with
    `condition: service_healthy`.
 
-5. Rebuild and restart: `docker compose up -d --build`.
+4. Restart: `docker compose up -d`.
 
 ## Project Structure
 
@@ -329,9 +331,9 @@ armarium/
 │   │   └── services/         auth, metadata lookups (TMDB/MusicBrainz/
 │   │                          Open Library), cover art, search, rate limiting
 │   └── tests/                pytest test suite
-├── frontend/                React 18 + Vite + Tailwind CSS
+├── frontend/                React 19 + Vite + Tailwind CSS
 │   ├── src/
-│   │   ├── api/               API client (Bearer token injection, 401 redirect)
+│   │   ├── api/               API client (cookie-based auth, 401 redirect)
 │   │   ├── components/        UI, layout, media cards, barcode scanner,
 │   │   │                       add-item flow, settings management
 │   │   ├── pages/              Library, Add Item, Item Detail, Settings, Admin, Login

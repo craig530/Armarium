@@ -8,8 +8,8 @@ requirements.
 ## Summary
 
 Every software dependency in Armarium's direct dependency tree is licensed
-under a permissive licence (MIT, BSD, Apache-2.0, ISC, HPND, or PSF-2.0), all
-of which are compatible with Armarium's MIT licence — they impose no
+under a permissive licence (MIT, BSD, Apache-2.0, ISC, MIT-CMU, or PSF-2.0),
+all of which are compatible with Armarium's MIT licence — they impose no
 copyleft, source-disclosure, or "same licence" requirements on Armarium
 itself.
 
@@ -37,79 +37,92 @@ are **not** covered by Armarium's MIT licence — see
 
 | Package | Version | Licence | Used for |
 |---|---|---|---|
-| [FastAPI](https://github.com/tiangolo/fastapi) | 0.104.1 | [MIT](https://spdx.org/licenses/MIT.html) | Web framework / API |
+| [FastAPI](https://github.com/fastapi/fastapi) | 0.136.3 | [MIT](https://spdx.org/licenses/MIT.html) | Web framework / API |
 | [Uvicorn](https://www.uvicorn.org/) | 0.24.0 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | ASGI server |
-| [SQLAlchemy](https://www.sqlalchemy.org) | 2.0.23 | [MIT](https://spdx.org/licenses/MIT.html) | Async ORM / database access |
+| [SQLAlchemy](https://www.sqlalchemy.org) | 2.0.50 | [MIT](https://spdx.org/licenses/MIT.html) | Async ORM / database access |
+| [Alembic](https://alembic.sqlalchemy.org) | 1.18.4 | [MIT](https://spdx.org/licenses/MIT.html) | Database schema migrations |
 | [aiosqlite](https://aiosqlite.omnilib.dev) | 0.19.0 | [MIT](https://spdx.org/licenses/MIT.html) | Async SQLite driver |
-| [httpx](https://github.com/encode/httpx) | 0.25.2 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | HTTP client for TMDB/MusicBrainz/Open Library |
-| [python-multipart](https://github.com/andrew-d/python-multipart) | 0.0.6 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Multipart form parsing (file uploads) |
-| [Pillow](https://python-pillow.org) | 10.1.0 | [HPND](https://spdx.org/licenses/HPND.html) | Cover/icon/logo image processing |
-| [python-dotenv](https://github.com/theskumar/python-dotenv) | 1.0.0 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | Loading `.env` configuration |
-| [Pydantic](https://github.com/pydantic/pydantic) | 2.5.2 | [MIT](https://spdx.org/licenses/MIT.html) | Data validation / schemas |
-| [pydantic-settings](https://github.com/pydantic/pydantic-settings) | 2.1.0 | [MIT](https://spdx.org/licenses/MIT.html) | Settings management |
+| [asyncpg](https://github.com/MagicStack/asyncpg) | 0.30.0 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Optional PostgreSQL driver (see [Advanced: Using PostgreSQL](README.md#advanced-using-postgresql)) |
+| [httpx](https://github.com/encode/httpx) | 0.28.1 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | HTTP client for TMDB/MusicBrainz/Open Library |
+| [python-multipart](https://github.com/Kludex/python-multipart) | 0.0.27 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Multipart form parsing (file uploads) |
+| [Pillow](https://python-pillow.github.io) | 12.2.0 | [MIT-CMU](https://spdx.org/licenses/MIT-CMU.html) | Cover/icon/logo image processing |
+| [python-dotenv](https://github.com/theskumar/python-dotenv) | 1.2.2 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | Loading `.env` configuration |
+| [Pydantic](https://github.com/pydantic/pydantic) | 2.13.4 | [MIT](https://spdx.org/licenses/MIT.html) | Data validation / schemas |
+| [pydantic-settings](https://github.com/pydantic/pydantic-settings) | 2.14.1 | [MIT](https://spdx.org/licenses/MIT.html) | Settings management |
 | [aiofiles](https://github.com/Tinche/aiofiles) | 23.2.1 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Async file I/O |
-| [python-jose](http://github.com/mpdavis/python-jose) | 3.3.0 | [MIT](https://spdx.org/licenses/MIT.html) | JWT signing/verification |
+| [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) | 3.0.0 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Server-side barcode decoding for the camera scanner |
+| [python-jose](http://github.com/mpdavis/python-jose) | 3.5.0 | [MIT](https://spdx.org/licenses/MIT.html) | JWT signing/verification |
 | [passlib](https://passlib.readthedocs.io) | 1.7.4 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | Password hashing |
 | [bcrypt](https://github.com/pyca/bcrypt/) | 4.0.1 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | bcrypt hashing backend for passlib |
-| [pytest](https://docs.pytest.org/) | 7.4.3 | [MIT](https://spdx.org/licenses/MIT.html) | Test suite (dev only) |
-| [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio) | 0.23.2 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Async test support (dev only) |
-| [anyio](https://anyio.readthedocs.io/) | 3.7.1 | [MIT](https://spdx.org/licenses/MIT.html) | Async compatibility layer (dev only) |
+| [pytest](https://docs.pytest.org/) | 9.1.0 | [MIT](https://spdx.org/licenses/MIT.html) | Test suite (dev only) |
+| [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio) | 1.4.0 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Async test support (dev only) |
+| [anyio](https://anyio.readthedocs.io/) | 4.13.0 | [MIT](https://spdx.org/licenses/MIT.html) | Async compatibility layer (dev only) |
+| [ruff](https://docs.astral.sh/ruff) | 0.15.17 | [MIT](https://spdx.org/licenses/MIT.html) | Linting (dev/CI only) |
+| [bandit](https://bandit.readthedocs.io/) | 1.9.4 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | SAST scanning (dev/CI only) |
+| [pip-audit](https://pypi.org/project/pip-audit/) | 2.10.1 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Dependency CVE scanning (dev/CI only) |
 
 <details>
 <summary>Full installed dependency tree (incl. transitive dependencies)</summary>
 
 Generated with `pip-licenses --format=markdown --with-urls --order=license`
-against `backend/.venv`. All licences below are permissive **except**
-`certifi` (MPL-2.0, see [Summary](#summary)).
+against a clean `pip install -r backend/requirements.txt` (production
+dependencies only). All licences below are permissive **except** `certifi`
+(MPL-2.0, see [Summary](#summary)).
+
+Dev/CI-only tooling (`requirements-dev.txt`: pytest, pytest-asyncio, anyio,
+ruff, bandit, pip-audit) and its own transitive dependencies are not shipped
+in the production image and so are excluded from this table — all of them
+are likewise MIT, BSD, Apache-2.0, or PSF-licensed.
 
 | Package | Version | Licence | URL |
 |---|---|---|---|
 | aiofiles | 23.2.1 | Apache Software License | https://github.com/Tinche/aiofiles |
+| asyncpg | 0.30.0 | Apache Software License | https://github.com/MagicStack/asyncpg |
 | bcrypt | 4.0.1 | Apache Software License | https://github.com/pyca/bcrypt/ |
-| pytest-asyncio | 0.23.2 | Apache Software License | https://github.com/pytest-dev/pytest-asyncio |
 | rsa | 4.9.1 | Apache Software License | https://stuvel.eu/rsa |
-| sniffio | 1.3.1 | Apache Software License; MIT License | https://github.com/python-trio/sniffio |
 | uvloop | 0.22.1 | Apache Software License; MIT License | (part of uvicorn[standard]) |
-| python-multipart | 0.0.6 | Apache-2.0 | https://github.com/andrew-d/python-multipart |
-| packaging | 26.2 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging |
-| cryptography | 48.0.1 | Apache-2.0 OR BSD-3-Clause | https://github.com/pyca/cryptography |
+| python-multipart | 0.0.27 | Apache-2.0 | https://github.com/Kludex/python-multipart |
+| zxing-cpp | 3.0.0 | Apache-2.0 | https://github.com/zxing-cpp/zxing-cpp |
+| cryptography | 49.0.0 | Apache-2.0 OR BSD-3-Clause | https://github.com/pyca/cryptography |
 | passlib | 1.7.4 | BSD | https://passlib.readthedocs.io |
-| click | 8.1.8 | BSD License | https://github.com/pallets/click/ |
-| pycparser | 2.23 | BSD License | https://github.com/eliben/pycparser |
-| python-dotenv | 1.0.0 | BSD License | https://github.com/theskumar/python-dotenv |
-| websockets | 15.0.1 | BSD License | https://github.com/python-websockets/websockets |
+| httpx | 0.28.1 | BSD License | https://github.com/encode/httpx |
 | pyasn1 | 0.6.3 | BSD-2-Clause | https://github.com/pyasn1/pyasn1 |
+| MarkupSafe | 3.0.3 | BSD-3-Clause | https://github.com/pallets/markupsafe/ |
+| click | 8.4.1 | BSD-3-Clause | https://github.com/pallets/click/ |
 | httpcore | 1.0.9 | BSD-3-Clause | https://www.encode.io/httpcore/ |
-| httpx | 0.25.2 | BSD-3-Clause | https://github.com/encode/httpx |
 | idna | 3.18 | BSD-3-Clause | https://github.com/kjd/idna |
-| starlette | 0.27.0 | BSD-3-Clause | https://github.com/encode/starlette |
+| pycparser | 3.0 | BSD-3-Clause | https://github.com/eliben/pycparser |
+| python-dotenv | 1.2.2 | BSD-3-Clause | https://github.com/theskumar/python-dotenv |
+| starlette | 1.3.1 | BSD-3-Clause | https://github.com/Kludex/starlette |
 | uvicorn | 0.24.0 | BSD-3-Clause | https://www.uvicorn.org/ |
-| Pillow | 10.1.0 | Historical Permission Notice and Disclaimer (HPND) | https://python-pillow.org |
+| websockets | 16.0 | BSD-3-Clause | https://github.com/python-websockets/websockets |
+| SQLAlchemy | 2.0.50 | MIT | https://www.sqlalchemy.org |
+| alembic | 1.18.4 | MIT | https://alembic.sqlalchemy.org |
+| annotated-doc | 0.0.4 | MIT | https://github.com/fastapi/annotated-doc |
+| anyio | 4.13.0 | MIT | https://anyio.readthedocs.io/en/stable/versionhistory.html |
 | cffi | 2.0.0 | MIT | https://cffi.readthedocs.io/en/latest/whatsnew.html |
 | ecdsa | 0.19.2 | MIT | http://github.com/tlsfuzzer/python-ecdsa |
-| fastapi | 0.104.1 | MIT | https://github.com/tiangolo/fastapi |
+| fastapi | 0.136.3 | MIT | https://github.com/fastapi/fastapi |
 | httptools | 0.8.0 | MIT | https://github.com/MagicStack/httptools |
-| iniconfig | 2.1.0 | MIT | https://github.com/pytest-dev/iniconfig |
-| pydantic | 2.5.2 | MIT | https://github.com/pydantic/pydantic |
-| pydantic-settings | 2.1.0 | MIT | https://github.com/pydantic/pydantic-settings |
-| greenlet | 3.2.5 | MIT AND Python-2.0 | https://greenlet.readthedocs.io/ |
+| pydantic | 2.13.4 | MIT | https://github.com/pydantic/pydantic |
+| pydantic-settings | 2.14.1 | MIT | https://github.com/pydantic/pydantic-settings |
+| pydantic_core | 2.46.4 | MIT | https://github.com/pydantic |
+| typing-inspection | 0.4.2 | MIT | https://github.com/pydantic/typing-inspection |
+| greenlet | 3.5.1 | MIT AND PSF-2.0 | https://greenlet.readthedocs.io |
+| Mako | 1.3.12 | MIT License | https://www.makotemplates.org/ |
 | PyYAML | 6.0.3 | MIT License | https://pyyaml.org/ |
-| SQLAlchemy | 2.0.23 | MIT License | https://www.sqlalchemy.org |
 | aiosqlite | 0.19.0 | MIT License | https://aiosqlite.omnilib.dev |
 | annotated-types | 0.7.0 | MIT License | https://github.com/annotated-types/annotated-types |
-| anyio | 3.7.1 | MIT License | https://anyio.readthedocs.io/en/stable/versionhistory.html |
-| exceptiongroup | 1.3.1 | MIT License | https://github.com/agronholm/exceptiongroup |
 | h11 | 0.16.0 | MIT License | https://github.com/python-hyper/h11 |
-| pluggy | 1.6.0 | MIT License | https://github.com/pytest-dev/pluggy |
-| pydantic_core | 2.14.5 | MIT License | https://github.com/pydantic/pydantic-core |
-| pytest | 7.4.3 | MIT License | https://docs.pytest.org/en/latest/ |
-| python-jose | 3.3.0 | MIT License | http://github.com/mpdavis/python-jose |
+| python-jose | 3.5.0 | MIT License | http://github.com/mpdavis/python-jose |
 | six | 1.17.0 | MIT License | https://github.com/benjaminp/six |
-| watchfiles | 1.1.1 | MIT License | https://github.com/samuelcolvin/watchfiles |
+| watchfiles | 1.2.0 | MIT License | https://github.com/samuelcolvin/watchfiles |
+| pillow | 12.2.0 | MIT-CMU | https://python-pillow.github.io |
 | certifi | 2026.5.20 | Mozilla Public License 2.0 (MPL 2.0) | https://github.com/certifi/python-certifi |
 | typing_extensions | 4.15.0 | PSF-2.0 | https://github.com/python/typing_extensions |
 
-To regenerate: `pip install pip-licenses && pip-licenses --format=markdown --with-urls --order=license`
+To regenerate: create a clean virtualenv, `pip install -r backend/requirements.txt pip-licenses`,
+then `pip-licenses --format=markdown --with-urls --order=license`.
 
 </details>
 
@@ -121,36 +134,37 @@ To regenerate: `pip install pip-licenses && pip-licenses --format=markdown --wit
 
 | Package | Version | Licence | Used for |
 |---|---|---|---|
-| [React](https://react.dev/) / [react-dom](https://react.dev/) | 18.2.x | [MIT](https://spdx.org/licenses/MIT.html) | UI framework |
-| [react-router-dom](https://github.com/remix-run/react-router) | 6.20.x | [MIT](https://spdx.org/licenses/MIT.html) | Client-side routing |
-| [Zustand](https://github.com/pmndrs/zustand) | 4.4.x | [MIT](https://spdx.org/licenses/MIT.html) | State management |
-| [Axios](https://github.com/axios/axios) | 1.6.x | [MIT](https://spdx.org/licenses/MIT.html) | API client |
-| [react-hot-toast](https://github.com/timolins/react-hot-toast) | 2.4.x | [MIT](https://spdx.org/licenses/MIT.html) | Toast notifications |
-| [clsx](https://github.com/lukeed/clsx) | 2.0.x | [MIT](https://spdx.org/licenses/MIT.html) | Conditional class names |
-| [lucide-react](https://lucide.dev/) | 0.294.x | [ISC](https://spdx.org/licenses/ISC.html) | UI icons & built-in location icons |
-| [@zxing/library](https://github.com/zxing-js/library) | 0.20.x | [MIT](https://spdx.org/licenses/MIT.html) | Barcode scanning |
+| [React](https://react.dev/) / [react-dom](https://react.dev/) | 19.2.x | [MIT](https://spdx.org/licenses/MIT.html) | UI framework |
+| [react-router-dom](https://github.com/remix-run/react-router) | 7.17.x | [MIT](https://spdx.org/licenses/MIT.html) | Client-side routing |
+| [Zustand](https://github.com/pmndrs/zustand) | 5.0.x | [MIT](https://spdx.org/licenses/MIT.html) | State management |
+| [Axios](https://github.com/axios/axios) | 1.17.x | [MIT](https://spdx.org/licenses/MIT.html) | API client |
+| [react-hot-toast](https://github.com/timolins/react-hot-toast) | 2.6.x | [MIT](https://spdx.org/licenses/MIT.html) | Toast notifications |
+| [clsx](https://github.com/lukeed/clsx) | 2.1.x | [MIT](https://spdx.org/licenses/MIT.html) | Conditional class names |
+| [lucide-react](https://lucide.dev/) | 1.18.x | [ISC](https://spdx.org/licenses/ISC.html) | UI icons & built-in location icons |
+
+Barcode scanning is decoded server-side via
+[zxing-cpp](#backend-dependencies-python) — there is no frontend barcode
+decoding dependency.
 
 ### Build tooling (development only — not shipped in the production bundle)
 
 | Package | Version | Licence | Used for |
 |---|---|---|---|
-| [Vite](https://vitejs.dev/) | 5.0.x | [MIT](https://spdx.org/licenses/MIT.html) | Build tool / dev server |
-| [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 4.2.x | [MIT](https://spdx.org/licenses/MIT.html) | React support for Vite |
-| [Tailwind CSS](https://tailwindcss.com/) | 3.3.x | [MIT](https://spdx.org/licenses/MIT.html) | Utility CSS framework |
-| [PostCSS](https://postcss.org/) | 8.4.x | [MIT](https://spdx.org/licenses/MIT.html) | CSS processing |
-| [Autoprefixer](https://github.com/postcss/autoprefixer) | 10.4.x | [MIT](https://spdx.org/licenses/MIT.html) | CSS vendor prefixing |
+| [Vite](https://vitejs.dev/) | 8.0.x | [MIT](https://spdx.org/licenses/MIT.html) | Build tool / dev server |
+| [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 6.0.x | [MIT](https://spdx.org/licenses/MIT.html) | React support for Vite |
+| [Tailwind CSS](https://tailwindcss.com/) | 4.3.x | [MIT](https://spdx.org/licenses/MIT.html) | Utility CSS framework |
+| [@tailwindcss/postcss](https://github.com/tailwindlabs/tailwindcss) | 4.3.x | [MIT](https://spdx.org/licenses/MIT.html) | PostCSS plugin for Tailwind CSS v4 (includes vendor prefixing) |
+| [PostCSS](https://postcss.org/) | 8.5.x | [MIT](https://spdx.org/licenses/MIT.html) | CSS processing |
 | [simple-icons](https://github.com/simple-icons/simple-icons) | 16.23.x | [CC0-1.0](https://spdx.org/licenses/CC0-1.0.html) | Source of bundled platform logo SVGs (see [Platform Logos](#platform-logos)) |
 
 <details>
 <summary>Full production dependency tree (incl. transitive dependencies)</summary>
 
-Generated with `npx license-checker --production`. Of the ~45 packages in the
-resolved production dependency tree (mostly small transitive utilities pulled
-in by axios, react-router and zustand):
+Generated with `npx license-checker --production`. Of the 40 third-party
+packages in the resolved production dependency tree (mostly small transitive
+utilities pulled in by axios, react-router and zustand):
 
-- **43 packages** are licensed under the **MIT License**.
-- **1 package** (`@zxing/text-encoding`) is dual-licensed
-  **(Unlicense OR Apache-2.0)**.
+- **39 packages** are licensed under the **MIT License**.
 - **1 package** (`lucide-react`) is licensed under **ISC** (see table above).
 
 No GPL, LGPL, AGPL, MPL, or proprietary-licensed packages appear anywhere in
