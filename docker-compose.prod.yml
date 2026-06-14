@@ -1,0 +1,71 @@
+services:
+  backend:
+    image: ghcr.io/craig530/armarium-backend:${ARMARIUM_VERSION:-latest}
+    container_name: armarium-backend
+    restart: unless-stopped
+    # Some hosts (e.g. a freshly-installed Ubuntu server using
+    # systemd-resolved) leave containers with a /etc/resolv.conf pointing at
+    # 127.0.0.53, which isn't reachable from inside the container's network
+    # namespace — breaking lookups to TMDB/MusicBrainz/Open Library. Pin
+    # public resolvers so outbound lookups work regardless of host DNS setup.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:///./data/armarium.db}
+      COVERS_DIR: ./data/covers
+      BACKUP_DIR: ./data/backups
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-10080}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set in .env}
+      # Frontend and backend share an origin via the nginx proxy, so no extra
+      # CORS origins are needed by default. Set CORS_ORIGINS in .env only if
+      # calling the API directly from a different origin.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    volumes:
+      - app_data:/app/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  frontend:
+    image: ghcr.io/craig530/armarium-frontend:${ARMARIUM_VERSION:-latest}
+    container_name: armarium-frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8765"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1, not localhost: nginx's `listen 8765` binds the IPv4
+      # wildcard only, but Alpine's busybox wget tries every address
+      # `localhost` resolves to (including ::1) and doesn't fall back on a
+      # refused connection the way curl does — against `localhost` this can
+      # make the healthcheck (and thus Docker's reported container health)
+      # fail even though nginx is up and serving fine.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8765/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+volumes:
+  app_data:
+    driver: local

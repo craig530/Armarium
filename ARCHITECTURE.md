@@ -367,7 +367,25 @@ future work can revisit them deliberately rather than rediscover them:
   settings panels, multiple modals/steps). Splitting these into smaller
   components would improve readability but touches a lot of working code —
   do incrementally, one panel/step at a time, with manual UI verification.
-- **Frontend test coverage is light** — only `lib/reorder.js` and
-  `hooks/useStepHistory.js` have tests. Page-level tests (Library filters,
-  AddFlow steps, Admin panels) would catch regressions from future
-  refactors.
+- **Frontend test coverage is improving but still partial** —
+  `lib/reorder.js`, `hooks/useStepHistory.js`, `pages/Library.jsx`,
+  `pages/Admin.jsx`, and several `components/add/*` steps have tests.
+  `ItemDetail.jsx` and `BarcodeScanner.jsx` do not yet — adding tests for
+  these (and any other page/component you touch) is encouraged.
+
+## 11. Documentation map
+
+Keep these in sync when a change touches them — most changes only need one
+or two:
+
+| Document | Covers | Update when... |
+|---|---|---|
+| [README.md](README.md) | User-facing features, Quick Start, configuration reference, supported media types, usage | A user-visible feature, config variable, or setup step changes |
+| [ARCHITECTURE.md](ARCHITECTURE.md) (this file) | Backend/frontend conventions, layering, repository pattern, quality gates | A convention is added, removed, or contradicted by your change |
+| [CLAUDE.md](CLAUDE.md) | Entry point for Claude Code / AI assistants — points here and to the quality-gate commands | The quality-gate commands or top-level conventions change |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | PR process, issue templates, code style | The contribution workflow or required local checks change |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Fresh local dev environment setup (VS Code, Mac/Linux), running tests | Dev environment setup, tooling, or test commands change |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deploying tagged releases via prebuilt Docker images | The release process, `docker-compose.prod.yml`, or supported deployment targets change |
+| [CHANGELOG.md](CHANGELOG.md) | Per-version release notes (Keep a Changelog format) | Any user-facing change — add an entry under `[Unreleased]` |
+| [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) | Dependency licences and third-party attribution | A dependency (backend `requirements*.txt` or frontend `package.json`) is added, removed, or its licence changes |
+| `.env.example` | Template for runtime configuration | A new environment variable is added to `app/config.py` |

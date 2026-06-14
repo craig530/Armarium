@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
-## [1.0.0]
+## [1.0.0] - 2026-06-14
 
 Initial public release.
 
@@ -51,8 +51,14 @@ Initial public release.
 
 ### Users & Security
 
-- JWT-based authentication with a multi-user model and an admin role.
+- JWT-based authentication with a multi-user model and an admin role,
+  including granular per-user permission flags (add items, manage locations,
+  platforms, media types).
 - Admin panel for creating and managing user accounts.
+- httpOnly, `SameSite` session cookies for the web app, with
+  `Authorization: Bearer` tokens for API/script access.
+- SSRF protections on external URL fetches (cover art, Plex) and validated
+  file uploads for covers, icons and logos.
 - In-process rate limiting on sensitive endpoints.
 
 ### Import, Export & Backup
@@ -74,3 +80,12 @@ Initial public release.
   setup.
 - Non-root, multi-stage Docker images for both backend and frontend.
 - SQLite by default, with optional PostgreSQL support.
+- Schema managed via Alembic migrations, with a repository-layer data-access
+  pattern (`app/repositories/`) shared by all routers.
+- CI pipeline (GitHub Actions) running linting, SAST (bandit), dependency
+  audits, and the full test suite on every push and pull request.
+- Versioned Docker images published to GHCR for each tagged release — see
+  [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+[Unreleased]: https://github.com/craig530/Armarium/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/craig530/Armarium/releases/tag/v1.0.0

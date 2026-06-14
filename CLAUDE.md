@@ -4,7 +4,13 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full architecture and
 conventions — read it before making structural changes (new models, routers,
 repositories, stores, or any change to auth/migrations/SSRF handling). Keep
 it up to date: if a change adds, removes, or contradicts a convention
-described there, update the doc in the same change.
+described there, update the doc in the same change. ARCHITECTURE.md §11 is a
+map of which other doc (README, CHANGELOG, docs/DEVELOPMENT.md,
+docs/DEPLOYMENT.md, THIRD_PARTY_LICENSES.md, `.env.example`) to update for a
+given kind of change — check it before finishing a task.
+
+New to this repo? [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) covers local
+setup (including this file's role) in more depth.
 
 ## Quick reference
 
@@ -29,7 +35,7 @@ described there, update the doc in the same change.
 ## Before considering a change done
 
 - Backend: `cd backend && source .venv/bin/activate && python -m pytest -q`
-  must pass (116+ tests).
+  must pass (119+ tests).
 - Frontend: `cd frontend && npm run build && npm test -- --run && npm run
   lint` must all pass cleanly.
 - For security-relevant changes (auth, permissions, external fetches, file

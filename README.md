@@ -1,5 +1,8 @@
 # Armarium
 
+[![CI](https://github.com/craig530/Armarium/actions/workflows/ci.yml/badge.svg)](https://github.com/craig530/Armarium/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **Armarium is a self-hosted catalogue for your media collection.** Keep track of
 every CD, vinyl record, DVD, Blu-ray, book, graphic novel — and the streaming
 services and digital storefronts you use too — all in one searchable,
@@ -168,8 +171,11 @@ it, either run the [development setup](#hot-reload-docker-setup) below, or
 temporarily publish port `8000` on the `backend` service in
 `docker-compose.yml`.
 
-All endpoints other than `/api/v1/auth/login` require a Bearer token, which
-you get back from that login endpoint.
+All endpoints other than `/api/v1/auth/login` require authentication. The
+browser SPA authenticates via an `httpOnly` session cookie set automatically
+on login. API clients (curl, scripts) instead use the `access_token` returned
+in the login response body as a `Bearer` token — see the
+[import/export examples](#exporting-and-importing-your-library) below.
 
 ## Usage
 
@@ -238,7 +244,23 @@ docker run --rm -v armarium_app_data:/data -v "$(pwd)":/backup alpine \
   tar czf /backup/armarium-$(date +%Y%m%d).tar.gz /data
 ```
 
+## Releases & versioned deployments
+
+Tagged versions (`vX.Y.Z`) are published as prebuilt Docker images on the
+[GitHub Container Registry](https://github.com/craig530?tab=packages), so you
+can run a specific version without cloning the repo or building anything
+locally — useful for production hosts or pinning to a known-good version. See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full instructions, including a
+ready-to-use `docker-compose.prod.yml`. Release notes for each version are in
+[CHANGELOG.md](CHANGELOG.md).
+
 ## Development
+
+For a full walkthrough of setting up a local development environment —
+including VS Code on macOS/Linux, running the backend and frontend test
+suites, and using [Claude Code](https://claude.com/claude-code) with this
+repo's conventions — see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The quick
+version:
 
 ### Running locally without Docker
 
@@ -321,28 +343,38 @@ fit for most self-hosted deployments. If you'd prefer PostgreSQL:
 
 ```
 armarium/
-├── backend/                FastAPI + SQLAlchemy (async) + SQLite
+├── backend/                  FastAPI + SQLAlchemy (async) + SQLite/PostgreSQL
 │   ├── app/
-│   │   ├── api/v1/          auth, users, media, locations, media-subtypes,
-│   │   │                     platforms, lookup, library export/import
-│   │   ├── models/           User, MediaItem, MediaSubtype, Location,
-│   │   │                     Platform, ItemLink
-│   │   ├── schemas/          Pydantic request/response schemas
-│   │   └── services/         auth, metadata lookups (TMDB/MusicBrainz/
-│   │                          Open Library), cover art, search, rate limiting
-│   └── tests/                pytest test suite
-├── frontend/                React 19 + Vite + Tailwind CSS
+│   │   ├── api/v1/             auth, users, media, locations, media-subtypes,
+│   │   │                        platforms, lookup, library export/import, plex
+│   │   ├── models/              User, MediaItem, MediaSubtype, Location,
+│   │   │                        Platform, ItemLink, PlexConfig, ...
+│   │   ├── schemas/             Pydantic request/response schemas
+│   │   ├── repositories/        per-model data-access layer (all SQL lives here)
+│   │   └── services/            auth, metadata lookups (TMDB/MusicBrainz/
+│   │                            Open Library), cover art, search, Plex sync,
+│   │                            rate limiting
+│   ├── alembic/                 migration environment (0001_baseline = v1 schema)
+│   └── tests/                   pytest test suite (119+ tests)
+├── frontend/                  React 19 + Vite + Tailwind CSS
 │   ├── src/
-│   │   ├── api/               API client (cookie-based auth, 401 redirect)
-│   │   ├── components/        UI, layout, media cards, barcode scanner,
-│   │   │                       add-item flow, settings management
-│   │   ├── pages/              Library, Add Item, Item Detail, Settings, Admin, Login
-│   │   ├── hooks/              keyboard shortcuts, etc.
-│   │   └── store/               Zustand stores (auth, theme, library UI state)
-│   └── public/                  PWA manifest, service worker, icons
-├── docker-compose.yml        Production: backend + frontend behind nginx
-├── docker-compose.dev.yml    Development override: hot reload for both
-└── .env.example               Template for your local configuration
+│   │   ├── api/                 API client (cookie-based auth, 401 redirect)
+│   │   ├── components/          UI, layout, media cards, barcode scanner,
+│   │   │                        add-item flow, settings management
+│   │   ├── pages/                Library, Add Item, Item Detail, Settings, Admin, Login
+│   │   ├── hooks/                keyboard shortcuts, etc.
+│   │   └── store/                 Zustand stores (auth, theme, library UI state)
+│   └── public/                    PWA manifest, service worker, icons
+├── docs/
+│   ├── DEVELOPMENT.md          Local dev environment setup (VS Code, Mac/Linux)
+│   └── DEPLOYMENT.md           Deploying versioned releases with Docker
+├── .github/workflows/          CI (lint/SAST/tests) and release (image build/publish)
+├── docker-compose.yml           Production: builds backend + frontend from source
+├── docker-compose.prod.yml      Production: prebuilt images from a tagged release
+├── docker-compose.dev.yml       Development override: hot reload for both
+├── ARCHITECTURE.md               Architecture & conventions reference
+├── CLAUDE.md                     Instructions for Claude Code / AI assistants
+└── .env.example                  Template for your local configuration
 ```
 
 ## Credits & Attribution
@@ -376,7 +408,12 @@ brand assets above.
 ## Contributing
 
 Contributions, bug reports and feature suggestions are very welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to get started and
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for a full local setup guide
+(including VS Code and [Claude Code](https://claude.com/claude-code)).
+[ARCHITECTURE.md](ARCHITECTURE.md) and [CLAUDE.md](CLAUDE.md) document the
+project's architecture and conventions — read these before making structural
+changes (new models, routers, repositories, stores, migrations, etc.).
 
 ## License
 
