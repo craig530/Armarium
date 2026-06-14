@@ -185,12 +185,15 @@ npx license-checker --production
 
 | Font | Licence | Source |
 |---|---|---|
-| [Inter](https://rsms.me/inter/) | [SIL Open Font License 1.1](https://spdx.org/licenses/OFL-1.1.html) | Loaded from [Google Fonts](https://fonts.google.com/specimen/Inter) via `<link>` tags in `frontend/index.html` |
-| [Fraunces](https://github.com/undercasetype/Fraunces) | [SIL Open Font License 1.1](https://spdx.org/licenses/OFL-1.1.html) | Loaded from [Google Fonts](https://fonts.google.com/specimen/Fraunces) via `<link>` tags in `frontend/index.html`; used for headings and the wordmark |
+| [Inter](https://rsms.me/inter/) | [SIL Open Font License 1.1](https://spdx.org/licenses/OFL-1.1.html) | Self-hosted via [@fontsource/inter](https://www.npmjs.com/package/@fontsource/inter), imported in `frontend/src/main.jsx` |
+| [Fraunces](https://github.com/undercasetype/Fraunces) | [SIL Open Font License 1.1](https://spdx.org/licenses/OFL-1.1.html) | Self-hosted via [@fontsource/fraunces](https://www.npmjs.com/package/@fontsource/fraunces), imported in `frontend/src/main.jsx`; used for headings and the wordmark |
 
 The SIL OFL does not require attribution in the application itself, but it is
-listed here for transparency. No font files are bundled in this repository —
-they are fetched from Google Fonts at runtime.
+listed here for transparency. Font files are bundled with the frontend build
+(via the `@fontsource` packages) rather than fetched from Google Fonts at
+runtime — this keeps the app fully self-contained and compatible with the
+strict `style-src`/`font-src` Content-Security-Policy
+(`frontend/nginx/security-headers.conf`).
 
 ---
 

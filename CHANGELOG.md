@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- Self-host the Inter and Fraunces fonts (via `@fontsource`) instead of
+  loading them from Google Fonts. The previous `<link>` tags were silently
+  blocked by the app's Content-Security-Policy (`style-src 'self'`), so the
+  UI always fell back to system fonts. This also removes an external
+  dependency/privacy leak on a self-hosted app.
 
 ## [1.0.0] - 2026-06-14
 
