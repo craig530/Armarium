@@ -30,7 +30,7 @@ const mockUsers = [
 function mockGet() {
   client.get.mockImplementation((url) => {
     if (url === '/users') return Promise.resolve({ data: mockUsers })
-    if (url === '/library/backup/list') return Promise.resolve({ data: { backups: [] } })
+    if (url === '/library/backup/list') return Promise.resolve({ data: { backups: [], backup_supported: true } })
     if (url === '/admin/plex/config') {
       return Promise.resolve({ data: { configured: false, enabled: false, base_url: null, platform: null } })
     }

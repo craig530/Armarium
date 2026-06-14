@@ -400,11 +400,15 @@ export default function Admin() {
 
 function BackupPanel() {
   const [backups, setBackups] = useState([])
+  const [backupSupported, setBackupSupported] = useState(true)
   const [triggering, setTriggering] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
 
   const loadBackups = () => {
-    client.get('/library/backup/list').then((r) => setBackups(r.data.backups)).catch(() => {})
+    client.get('/library/backup/list').then((r) => {
+      setBackups(r.data.backups)
+      setBackupSupported(r.data.backup_supported)
+    }).catch(() => {})
   }
 
   useEffect(() => { loadBackups() }, [])
@@ -450,52 +454,64 @@ function BackupPanel() {
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-gray-900 dark:text-white">Database Backups</h2>
-        <Button size="sm" variant="secondary" loading={triggering} onClick={triggerBackup}>
-          Backup now
-        </Button>
+        {backupSupported && (
+          <Button size="sm" variant="secondary" loading={triggering} onClick={triggerBackup}>
+            Backup now
+          </Button>
+        )}
       </div>
-      {backups.length === 0 ? (
-        <p className="text-sm text-gray-400">No backups yet. Click &quot;Backup now&quot; to create one.</p>
+      {!backupSupported ? (
+        <p className="text-sm text-gray-400">
+          Built-in backups are only available for the bundled SQLite database. This instance is
+          configured to use PostgreSQL — back it up using your PostgreSQL provider&apos;s own
+          tools (e.g. <code className="font-mono">pg_dump</code>).
+        </p>
       ) : (
-        <div className="space-y-1.5 max-h-48 overflow-y-auto">
-          {backups.map((b) => (
-            <div key={b.name} className="flex items-center justify-between text-sm">
-              <span className="font-mono text-xs text-gray-600 dark:text-gray-400">{b.name}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">
-                  {(b.size_bytes / 1024).toFixed(0)} KB · {new Date(b.created).toLocaleString()}
-                </span>
-                <button
-                  onClick={() => downloadBackup(b.name)}
-                  title="Download backup"
-                  className="p-1 rounded-sm text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                >
-                  <Download size={13} />
-                </button>
-                <button
-                  onClick={() => deleteBackup(b.name)}
-                  title="Delete backup"
-                  className="p-1 rounded-sm text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
+        <>
+          {backups.length === 0 ? (
+            <p className="text-sm text-gray-400">No backups yet. Click &quot;Backup now&quot; to create one.</p>
+          ) : (
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {backups.map((b) => (
+                <div key={b.name} className="flex items-center justify-between text-sm">
+                  <span className="font-mono text-xs text-gray-600 dark:text-gray-400">{b.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">
+                      {(b.size_bytes / 1024).toFixed(0)} KB · {new Date(b.created).toLocaleString()}
+                    </span>
+                    <button
+                      onClick={() => downloadBackup(b.name)}
+                      title="Download backup"
+                      className="p-1 rounded-sm text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <Download size={13} />
+                    </button>
+                    <button
+                      onClick={() => deleteBackup(b.name)}
+                      title="Delete backup"
+                      className="p-1 rounded-sm text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+          <p className="mt-3 text-xs text-gray-400">
+            Backups are stored in the <code className="font-mono">app_data</code> volume. The last 30 are retained automatically.
+          </p>
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+            <p className="font-medium text-gray-700 dark:text-gray-300">To restore a backup:</p>
+            <ol className="list-decimal list-inside space-y-0.5">
+              <li>Download the backup file above.</li>
+              <li>Stop the Armarium containers (<code className="font-mono">docker compose down</code>).</li>
+              <li>Replace the database file in the <code className="font-mono">app_data</code> volume with the downloaded backup, renaming it to match the configured database filename.</li>
+              <li>Restart the containers (<code className="font-mono">docker compose up -d</code>).</li>
+            </ol>
+          </div>
+        </>
       )}
-      <p className="mt-3 text-xs text-gray-400">
-        Backups are stored in the <code className="font-mono">app_data</code> volume. The last 30 are retained automatically.
-      </p>
-      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 space-y-1">
-        <p className="font-medium text-gray-700 dark:text-gray-300">To restore a backup:</p>
-        <ol className="list-decimal list-inside space-y-0.5">
-          <li>Download the backup file above.</li>
-          <li>Stop the Armarium containers (<code className="font-mono">docker compose down</code>).</li>
-          <li>Replace the database file in the <code className="font-mono">app_data</code> volume with the downloaded backup, renaming it to match the configured database filename.</li>
-          <li>Restart the containers (<code className="font-mono">docker compose up -d</code>).</li>
-        </ol>
-      </div>
       {confirmDialog}
     </div>
   )
@@ -575,7 +591,8 @@ function PlexIntegrationPanel() {
   const handleRemove = async () => {
     if (!await confirm(
       'Remove the Plex integration? Existing Plex-sourced items are left in place, ' +
-      'but library sync mappings will stop working until reconfigured.'
+      'but library sync mappings will stop working until reconfigured.',
+      { confirmLabel: 'Remove' }
     )) return
     try {
       await plexApi.deleteConfig()
@@ -673,7 +690,8 @@ function CoverImagesPanel() {
     if (!await confirm(
       'This re-downloads and re-processes every cover image fetched from a URL, ' +
       'fixing any that were saved with the previous image processing. It runs in ' +
-      'the background and may take a while for large libraries. Continue?'
+      'the background and may take a while for large libraries. Continue?',
+      { confirmLabel: 'Redownload', variant: 'secondary' }
     )) return
     setRedownloading(true)
     try {
@@ -689,7 +707,8 @@ function CoverImagesPanel() {
   const handlePurge = async () => {
     if (!await confirm(
       'This permanently deletes any cover image files on disk that are no longer ' +
-      'referenced by an item. Continue?'
+      'referenced by an item. Continue?',
+      { confirmLabel: 'Purge' }
     )) return
     setPurging(true)
     try {
@@ -740,7 +759,8 @@ function LibraryMaintenancePanel() {
     if (!await confirm(
       'This scans your whole library and links items that share the same film/show, ' +
       'album or book (by TMDB/MusicBrainz ID or ISBN) but aren\'t linked yet — useful ' +
-      'after adding copies on other platforms or locations before linking existed. Continue?'
+      'after adding copies on other platforms or locations before linking existed. Continue?',
+      { confirmLabel: 'Scan & Link', variant: 'secondary' }
     )) return
     setLinking(true)
     try {
@@ -775,7 +795,13 @@ function DangerZonePanel() {
   const handleReset = async () => {
     if (!await confirm(
       'This will permanently delete all media, locations, and platforms, and restore the default media types. ' +
-      'User accounts are kept.\n\nMake sure you’ve taken a backup first. Continue?'
+      'User accounts are kept.\n\nMake sure you’ve taken a backup first.',
+      { title: 'Reset database?', confirmLabel: 'Continue', variant: 'danger' }
+    )) return
+
+    if (!await confirm(
+      'Last chance — this cannot be undone. Type RESET below to permanently wipe the library.',
+      { title: 'Confirm database reset', confirmLabel: 'Reset database', variant: 'danger', requireText: 'RESET' }
     )) return
 
     setResetting(true)

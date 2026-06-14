@@ -32,10 +32,10 @@ export default function MediaSubtypeManager() {
     try {
       if (editId) {
         await mediaSubtypesApi.update(editId, { name: form.name })
-        toast.success('Media type updated')
+        toast.success('Medium updated')
       } else {
         await mediaSubtypesApi.create(form)
-        toast.success('Media type created')
+        toast.success('Medium created')
       }
       setShowForm(false)
       setEditId(null)
@@ -57,7 +57,7 @@ export default function MediaSubtypeManager() {
     if (!await confirm(`Delete "${subtype.name}"?`)) return
     try {
       await mediaSubtypesApi.delete(subtype.id)
-      toast.success('Media type deleted')
+      toast.success('Medium deleted')
       load()
       useReferenceDataStore.getState().invalidate()
     } catch (err) {
@@ -84,7 +84,7 @@ export default function MediaSubtypeManager() {
       {canManage && (
         <div className="flex items-center justify-end">
           <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true) }}>
-            <Plus size={15} /> New type
+            <Plus size={15} /> New medium
           </Button>
         </div>
       )}
@@ -93,7 +93,7 @@ export default function MediaSubtypeManager() {
       {canManage && showForm && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3 bg-gray-50 dark:bg-gray-900">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-            {editId ? 'Edit media type' : 'New media type'}
+            {editId ? 'Edit medium' : 'New medium'}
           </h3>
           <Input
             label="Name"
@@ -135,7 +135,7 @@ export default function MediaSubtypeManager() {
       {loading ? (
         <p className="text-sm text-gray-400 animate-pulse">Loading…</p>
       ) : subtypes.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-8">No media types yet.</p>
+        <p className="text-sm text-gray-400 text-center py-8">No mediums yet.</p>
       ) : (
         <div className="space-y-5">
           {CATEGORIES.map((category) => {

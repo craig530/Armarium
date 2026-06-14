@@ -88,6 +88,25 @@ async def test_backup_delete_unknown_or_invalid_name(client, auth_headers):
     assert resp.status_code == 404
 
 
+async def test_backup_list_reports_supported_on_sqlite(client, auth_headers):
+    resp = await client.get("/api/v1/library/backup/list", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["backup_supported"] is True
+
+
+async def test_backup_unsupported_on_postgres(client, auth_headers, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "database_url", "postgresql+asyncpg://user:pass@db/armarium")
+
+    resp = await client.get("/api/v1/library/backup/list", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["backup_supported"] is False
+
+    resp = await client.post("/api/v1/library/backup", headers=auth_headers)
+    assert resp.status_code == 400
+
+
 async def test_backup_delete_requires_admin(client, auth_headers):
     _, headers = await _create_user_and_login(client, auth_headers, "backupuser")
 

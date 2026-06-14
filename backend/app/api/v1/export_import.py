@@ -199,16 +199,18 @@ async def trigger_backup(_=Depends(get_current_admin)):
 @router.get("/backup/list")
 async def list_backups(_=Depends(get_current_admin)):
     """List available database backups (admin only)."""
+    backup_supported = "sqlite" in settings.database_url
     backup_dir = Path(settings.backup_dir)
     if not backup_dir.exists():
-        return {"backups": []}
+        return {"backups": [], "backup_supported": backup_supported}
 
     backups = sorted(backup_dir.glob("armarium_*.db"), reverse=True)
     return {
         "backups": [
             {"name": b.name, "size_bytes": b.stat().st_size, "created": datetime.fromtimestamp(b.stat().st_mtime).isoformat()}
             for b in backups
-        ]
+        ],
+        "backup_supported": backup_supported,
     }
 
 

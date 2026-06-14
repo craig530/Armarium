@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed the "Manage Locations" / "Manage Platforms" / "Manage Media Types"
+  settings sections to "Locations" / "Platforms" / "Mediums" — they're
+  already grouped under a "Manage" menu/heading, so the longer names were
+  redundant and cramped on mobile. The "New media type" button is now "New
+  medium".
+- Confirmation dialogs now show button text that matches the action (e.g.
+  "Unlink", "Remove", "Redownload", "Scan & Link", "Stop syncing") instead of
+  a generic "Delete" for every confirmation.
+
+### Added
+
+- Resetting the database from the Admin Danger Zone now requires a second
+  confirmation step where you must type `RESET` to proceed, on top of the
+  existing warning dialog.
+
 ### Fixed
 
 - Self-host the Inter and Fraunces fonts (via `@fontsource`) instead of
@@ -14,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   blocked by the app's Content-Security-Policy (`style-src 'self'`), so the
   UI always fell back to system fonts. This also removes an external
   dependency/privacy leak on a self-hosted app.
+- The Admin "Database Backups" panel is now disabled with an explanation
+  when running on PostgreSQL, where built-in backups aren't supported,
+  instead of silently failing when "Backup now" is clicked.
+- The Plex Sync settings page no longer overflows on mobile/PWA — each
+  library's sync status, sync button and remove button now wrap onto their
+  own row instead of pushing the remove button off-screen.
 
 ## [1.0.0] - 2026-06-14
 

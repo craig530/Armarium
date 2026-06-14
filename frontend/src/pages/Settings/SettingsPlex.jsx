@@ -122,7 +122,10 @@ export default function SettingsPlex() {
   }
 
   const handleDelete = async (mapping) => {
-    if (!await confirm(`Stop syncing "${mapping.section_title}"? Items already added from this library are kept.`)) return
+    if (!await confirm(
+      `Stop syncing "${mapping.section_title}"? Items already added from this library are kept.`,
+      { confirmLabel: 'Stop syncing', variant: 'secondary' }
+    )) return
     try {
       await plexApi.deleteMapping(mapping.id)
       toast.success('Library mapping removed')
@@ -221,7 +224,7 @@ export default function SettingsPlex() {
               {mappings.length === 0 ? (
                 <p className="text-sm text-gray-400">No libraries added yet.</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {mappings.map((m) => {
                     const subtypeOptions = mediaSubtypes.filter(
                       (s) => s.category === m.category && s.supertype === 'digital'
@@ -229,13 +232,23 @@ export default function SettingsPlex() {
                     const status = syncStatus[m.id]
                     const isSyncing = status?.status === 'running'
                     return (
-                      <div key={m.id} className="py-1">
-                        <div className="flex items-center gap-3">
+                      <div key={m.id} className="rounded-lg border border-gray-100 dark:border-gray-800 p-3 space-y-2">
+                        <div className="flex items-start gap-3">
                           <MediaSubtypeBadge subtype={{ category: m.category, name: categoryLabel(m.category) }} />
-                          <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{m.section_title}</span>
+                          <span className="flex-1 min-w-0 text-sm text-gray-800 dark:text-gray-200 break-words">{m.section_title}</span>
+                          <button
+                            onClick={() => handleDelete(m)}
+                            disabled={isSyncing}
+                            title="Stop syncing this library"
+                            className="p-1 -m-1 rounded-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
                           {isSyncing ? (
                             <>
-                              <div className="flex items-center gap-2 w-36">
+                              <div className="flex items-center gap-2 flex-1 min-w-32">
                                 <div className="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
                                   <div
                                     className="h-full bg-brand-500 transition-all"
@@ -256,7 +269,7 @@ export default function SettingsPlex() {
                             </>
                           ) : (
                             <>
-                              <span className="text-xs text-gray-400">
+                              <span className="text-xs text-gray-400 flex-1">
                                 {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
                               </span>
                               <Button
@@ -269,16 +282,9 @@ export default function SettingsPlex() {
                               </Button>
                             </>
                           )}
-                          <button
-                            onClick={() => handleDelete(m)}
-                            disabled={isSyncing}
-                            className="p-1 rounded-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Trash2 size={13} />
-                          </button>
                         </div>
-                        <div className="flex items-center gap-2 mt-1 ml-1">
-                          <span className="text-xs text-gray-400">Media type:</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-gray-400 shrink-0">Medium:</span>
                           {isAdmin ? (
                             <select
                               value={m.media_subtype?.id ?? ''}

@@ -242,7 +242,7 @@ export default function ItemDetail() {
   }
 
   const handleUnlink = async (otherId) => {
-    if (!await confirm('Unlink these items?')) return
+    if (!await confirm('Unlink these items?', { confirmLabel: 'Unlink', variant: 'secondary' })) return
     try {
       await mediaApi.unlink(id, otherId)
       await load()
