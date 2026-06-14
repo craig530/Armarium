@@ -8,10 +8,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
 
 from .config import settings
 from .database import engine, Base, AsyncSessionLocal
+from .repositories.user import UserRepository
 from .services.media_subtypes import seed_default_media_subtypes
 from .services.search import setup_fts
 from .api.v1.router import router
@@ -37,15 +37,15 @@ async def _ensure_admin():
     from .services.auth import hash_password
 
     async with AsyncSessionLocal() as db:
-        count = (await db.execute(select(User))).scalars().first()
-        if count is None:
+        repo = UserRepository(db)
+        if not await repo.any_exist():
             admin = User(
                 username=settings.admin_username,
                 hashed_password=hash_password(settings.admin_password),
                 is_admin=True,
             )
-            db.add(admin)
-            await db.commit()
+            repo.add(admin)
+            await repo.commit()
             if settings.admin_password == "changeme":
                 logger.warning(
                     "⚠️  Default admin password in use — set ADMIN_PASSWORD in .env before exposing to network."

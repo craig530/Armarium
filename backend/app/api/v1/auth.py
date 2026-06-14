@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from ...database import get_db
 from ...models.user import User
+from ...repositories.user import UserRepository, get_user_repository
 from ...schemas.user import LoginRequest, TokenResponse, UserResponse
 from ...services.auth import verify_password, create_access_token, get_current_user
 from ...services.rate_limit import SlidingWindowRateLimiter
@@ -15,12 +13,11 @@ login_limiter = SlidingWindowRateLimiter(max_attempts=10, window_seconds=300)
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(credentials: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+async def login(credentials: LoginRequest, request: Request, repo: UserRepository = Depends(get_user_repository)):
     client_ip = request.client.host if request.client else "unknown"
     login_limiter.check(client_ip, "Too many login attempts. Please wait a few minutes and try again.")
 
-    result = await db.execute(select(User).where(User.username == credentials.username))
-    user = result.scalar_one_or_none()
+    user = await repo.get_by_username(credentials.username)
 
     if not user or not user.is_active or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
