@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     jwt_secret: str = ""              # required in production — set via .env
     jwt_expire_minutes: int = 60 * 24 * 7     # 7 days
 
+    # Set the `Secure` flag on the access-token cookie (requires HTTPS).
+    # Only disable for HTTP-only deployments (e.g. an internal network
+    # without TLS) — without it, the cookie is sent over plain HTTP.
+    cookie_secure: bool = True
+
     # Default admin (created on first run if no users exist)
     admin_username: str = "admin"
     admin_password: str = "changeme"

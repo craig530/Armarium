@@ -5,15 +5,6 @@ const client = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach auth token on every request
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('armarium-token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
 // Format a FastAPI error `detail` payload into a readable string.
 // 422 validation errors arrive as a list of {loc, msg, ...} objects.
 function formatErrorDetail(detail) {
@@ -42,7 +33,6 @@ client.interceptors.response.use(
       return Promise.reject(err)
     }
     if (err.response?.status === 401) {
-      localStorage.removeItem('armarium-token')
       localStorage.removeItem('armarium-user')
       navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_API_CACHE' })
       window.location.href = '/login'

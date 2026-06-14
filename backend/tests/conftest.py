@@ -11,6 +11,11 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("ADMIN_USERNAME", "admin")
 os.environ.setdefault("ADMIN_PASSWORD", "testpass123")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-not-for-production")
+# The test client talks to the app over plain "http://test", but the access-
+# token cookie defaults to Secure (HTTPS-only) — without this, httpx's
+# cookie jar would accept the cookie from Set-Cookie but never send it back,
+# breaking cookie-based auth tests.
+os.environ.setdefault("COOKIE_SECURE", "false")
 os.environ.setdefault("COVERS_DIR", "/tmp/armarium_test_covers")
 os.environ.setdefault("BACKUP_DIR", "/tmp/armarium_test_backups")
 os.environ.setdefault("LOCATION_ICONS_DIR", "/tmp/armarium_test_location_icons")

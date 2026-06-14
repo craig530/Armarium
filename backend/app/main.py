@@ -92,8 +92,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Bearer-token auth doesn't rely on cookies, so allow_credentials is left off —
-# combining it with a wildcard origin is both unnecessary and rejected by browsers.
+# The access-token cookie is SameSite=Lax, so browsers never attach it to
+# requests from these extra CORS origins anyway — only same-origin requests
+# (the default deployment) use the cookie. Cross-origin callers authenticate
+# via `Authorization: Bearer <token>` instead, which doesn't need
+# allow_credentials, and combining it with a wildcard origin is both
+# unnecessary and rejected by browsers.
 _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
 app.add_middleware(

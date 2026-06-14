@@ -34,23 +34,17 @@ export const useThemeStore = create((set) => {
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
+// The JWT itself lives in an httpOnly cookie set by the server, so the
+// frontend never sees the token — only this cached (non-secret) user object,
+// used for an optimistic initial render before refreshUser() confirms the
+// cookie is still valid.
 function loadStoredAuth() {
   try {
-    const token = localStorage.getItem('armarium-token')
     const user = JSON.parse(localStorage.getItem('armarium-user') || 'null')
-    return { token, user, isAuthenticated: !!token && !!user }
+    return { user, isAuthenticated: !!user }
   } catch {
-    return { token: null, user: null, isAuthenticated: false }
+    return { user: null, isAuthenticated: false }
   }
-}
-
-// JWT payloads are base64url, not plain base64 — convert and pad before
-// passing to atob, which otherwise throws on '-'/'_' or missing padding.
-function decodeJwtPayload(token) {
-  const base64url = token.split('.')[1]
-  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
-  return JSON.parse(atob(padded))
 }
 
 // Tell the service worker to drop any cached /api/ responses, so the next
@@ -69,38 +63,41 @@ export const useAuthStore = create((set) => ({
   ...loadStoredAuth(),
 
   async login(username, password) {
-    const resp = await axios.post('/api/v1/auth/login', { username, password })
-    const { access_token } = resp.data
-    const payload = decodeJwtPayload(access_token)
-    const user = { username: payload.sub, is_admin: payload.is_admin }
+    // Sets the httpOnly access-token cookie via Set-Cookie; the response
+    // body's access_token is for API clients (see README), not used here.
+    await axios.post('/api/v1/auth/login', { username, password })
 
-    localStorage.setItem('armarium-token', access_token)
-    localStorage.setItem('armarium-user', JSON.stringify(user))
-    set({ token: access_token, user, isAuthenticated: true })
-
-    // Populate the full profile (id + permission flags) from the API —
-    // the JWT only carries username/is_admin.
+    // Populate the full profile (id + permission flags) from the API.
     await useAuthStore.getState().refreshUser()
   },
 
   // Re-fetch the current user's profile (including permission flags) from
   // the API. Called after login and on app load so permissions stay fresh
-  // without requiring re-login.
+  // without requiring re-login, and to confirm the access-token cookie is
+  // still valid.
   async refreshUser() {
     try {
       const resp = await client.get('/auth/me')
       const user = resp.data
       localStorage.setItem('armarium-user', JSON.stringify(user))
-      set({ user })
+      set({ user, isAuthenticated: true })
     } catch {
-      // Token may be invalid/expired — the response interceptor handles 401s.
+      // Cookie missing/expired — the response interceptor handles the
+      // redirect to /login; clear the cached user so isAuthenticated
+      // reflects reality on the next render.
+      localStorage.removeItem('armarium-user')
+      set({ user: null, isAuthenticated: false })
     }
   },
 
-  logout() {
-    localStorage.removeItem('armarium-token')
+  async logout() {
+    try {
+      await client.post('/auth/logout')
+    } catch {
+      // Best effort — clear local state regardless.
+    }
     localStorage.removeItem('armarium-user')
-    set({ token: null, user: null, isAuthenticated: false })
+    set({ user: null, isAuthenticated: false })
     clearServiceWorkerCache()
   },
 }))
