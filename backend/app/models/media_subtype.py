@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum as SQLEnum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Enum as SQLEnum, UniqueConstraint, func
 from datetime import datetime
 from ..database import Base
 from .enums import MediaCategory, Supertype
@@ -16,5 +16,5 @@ class MediaSubtype(Base):
     supertype = Column(SQLEnum(Supertype), nullable=False, index=True)
     sort_order = Column(Integer, nullable=False, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

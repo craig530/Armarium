@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from ..database import Base
@@ -47,16 +47,16 @@ class MediaItem(Base):
     location = relationship("Location", back_populates="items", lazy="selectin")
 
     # Media subtype (Physical/Digital x Music/Films & TV/Books)
-    media_subtype_id = Column(Integer, ForeignKey("media_subtypes.id", ondelete="SET NULL"), nullable=True, index=True)
+    media_subtype_id = Column(Integer, ForeignKey("media_subtypes.id", ondelete="RESTRICT"), nullable=False, index=True)
     media_subtype = relationship("MediaSubtype", lazy="selectin")
 
     # Digital platform (e.g. Netflix, Plex, Spotify)
-    platform_id = Column(Integer, ForeignKey("platforms.id", ondelete="SET NULL"), nullable=True, index=True)
+    platform_id = Column(Integer, ForeignKey("platforms.id", ondelete="RESTRICT"), nullable=True, index=True)
     platform = relationship("Platform", lazy="selectin")
 
     # Films & TV — seasons/episodes owned (physical box sets or digital)
     seasons_owned = Column(String(100))
     episode_count = Column(Integer)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, text, func
 from datetime import datetime
 from ..database import Base
 
@@ -21,5 +21,5 @@ class User(Base):
     can_manage_platforms = Column(Boolean, nullable=False, default=True, server_default=text("1"))
     can_manage_media_types = Column(Boolean, nullable=False, default=False, server_default=text("0"))
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

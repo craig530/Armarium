@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, CheckConstraint, func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from ..database import Base
@@ -12,6 +12,9 @@ class PlexConfig(Base):
     """
 
     __tablename__ = "plex_config"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_plex_config_singleton"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     base_url = Column(String(500), nullable=False)
@@ -24,5 +27,5 @@ class PlexConfig(Base):
     platform_id = Column(Integer, ForeignKey("platforms.id", ondelete="RESTRICT"), nullable=False)
     platform = relationship("Platform", lazy="selectin")
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

@@ -1,4 +1,4 @@
-from .enums import MediaCategory, Supertype
+from .enums import LinkMatchType, MediaCategory, Supertype
 from .item_link import ItemLink
 from .location import Location
 from .media import MediaItem

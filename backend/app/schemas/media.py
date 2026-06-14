@@ -149,7 +149,7 @@ class MediaItemResponse(BaseModel):
     tmdb_id: Optional[int] = None
     openlibrary_id: Optional[str] = None
 
-    media_subtype_id: Optional[int] = None
+    media_subtype_id: int
     media_subtype: Optional[MediaSubtypeSummary] = None    # computed
     category: Optional[MediaCategory] = None               # computed, from subtype
     supertype: Optional[Supertype] = None                  # computed, from subtype

@@ -12,7 +12,7 @@ from ...models.location import Location
 from ...models.media_subtype import MediaSubtype
 from ...models.platform import Platform
 from ...models.item_link import ItemLink
-from ...models.enums import MediaCategory, Supertype
+from ...models.enums import LinkMatchType, MediaCategory, Supertype
 from ...schemas.media import (
     MediaItemCreate, MediaItemUpdate, MediaItemResponse, MediaListResponse, LibraryStats,
     MediaSubtypeSummary, PlatformSummary, LinkedItemSummary, ItemLinkCreate,
@@ -440,7 +440,8 @@ async def _link_unlinked(db: AsyncSession, item: MediaItem, candidates: list) ->
     for candidate in candidates:
         if candidate.id == item.id or candidate.id in linked_ids:
             continue
-        db.add(ItemLink(item_a_id=item.id, item_b_id=candidate.id, matched_via="auto"))
+        a, b = sorted((item.id, candidate.id))
+        db.add(ItemLink(item_a_id=a, item_b_id=b, matched_via=LinkMatchType.AUTO))
         linked_ids.add(candidate.id)
         created += 1
 
@@ -576,20 +577,17 @@ async def link_items(
     if payload.item_a_id not in ids or payload.item_b_id not in ids:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    a, b = sorted((payload.item_a_id, payload.item_b_id))
+
     existing = (
         await db.execute(
-            select(ItemLink.id).where(
-                or_(
-                    and_(ItemLink.item_a_id == payload.item_a_id, ItemLink.item_b_id == payload.item_b_id),
-                    and_(ItemLink.item_a_id == payload.item_b_id, ItemLink.item_b_id == payload.item_a_id),
-                )
-            )
+            select(ItemLink.id).where(ItemLink.item_a_id == a, ItemLink.item_b_id == b)
         )
     ).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(status_code=400, detail="These items are already linked")
 
-    db.add(ItemLink(item_a_id=payload.item_a_id, item_b_id=payload.item_b_id, matched_via="manual"))
+    db.add(ItemLink(item_a_id=a, item_b_id=b, matched_via=LinkMatchType.MANUAL))
     await db.commit()
 
     item_a = await _reload_item(db, payload.item_a_id)

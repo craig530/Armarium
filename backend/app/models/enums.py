@@ -10,3 +10,8 @@ class MediaCategory(str, enum.Enum):
     MUSIC = "music"
     FILMS_TV = "films_tv"
     BOOKS = "books"
+
+
+class LinkMatchType(str, enum.Enum):
+    AUTO = "auto"
+    MANUAL = "manual"
