@@ -1,13 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 from typing import List, Optional
 from pathlib import Path
 
-from ...database import get_db
 from ...models.platform import Platform
-from ...models.media import MediaItem
-from ...models.plex_config import PlexConfig
+from ...repositories.platform import PlatformRepository, get_platform_repository
 from ...schemas.platform import PlatformCreate, PlatformUpdate, PlatformResponse
 from ...services.auth import get_current_user, require_permission
 from ...services.asset_upload import save_asset, remove_asset
@@ -37,29 +33,14 @@ def _to_response(platform: Platform, item_count: int = 0, locked_reason: str = N
     )
 
 
-async def _item_count_map(db: AsyncSession) -> dict:
-    rows = await db.execute(
-        select(MediaItem.platform_id, func.count(MediaItem.id))
-        .where(MediaItem.platform_id.is_not(None))
-        .group_by(MediaItem.platform_id)
-    )
-    return {row[0]: row[1] for row in rows}
-
-
-async def _locked_map(db: AsyncSession) -> dict:
-    """The platform configured for Plex sync — locked (undeletable) until
-    the admin reconfigures or removes the Plex integration."""
-    platform_id = (await db.execute(select(PlexConfig.platform_id))).scalars().first()
-    if platform_id is None:
-        return {}
-    return {platform_id: "Configured as the Plex sync platform"}
-
-
 @router.get("", response_model=List[PlatformResponse])
-async def list_platforms(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    rows = (await db.execute(select(Platform).order_by(Platform.name))).scalars().all()
-    counts = await _item_count_map(db)
-    locked = await _locked_map(db)
+async def list_platforms(
+    _=Depends(get_current_user),
+    repo: PlatformRepository = Depends(get_platform_repository),
+):
+    rows = await repo.list_ordered()
+    counts = await repo.item_count_map()
+    locked = await repo.locked_map()
     return [_to_response(p, counts.get(p.id, 0), locked.get(p.id)) for p in rows]
 
 
@@ -67,16 +48,16 @@ async def list_platforms(_=Depends(get_current_user), db: AsyncSession = Depends
 async def create_platform(
     payload: PlatformCreate,
     _=Depends(require_permission("can_manage_platforms")),
-    db: AsyncSession = Depends(get_db),
+    repo: PlatformRepository = Depends(get_platform_repository),
 ):
-    existing = (await db.execute(select(Platform.id).where(Platform.name == payload.name))).scalar_one_or_none()
+    existing = await repo.find_by_name(payload.name)
     if existing is not None:
         raise HTTPException(status_code=409, detail="A platform with this name already exists")
 
     platform = Platform(name=payload.name, logo_key=payload.logo_key)
-    db.add(platform)
-    await db.commit()
-    await db.refresh(platform)
+    repo.add(platform)
+    await repo.commit()
+    await repo.refresh(platform)
     return _to_response(platform, 0)
 
 
@@ -85,16 +66,14 @@ async def update_platform(
     platform_id: int,
     payload: PlatformUpdate,
     _=Depends(require_permission("can_manage_platforms")),
-    db: AsyncSession = Depends(get_db),
+    repo: PlatformRepository = Depends(get_platform_repository),
 ):
-    platform = (await db.execute(select(Platform).where(Platform.id == platform_id))).scalar_one_or_none()
+    platform = await repo.get(platform_id)
     if not platform:
         raise HTTPException(status_code=404, detail="Platform not found")
 
     if payload.name is not None and payload.name != platform.name:
-        existing = (
-            await db.execute(select(Platform.id).where(Platform.name == payload.name, Platform.id != platform_id))
-        ).scalar_one_or_none()
+        existing = await repo.find_by_name(payload.name, exclude_id=platform_id)
         if existing is not None:
             raise HTTPException(status_code=409, detail="A platform with this name already exists")
         platform.name = payload.name
@@ -102,9 +81,9 @@ async def update_platform(
     if "logo_key" in payload.model_fields_set:
         platform.logo_key = payload.logo_key
 
-    await db.commit()
-    await db.refresh(platform)
-    counts = await _item_count_map(db)
+    await repo.commit()
+    await repo.refresh(platform)
+    counts = await repo.item_count_map()
     return _to_response(platform, counts.get(platform.id, 0))
 
 
@@ -112,19 +91,17 @@ async def update_platform(
 async def delete_platform(
     platform_id: int,
     _=Depends(require_permission("can_manage_platforms")),
-    db: AsyncSession = Depends(get_db),
+    repo: PlatformRepository = Depends(get_platform_repository),
 ):
-    platform = (await db.execute(select(Platform).where(Platform.id == platform_id))).scalar_one_or_none()
+    platform = await repo.get(platform_id)
     if not platform:
         raise HTTPException(status_code=404, detail="Platform not found")
 
-    count = (
-        await db.execute(select(func.count(MediaItem.id)).where(MediaItem.platform_id == platform_id))
-    ).scalar_one()
+    count = await repo.item_count(platform_id)
     if count > 0:
         raise HTTPException(status_code=400, detail=f"Cannot delete: {count} item(s) use this platform")
 
-    locked = await _locked_map(db)
+    locked = await repo.locked_map()
     reason = locked.get(platform_id)
     if reason is not None:
         raise HTTPException(
@@ -133,8 +110,8 @@ async def delete_platform(
         )
 
     remove_asset(settings.platform_logos_dir, platform.logo_path)
-    await db.delete(platform)
-    await db.commit()
+    await repo.delete(platform)
+    await repo.commit()
 
 
 @router.post("/{platform_id}/logo", response_model=PlatformResponse)
@@ -142,9 +119,9 @@ async def upload_platform_logo(
     platform_id: int,
     file: UploadFile = File(...),
     _=Depends(require_permission("can_manage_platforms")),
-    db: AsyncSession = Depends(get_db),
+    repo: PlatformRepository = Depends(get_platform_repository),
 ):
-    platform = (await db.execute(select(Platform).where(Platform.id == platform_id))).scalar_one_or_none()
+    platform = await repo.get(platform_id)
     if not platform:
         raise HTTPException(status_code=404, detail="Platform not found")
 
@@ -163,7 +140,7 @@ async def upload_platform_logo(
         remove_asset(settings.platform_logos_dir, platform.logo_path)
 
     platform.logo_path = filename
-    await db.commit()
-    await db.refresh(platform)
-    counts = await _item_count_map(db)
+    await repo.commit()
+    await repo.refresh(platform)
+    counts = await repo.item_count_map()
     return _to_response(platform, counts.get(platform.id, 0))
