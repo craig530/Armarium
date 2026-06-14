@@ -119,9 +119,9 @@ export default function Navbar({ stats }) {
         <div className="ml-auto flex items-center gap-2">
           {/* Keyboard hint */}
           <span className="hidden lg:flex items-center gap-1 text-xs text-gray-400 mr-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">/</kbd> search
+            <kbd className="px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono">/</kbd> search
             <span className="mx-1">·</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">n</kbd> add
+            <kbd className="px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono">n</kbd> add
           </span>
 
           {/* Dark mode toggle */}

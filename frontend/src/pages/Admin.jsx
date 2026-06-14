@@ -41,7 +41,7 @@ function PermissionToggles({ value, onChange }) {
           type="checkbox"
           checked={value.is_read_only}
           onChange={(e) => onChange('is_read_only', e.target.checked)}
-          className="rounded"
+          className="rounded-sm"
         />
         Read only (overrides all permissions below)
       </label>
@@ -57,7 +57,7 @@ function PermissionToggles({ value, onChange }) {
             checked={value[key]}
             disabled={value.is_read_only}
             onChange={(e) => onChange(key, e.target.checked)}
-            className="rounded"
+            className="rounded-sm"
           />
           {label}
         </label>
@@ -163,13 +163,13 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="New password"
-              className="w-36 text-base sm:text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-36 text-base sm:text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
               autoFocus
             />
-            <button onClick={handlePasswordReset} disabled={saving} className="p-1 rounded text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">
+            <button onClick={handlePasswordReset} disabled={saving} className="p-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">
               <Check size={14} />
             </button>
-            <button onClick={() => { setEditing(false); setNewPassword('') }} className="p-1 rounded text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+            <button onClick={() => { setEditing(false); setNewPassword('') }} className="p-1 rounded-sm text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
               <X size={14} />
             </button>
           </div>
@@ -230,7 +230,7 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
               type="checkbox"
               checked={user.is_read_only}
               onChange={(e) => handleTogglePermission('is_read_only', e.target.checked)}
-              className="rounded"
+              className="rounded-sm"
             />
             Read only
           </label>
@@ -246,7 +246,7 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
                 checked={user[key]}
                 disabled={user.is_read_only}
                 onChange={(e) => handleTogglePermission(key, e.target.checked)}
-                className="rounded"
+                className="rounded-sm"
               />
               {label}
             </label>
@@ -345,7 +345,7 @@ export default function Admin() {
                 type="checkbox"
                 checked={form.is_admin}
                 onChange={(e) => setForm((f) => ({ ...f, is_admin: e.target.checked }))}
-                className="rounded"
+                className="rounded-sm"
               />
               Grant admin role
             </label>
@@ -468,14 +468,14 @@ function BackupPanel() {
                 <button
                   onClick={() => downloadBackup(b.name)}
                   title="Download backup"
-                  className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="p-1 rounded-sm text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <Download size={13} />
                 </button>
                 <button
                   onClick={() => deleteBackup(b.name)}
                   title="Delete backup"
-                  className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="p-1 rounded-sm text-gray-400 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -619,7 +619,7 @@ function PlexIntegrationPanel() {
               type="checkbox"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
-              className="rounded"
+              className="rounded-sm"
             />
             Enabled
           </label>

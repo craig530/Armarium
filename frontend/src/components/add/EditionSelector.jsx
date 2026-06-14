@@ -38,7 +38,7 @@ export default function EditionSelector({ candidates, onSelect }) {
               {c.creator && <p className="text-xs text-gray-500 dark:text-gray-400">{c.creator}</p>}
               {c.year && <p className="text-xs text-gray-400">{c.year}</p>}
               {c.edition && (
-                <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                   {c.edition}
                 </span>
               )}

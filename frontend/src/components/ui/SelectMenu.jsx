@@ -52,7 +52,7 @@ export default function SelectMenu({ groups, value, onChange, label, placeholder
             'w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-base sm:text-sm text-left',
             'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100',
             'border-gray-300 dark:border-gray-700',
-            'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent'
+            'focus:outline-hidden focus:ring-2 focus:ring-brand-500 focus:border-transparent'
           )}
         >
           {/* Muted when the first/default option is selected, matching

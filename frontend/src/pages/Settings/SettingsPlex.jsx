@@ -272,7 +272,7 @@ export default function SettingsPlex() {
                           <button
                             onClick={() => handleDelete(m)}
                             disabled={isSyncing}
-                            className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-1 rounded-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -283,7 +283,7 @@ export default function SettingsPlex() {
                             <select
                               value={m.media_subtype?.id ?? ''}
                               onChange={(e) => handleSubtypeChange(m, e.target.value)}
-                              className="text-xs rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                              className="text-xs rounded-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
                             >
                               <option value="" disabled>Select…</option>
                               {subtypeOptions.map((s) => (
@@ -325,7 +325,7 @@ export default function SettingsPlex() {
                           type="checkbox"
                           checked={!!staleSelection[item.id]}
                           onChange={() => handleToggleStale(item.id)}
-                          className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                          className="h-4 w-4 rounded-sm border-gray-300 text-brand-600 focus:ring-brand-500"
                         />
                         <CoverImage
                           src={item.cover_thumb_url}

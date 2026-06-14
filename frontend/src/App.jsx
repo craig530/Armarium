@@ -71,7 +71,7 @@ export default function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          className: 'dark:!bg-gray-800 dark:!text-white dark:!border-gray-700',
+          className: 'dark:bg-gray-800! dark:text-white! dark:border-gray-700!',
           duration: 3500,
         }}
       />

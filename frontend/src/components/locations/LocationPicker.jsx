@@ -61,7 +61,7 @@ export default function LocationPicker({
             'w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-base sm:text-sm text-left',
             'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100',
             'border-gray-300 dark:border-gray-700',
-            'focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent'
+            'focus:outline-hidden focus:ring-2 focus:ring-brand-500 focus:border-transparent'
           )}
         >
           <span className={clsx('truncate flex items-center gap-2 min-w-0', !selected && 'text-gray-400 dark:text-gray-600')}>
@@ -81,7 +81,7 @@ export default function LocationPicker({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search locations…"
-                  className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-7 pr-2 py-1.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 pl-7 pr-2 py-1.5 text-base sm:text-sm text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                 />
               </div>
             </div>

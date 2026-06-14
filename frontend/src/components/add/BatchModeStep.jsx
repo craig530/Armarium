@@ -35,7 +35,7 @@ export default function BatchModeStep({ batchMode, onChange, onContinue }) {
         >
           <div
             className={clsx(
-              'absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+              'absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform',
               batchMode && 'translate-x-5'
             )}
           />

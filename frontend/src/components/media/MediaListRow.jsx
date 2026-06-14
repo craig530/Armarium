@@ -29,7 +29,7 @@ export default function MediaListRow({ item, onDeleted }) {
   return (
     <div
       onClick={() => navigate(`/item/${item.id}`)}
-      className="flex items-center gap-4 p-3 rounded-xl hover:bg-white dark:hover:bg-gray-900 hover:shadow-sm transition-all cursor-pointer group"
+      className="flex items-center gap-4 p-3 rounded-xl hover:bg-white dark:hover:bg-gray-900 hover:shadow-xs transition-all cursor-pointer group"
     >
       {/* Cover thumbnail */}
       <div className="shrink-0 h-16 w-12 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">

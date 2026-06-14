@@ -5,7 +5,7 @@ import { platformLogoUrl } from '../../lib/platformLogos'
 
 function IconBox({ children }) {
   return (
-    <span className="shrink-0 h-5 w-5 rounded bg-white dark:bg-gray-900 flex items-center justify-center p-0.5">
+    <span className="shrink-0 h-5 w-5 rounded-sm bg-white dark:bg-gray-900 flex items-center justify-center p-0.5">
       {children}
     </span>
   )

@@ -213,13 +213,13 @@ export default function LocationManager() {
                     <>
                       <button
                         onClick={() => handleEdit(loc)}
-                        className="p-1 rounded text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        className="p-1 rounded-sm text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
                       >
                         <Pencil size={13} />
                       </button>
                       <button
                         onClick={() => handleDelete(loc)}
-                        className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        className="p-1 rounded-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                       >
                         <Trash2 size={13} />
                       </button>

@@ -296,9 +296,9 @@ export default function ItemDetail() {
       <div className="flex gap-6 items-start">
         <div className="shrink-0 w-36 rounded-xl overflow-hidden shadow-lg bg-gray-100 dark:bg-gray-800">
           {item.cover_url ? (
-            <img key={item.cover_url} src={coverProxyUrl(item.cover_url)} alt={item.title} className="w-full aspect-[2/3] object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+            <img key={item.cover_url} src={coverProxyUrl(item.cover_url)} alt={item.title} className="w-full aspect-2/3 object-cover" onError={(e) => { e.target.style.display = 'none' }} />
           ) : (
-            <CoverImage category={item.category} title={item.title} size="full" className="aspect-[2/3]" />
+            <CoverImage category={item.category} title={item.title} size="full" className="aspect-2/3" />
           )}
         </div>
 

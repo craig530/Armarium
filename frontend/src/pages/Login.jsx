@@ -63,7 +63,7 @@ export default function Login() {
                 autoFocus
                 value={form.username}
                 onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                className="w-full rounded-lg border px-3 py-2 text-base sm:text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full rounded-lg border px-3 py-2 text-base sm:text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
               />
             </div>
 
@@ -75,7 +75,7 @@ export default function Login() {
                   autoComplete="current-password"
                   value={form.password}
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  className="w-full rounded-lg border px-3 py-2 pr-10 text-base sm:text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full rounded-lg border px-3 py-2 pr-10 text-base sm:text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
                 />
                 <button
                   type="button"

@@ -2,14 +2,14 @@ import clsx from 'clsx'
 
 function Bone({ className }) {
   return (
-    <div className={clsx('animate-pulse rounded bg-gray-200 dark:bg-gray-700/60', className)} />
+    <div className={clsx('animate-pulse rounded-sm bg-gray-200 dark:bg-gray-700/60', className)} />
   )
 }
 
 export function SkeletonCard() {
   return (
     <div className="p-3 space-y-2">
-      <Bone className="aspect-[2/3] w-full rounded-lg" />
+      <Bone className="aspect-2/3 w-full rounded-lg" />
       <Bone className="h-3 w-4/5" />
       <Bone className="h-3 w-3/5" />
     </div>
