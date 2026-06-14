@@ -1,12 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from typing import List, Optional
-from pathlib import Path
+from typing import List
 
-from ...database import get_db
 from ...models.location import Location
-from ...models.media import MediaItem
+from ...repositories.location import LocationRepository, get_location_repository, location_icon_url
 from ...schemas.location import LocationCreate, LocationUpdate, LocationResponse
 from ...services.auth import get_current_user, require_permission
 from ...services.asset_upload import save_asset, remove_asset
@@ -18,71 +14,14 @@ ALLOWED_ICON_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "ima
 MAX_ICON_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB
 
 
-def _icon_url(icon_path: Optional[str]) -> Optional[str]:
-    return f"/location-icons/{Path(icon_path).name}" if icon_path else None
-
-
-async def _location_rows(db: AsyncSession):
-    """Fetch every location as plain (id, name, parent_id, ...) rows.
-
-    Avoids the ORM `Location.children`/`Location.parent` relationships —
-    those are only eager-loaded to a fixed depth via selectinload(), and
-    accessing them beyond that depth raises MissingGreenlet.
-    """
-    return (
-        await db.execute(
-            select(
-                Location.id, Location.name, Location.parent_id,
-                Location.icon_key, Location.icon_path, Location.sort_order,
-                Location.created_at, Location.updated_at,
-            )
-            .order_by(Location.sort_order, Location.name)
-        )
-    ).all()
-
-
-def _build_tree(rows, count_map: dict):
-    """Build LocationResponse trees from flat rows, returning (roots, by_id)."""
-    by_parent = {}
-    for row in rows:
-        by_parent.setdefault(row.parent_id, []).append(row)
-
-    by_id = {}
-
-    def build(row) -> LocationResponse:
-        node = LocationResponse(
-            id=row.id,
-            name=row.name,
-            parent_id=row.parent_id,
-            icon_key=row.icon_key,
-            icon_url=_icon_url(row.icon_path),
-            sort_order=row.sort_order,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            item_count=count_map.get(row.id, 0),
-            children=[build(c) for c in by_parent.get(row.id, [])],
-        )
-        by_id[row.id] = node
-        return node
-
-    roots = [build(r) for r in by_parent.get(None, [])]
-    return roots, by_id
-
-
-async def _count_map(db: AsyncSession) -> dict:
-    count_rows = await db.execute(
-        select(MediaItem.location_id, func.count(MediaItem.id))
-        .where(MediaItem.location_id.is_not(None))
-        .group_by(MediaItem.location_id)
-    )
-    return {row[0]: row[1] for row in count_rows}
-
-
 @router.get("", response_model=List[LocationResponse])
-async def list_locations(_=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    count_map = await _count_map(db)
-    rows = await _location_rows(db)
-    roots, _by_id = _build_tree(rows, count_map)
+async def list_locations(
+    _=Depends(get_current_user),
+    repo: LocationRepository = Depends(get_location_repository),
+):
+    count_map = await repo.item_count_map()
+    rows = await repo.flat_rows()
+    roots, _by_id = repo.build_tree(rows, count_map)
     return roots
 
 
@@ -90,20 +29,20 @@ async def list_locations(_=Depends(get_current_user), db: AsyncSession = Depends
 async def create_location(
     payload: LocationCreate,
     _=Depends(require_permission("can_manage_locations")),
-    db: AsyncSession = Depends(get_db),
+    repo: LocationRepository = Depends(get_location_repository),
 ):
     if payload.parent_id:
-        parent = (await db.execute(select(Location).where(Location.id == payload.parent_id))).scalar_one_or_none()
+        parent = await repo.get(payload.parent_id)
         if not parent:
             raise HTTPException(status_code=404, detail="Parent location not found")
 
     loc = Location(name=payload.name, parent_id=payload.parent_id, icon_key=payload.icon_key, sort_order=payload.sort_order)
-    db.add(loc)
-    await db.commit()
-    await db.refresh(loc)
+    repo.add(loc)
+    await repo.commit()
+    await repo.refresh(loc)
     return LocationResponse(
         id=loc.id, name=loc.name, parent_id=loc.parent_id,
-        icon_key=loc.icon_key, icon_url=_icon_url(loc.icon_path), sort_order=loc.sort_order,
+        icon_key=loc.icon_key, icon_url=location_icon_url(loc.icon_path), sort_order=loc.sort_order,
         created_at=loc.created_at, updated_at=loc.updated_at,
         item_count=0, children=[],
     )
@@ -113,14 +52,14 @@ async def create_location(
 async def get_location(
     loc_id: int,
     _=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    repo: LocationRepository = Depends(get_location_repository),
 ):
-    rows = await _location_rows(db)
+    rows = await repo.flat_rows()
     if not any(row.id == loc_id for row in rows):
         raise HTTPException(status_code=404, detail="Location not found")
 
-    count_map = await _count_map(db)
-    _roots, by_id = _build_tree(rows, count_map)
+    count_map = await repo.item_count_map()
+    _roots, by_id = repo.build_tree(rows, count_map)
     return by_id[loc_id]
 
 
@@ -129,9 +68,9 @@ async def update_location(
     loc_id: int,
     payload: LocationUpdate,
     _=Depends(require_permission("can_manage_locations")),
-    db: AsyncSession = Depends(get_db),
+    repo: LocationRepository = Depends(get_location_repository),
 ):
-    loc = (await db.execute(select(Location).where(Location.id == loc_id))).scalar_one_or_none()
+    loc = await repo.get(loc_id)
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
 
@@ -145,30 +84,18 @@ async def update_location(
         if payload.parent_id == loc_id:
             raise HTTPException(status_code=400, detail="Location cannot be its own parent")
 
-        # Walk up from the proposed parent toward the root. If loc_id appears in
-        # that chain, reparenting would make loc_id its own ancestor, creating a
-        # cycle that would recurse forever when building the location tree.
-        # `visited` also bounds the walk if a cycle already exists in the data
-        # for an unrelated branch.
-        ancestor_id = payload.parent_id
-        visited = set()
-        while ancestor_id is not None and ancestor_id not in visited:
-            if ancestor_id == loc_id:
-                raise HTTPException(status_code=400, detail="Cannot move a location under one of its own descendants")
-            visited.add(ancestor_id)
-            ancestor_id = (
-                await db.execute(select(Location.parent_id).where(Location.id == ancestor_id))
-            ).scalar_one_or_none()
+        if await repo.would_create_cycle(loc_id, payload.parent_id):
+            raise HTTPException(status_code=400, detail="Cannot move a location under one of its own descendants")
 
         loc.parent_id = payload.parent_id
     elif "parent_id" in payload.model_fields_set:
         loc.parent_id = None
 
-    await db.commit()
-    await db.refresh(loc)
+    await repo.commit()
+    await repo.refresh(loc)
     return LocationResponse(
         id=loc.id, name=loc.name, parent_id=loc.parent_id,
-        icon_key=loc.icon_key, icon_url=_icon_url(loc.icon_path), sort_order=loc.sort_order,
+        icon_key=loc.icon_key, icon_url=location_icon_url(loc.icon_path), sort_order=loc.sort_order,
         created_at=loc.created_at, updated_at=loc.updated_at,
         item_count=0, children=[],
     )
@@ -178,26 +105,23 @@ async def update_location(
 async def delete_location(
     loc_id: int,
     _=Depends(require_permission("can_manage_locations")),
-    db: AsyncSession = Depends(get_db),
+    repo: LocationRepository = Depends(get_location_repository),
 ):
-    loc = (await db.execute(select(Location).where(Location.id == loc_id))).scalar_one_or_none()
+    loc = await repo.get(loc_id)
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
 
-    child = (await db.execute(select(Location.id).where(Location.parent_id == loc_id))).scalars().first()
-    if child is not None:
+    if await repo.has_children(loc_id):
         raise HTTPException(
             status_code=400,
             detail="Cannot delete a location that has child locations. Move or delete them first.",
         )
 
-    items = (await db.execute(select(MediaItem).where(MediaItem.location_id == loc_id))).scalars().all()
-    for item in items:
-        item.location_id = None
+    await repo.unlink_items(loc_id)
 
     remove_asset(settings.location_icons_dir, loc.icon_path)
-    await db.delete(loc)
-    await db.commit()
+    await repo.delete(loc)
+    await repo.commit()
 
 
 @router.post("/{loc_id}/icon", response_model=LocationResponse)
@@ -205,9 +129,9 @@ async def upload_location_icon(
     loc_id: int,
     file: UploadFile = File(...),
     _=Depends(require_permission("can_manage_locations")),
-    db: AsyncSession = Depends(get_db),
+    repo: LocationRepository = Depends(get_location_repository),
 ):
-    loc = (await db.execute(select(Location).where(Location.id == loc_id))).scalar_one_or_none()
+    loc = await repo.get(loc_id)
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
 
@@ -226,9 +150,9 @@ async def upload_location_icon(
         remove_asset(settings.location_icons_dir, loc.icon_path)
 
     loc.icon_path = filename
-    await db.commit()
+    await repo.commit()
 
-    rows = await _location_rows(db)
-    count_map = await _count_map(db)
-    _roots, by_id = _build_tree(rows, count_map)
+    rows = await repo.flat_rows()
+    count_map = await repo.item_count_map()
+    _roots, by_id = repo.build_tree(rows, count_map)
     return by_id[loc_id]
