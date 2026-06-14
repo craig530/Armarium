@@ -1,6 +1,6 @@
 from typing import Generic, Optional, Sequence, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 ModelT = TypeVar("ModelT")
@@ -34,8 +34,14 @@ class BaseRepository(Generic[ModelT]):
     async def delete(self, obj: ModelT) -> None:
         await self.db.delete(obj)
 
+    async def delete_all(self) -> None:
+        await self.db.execute(delete(self.model))
+
     async def commit(self) -> None:
         await self.db.commit()
+
+    async def flush(self) -> None:
+        await self.db.flush()
 
     async def refresh(self, obj: ModelT) -> None:
         await self.db.refresh(obj)

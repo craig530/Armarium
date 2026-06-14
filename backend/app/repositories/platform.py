@@ -40,6 +40,9 @@ class PlatformRepository(BaseRepository[Platform]):
             return {}
         return {platform_id: "Configured as the Plex sync platform"}
 
+    async def existing_ids(self) -> set:
+        return set((await self.db.execute(select(Platform.id))).scalars().all())
+
     async def find_by_name(self, name: str, exclude_id: Optional[int] = None) -> Optional[int]:
         stmt = select(Platform.id).where(Platform.name == name)
         if exclude_id is not None:

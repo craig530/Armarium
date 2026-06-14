@@ -1,7 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse, FileResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from typing import Optional
 import csv
 import io
@@ -12,12 +10,12 @@ from datetime import datetime
 from pathlib import Path
 import shutil
 
-from ...database import get_db
 from ...models.media import MediaItem
-from ...models.location import Location
-from ...models.media_subtype import MediaSubtype
-from ...models.platform import Platform
 from ...models.enums import Supertype
+from ...repositories.location import LocationRepository, get_location_repository
+from ...repositories.media_item import MediaItemRepository, get_media_item_repository
+from ...repositories.media_subtype import MediaSubtypeRepository, get_media_subtype_repository
+from ...repositories.platform import PlatformRepository, get_platform_repository
 from ...schemas.media import MediaItemCreate
 from ...services.auth import get_current_user, get_current_admin
 from ...config import settings
@@ -62,11 +60,10 @@ def _row_to_create(row: dict) -> Optional[MediaItemCreate]:
 async def export_library(
     format: str = Query("json", pattern="^(json|csv)$"),
     _=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    repo: MediaItemRepository = Depends(get_media_item_repository),
 ):
     """Export the full library as JSON or CSV."""
-    stmt = select(MediaItem).order_by(MediaItem.title)
-    items = (await db.execute(stmt)).scalars().all()
+    items = await repo.list(MediaItem.title)
 
     if format == "json":
         data = [
@@ -123,7 +120,10 @@ async def import_library(
     file: UploadFile = File(...),
     format: str = Query("csv", pattern="^(json|csv)$"),
     _=Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
+    media_repo: MediaItemRepository = Depends(get_media_item_repository),
+    subtype_repo: MediaSubtypeRepository = Depends(get_media_subtype_repository),
+    location_repo: LocationRepository = Depends(get_location_repository),
+    platform_repo: PlatformRepository = Depends(get_platform_repository),
 ):
     """
     Bulk import media items from a CSV or JSON file.
@@ -143,11 +143,9 @@ async def import_library(
 
     # Validate foreign keys against what actually exists, rather than letting
     # stale/foreign ids from an old export create dangling references.
-    subtype_supertypes = dict(
-        (await db.execute(select(MediaSubtype.id, MediaSubtype.supertype))).all()
-    )
-    valid_locations = set((await db.execute(select(Location.id))).scalars().all())
-    valid_platforms = set((await db.execute(select(Platform.id))).scalars().all())
+    subtype_supertypes = await subtype_repo.supertype_map()
+    valid_locations = await location_repo.existing_ids()
+    valid_platforms = await platform_repo.existing_ids()
 
     created, skipped = 0, 0
     for row in rows:
@@ -166,10 +164,10 @@ async def import_library(
         if supertype != Supertype.DIGITAL or item_create.platform_id not in valid_platforms:
             item_create.platform_id = None
 
-        db.add(MediaItem(**item_create.model_dump()))
+        media_repo.add(MediaItem(**item_create.model_dump()))
         created += 1
 
-    await db.commit()
+    await media_repo.commit()
     return {"imported": created, "skipped": skipped}
 
 

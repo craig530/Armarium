@@ -51,6 +51,11 @@ class MediaSubtypeRepository(BaseRepository[MediaSubtype]):
             for subtype_id, section_title in rows
         }
 
+    async def supertype_map(self) -> dict:
+        """{subtype_id: Supertype}, used to validate import rows' media_subtype_id."""
+        rows = await self.db.execute(select(MediaSubtype.id, MediaSubtype.supertype))
+        return dict(rows.all())
+
     async def find_by_name_in_category(
         self, category: MediaCategory, supertype: Supertype, name: str, exclude_id: Optional[int] = None
     ) -> Optional[int]:

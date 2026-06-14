@@ -73,6 +73,9 @@ class LocationRepository(BaseRepository[Location]):
         )
         return {row[0]: row[1] for row in rows}
 
+    async def existing_ids(self) -> set:
+        return set((await self.db.execute(select(Location.id))).scalars().all())
+
     async def has_children(self, loc_id: int) -> bool:
         child = (await self.db.execute(select(Location.id).where(Location.parent_id == loc_id))).scalars().first()
         return child is not None

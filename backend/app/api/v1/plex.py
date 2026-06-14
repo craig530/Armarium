@@ -33,7 +33,8 @@ from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
 from ...services.cover_art import delete_cover_files, optimise_and_save
 from ...services.plex_sync_jobs import PlexSyncJob, get_job, set_job
-from .media import _build_responses, _link_unlinked
+from ...repositories.media_item import MediaItemRepository
+from .media import _build_responses
 
 router = APIRouter()
 
@@ -357,6 +358,7 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
     the request that started it, so it opens its own session and re-loads
     everything it needs."""
     async with AsyncSessionLocal() as db:
+        repo = MediaItemRepository(db)
         try:
             mapping = (
                 await db.execute(select(PlexLibraryMapping).where(PlexLibraryMapping.id == mapping_id))
@@ -399,7 +401,7 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                         setattr(existing, field_name, value)
                     await _apply_cover(db, config, existing, raw_item.get("thumb"))
                     candidates = await _find_link_candidates(db, mapping, config, sync_item, exclude_id=existing.id)
-                    await _link_unlinked(db, existing, candidates)
+                    await repo.link_unlinked(existing, candidates)
                     seen_item_ids.add(existing.id)
                     job.updated += 1
                     job.processed += 1
@@ -416,7 +418,7 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                 await db.flush()
                 await _apply_cover(db, config, item, raw_item.get("thumb"))
                 await db.flush()
-                await _link_unlinked(db, item, candidates)
+                await repo.link_unlinked(item, candidates)
                 seen_item_ids.add(item.id)
                 job.created += 1
                 job.processed += 1
@@ -435,7 +437,7 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
             if seen_item_ids:
                 stale_stmt = stale_stmt.where(MediaItem.id.notin_(seen_item_ids))
             stale_items = (await db.execute(stale_stmt)).scalars().all()
-            job.stale_items = await _build_responses(db, stale_items) if stale_items else []
+            job.stale_items = await _build_responses(repo, stale_items) if stale_items else []
 
             mapping.last_synced_at = datetime.utcnow()
             await db.commit()
