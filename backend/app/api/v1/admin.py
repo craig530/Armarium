@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import settings
 from ...database import get_db, AsyncSessionLocal
-from ...migrations import seed_media_subtypes
+from ...services.media_subtypes import seed_default_media_subtypes
 from ...models.item_link import ItemLink
 from ...models.location import Location
 from ...models.media import MediaItem
@@ -47,7 +47,7 @@ async def reset_database(
     _reset_dir(settings.location_icons_dir)
     _reset_dir(settings.platform_logos_dir)
 
-    await seed_media_subtypes(db)
+    await seed_default_media_subtypes(db)
 
     return {"status": "ok"}
 

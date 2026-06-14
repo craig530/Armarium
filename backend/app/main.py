@@ -2,6 +2,8 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -10,25 +12,23 @@ from sqlalchemy import select
 
 from .config import settings
 from .database import engine, Base, AsyncSessionLocal
-from .migrations import (
-    run_additive_migrations,
-    create_missing_indexes,
-    seed_media_subtypes,
-    backfill_media_subtypes,
-    remove_unused_default_subtypes,
-    rename_default_subtypes,
-    add_books_digital_subtypes,
-    add_user_permission_columns,
-    add_location_sort_order_column,
-    drop_legacy_media_type_column,
-    drop_plex_source_columns,
-    reset_mismatched_plex_tables,
-)
+from .services.media_subtypes import seed_default_media_subtypes
 from .services.search import setup_fts
 from .api.v1.router import router
 from . import models  # noqa: F401 — registers ORM classes before create_all
 
 logger = logging.getLogger("armarium")
+
+ALEMBIC_INI = Path(__file__).resolve().parent.parent / "alembic.ini"
+
+
+def _run_alembic_upgrade(sync_conn) -> None:
+    """Bring a file-based database to the latest Alembic revision, using the
+    connection already opened by the async engine (see env.py's
+    `config.attributes["connection"]` branch — no second engine/event loop)."""
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.attributes["connection"] = sync_conn
+    command.upgrade(cfg, "head")
 
 
 async def _ensure_admin():
@@ -56,13 +56,17 @@ async def _ensure_admin():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.database_url.endswith(":memory:"):
+        # In-memory test DBs skip Alembic entirely — this is schema-equivalent
+        # to the v1 baseline by construction (both derive from Base.metadata).
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    else:
+        async with engine.connect() as conn:
+            await conn.run_sync(_run_alembic_upgrade)
+            await conn.commit()
+
     async with engine.begin() as conn:
-        await reset_mismatched_plex_tables(conn)
-        await conn.run_sync(Base.metadata.create_all)
-        await run_additive_migrations(conn)
-        await create_missing_indexes(conn)
-        await add_user_permission_columns(conn)
-        await add_location_sort_order_column(conn)
         await setup_fts(conn)
 
     Path(settings.covers_dir).mkdir(parents=True, exist_ok=True)
@@ -70,16 +74,11 @@ async def lifespan(app: FastAPI):
     Path(settings.location_icons_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.platform_logos_dir).mkdir(parents=True, exist_ok=True)
 
-    async with AsyncSessionLocal() as db:
-        await seed_media_subtypes(db)
-        await backfill_media_subtypes(db)
-        await remove_unused_default_subtypes(db)
-        await rename_default_subtypes(db)
-        await add_books_digital_subtypes(db)
-
-    async with engine.begin() as conn:
-        await drop_legacy_media_type_column(conn)
-        await drop_plex_source_columns(conn)
+    if settings.database_url.endswith(":memory:"):
+        # The Alembic baseline seeds these for file-based DBs; in-memory test
+        # DBs need the same seed data applied directly.
+        async with AsyncSessionLocal() as db:
+            await seed_default_media_subtypes(db)
 
     await _ensure_admin()
     yield
