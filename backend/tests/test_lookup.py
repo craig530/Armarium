@@ -1,0 +1,246 @@
+"""Tests for app.api.v1.lookup — barcode lookup, cover proxy, and image scan."""
+import io
+
+import pytest
+from unittest.mock import patch, AsyncMock
+
+from .conftest import _subtype_id, PNG_1X1
+
+
+# ── Barcode lookup ────────────────────────────────────────────────────────────
+
+async def test_lookup_barcode_flags_existing_library_item(client, auth_headers):
+    from app.models.enums import MediaCategory
+    from app.schemas.media import LookupCandidate
+
+    isbn = "9780134685991"
+    book_id = await _subtype_id(client, auth_headers, "Book")
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Effective Java", "media_subtype_id": book_id, "isbn": isbn},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    item_id = resp.json()["id"]
+
+    fake_candidate = LookupCandidate(
+        external_id=isbn,
+        source="openlibrary",
+        title="Effective Java",
+        category=MediaCategory.BOOKS,
+    )
+
+    with patch("app.services.openlibrary.lookup_by_isbn", new=AsyncMock(return_value=[fake_candidate])):
+        resp = await client.get(f"/api/v1/lookup/barcode/{isbn}", headers=auth_headers)
+
+    assert resp.status_code == 200
+    results = resp.json()
+    assert len(results) == 1
+    assert results[0]["metadata"]["library_count"] == 1
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_lookup_barcode_rejects_invalid_barcode(client, auth_headers):
+    # A 5-digit EAN-5 price extension is not a valid product barcode.
+    resp = await client.get("/api/v1/lookup/barcode/51995", headers=auth_headers)
+
+    assert resp.status_code == 400
+    assert "barcode" in resp.json()["detail"].lower()
+
+
+async def test_lookup_barcode_rejects_non_isbn_for_books_category(client, auth_headers):
+    # 13-digit EAN-13 that doesn't start with 978/979 — not a valid ISBN, so
+    # a category=books lookup must reject it before calling Open Library.
+    with patch("app.services.openlibrary.lookup_by_isbn", new=AsyncMock(return_value=[])) as mock_lookup:
+        resp = await client.get(
+            "/api/v1/lookup/barcode/3916681812733?category=books", headers=auth_headers
+        )
+
+    assert resp.status_code == 400
+    assert "isbn" in resp.json()["detail"].lower()
+    mock_lookup.assert_not_awaited()
+
+
+async def test_lookup_barcode_cd_queries_musicbrainz_with_ean13_from_upc(client, auth_headers):
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_lookup:
+        resp = await client.get("/api/v1/lookup/barcode/075678563598", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    # The 12-digit UPC-A is converted to its 13-digit EAN-13 form before
+    # being passed to MusicBrainz.
+    mock_lookup.assert_awaited_once_with("0075678563598")
+
+
+async def test_lookup_barcode_music_category_queries_musicbrainz(client, auth_headers):
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_lookup:
+        resp = await client.get("/api/v1/lookup/barcode/075678563598?category=music", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    mock_lookup.assert_awaited_once_with("0075678563598")
+
+
+async def test_lookup_barcode_films_tv_category_does_not_query_musicbrainz(client, auth_headers):
+    # MusicBrainz only knows about music releases — a UPC/EAN-13 scanned while
+    # adding a film/TV item must not return mismatched (category=music)
+    # candidates, and must not even call MusicBrainz.
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_lookup:
+        resp = await client.get("/api/v1/lookup/barcode/075678563598?category=films_tv", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    mock_lookup.assert_not_awaited()
+
+
+async def test_lookup_barcode_isbn_queries_open_library(client, auth_headers):
+    from app.models.enums import MediaCategory
+    from app.schemas.media import LookupCandidate
+    from app.services.cache import lookup_cache
+
+    # Avoid a cache hit from another test's lookup of the same ISBN.
+    lookup_cache.clear()
+
+    fake_candidate = LookupCandidate(
+        external_id="9780134685991",
+        source="openlibrary",
+        title="Effective Java",
+        category=MediaCategory.BOOKS,
+    )
+
+    with patch("app.services.openlibrary.lookup_by_isbn", new=AsyncMock(return_value=[fake_candidate])) as mock_lookup:
+        resp = await client.get("/api/v1/lookup/barcode/978-0-13-468599-1", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+    # Hyphens stripped server-side before querying Open Library.
+    mock_lookup.assert_awaited_once_with("9780134685991")
+
+
+# ── Cover proxy ──────────────────────────────────────────────────────────────
+
+async def test_cover_proxy_streams_remote_image(client):
+    fake_bytes = b"\xff\xd8\xfake-jpeg-data"
+    with patch("app.api.v1.lookup.fetch_remote_image", new=AsyncMock(return_value=(fake_bytes, "image/jpeg"))) as mock_fetch:
+        resp = await client.get(
+            "/api/v1/lookup/cover-proxy",
+            params={"url": "https://image.tmdb.org/t/p/w500/poster.jpg"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.content == fake_bytes
+    assert resp.headers["content-type"] == "image/jpeg"
+    mock_fetch.assert_awaited_once_with("https://image.tmdb.org/t/p/w500/poster.jpg")
+
+
+async def test_cover_proxy_404_when_unavailable(client):
+    with patch("app.api.v1.lookup.fetch_remote_image", new=AsyncMock(return_value=None)):
+        resp = await client.get(
+            "/api/v1/lookup/cover-proxy",
+            params={"url": "https://image.tmdb.org/t/p/w500/missing.jpg"},
+        )
+
+    assert resp.status_code == 404
+
+
+async def test_cover_proxy_does_not_require_auth(client):
+    # <img> tags can't send the Authorization header, so this endpoint must
+    # be reachable without auth_headers.
+    with patch("app.api.v1.lookup.fetch_remote_image", new=AsyncMock(return_value=(b"data", "image/png"))):
+        resp = await client.get(
+            "/api/v1/lookup/cover-proxy",
+            params={"url": "https://covers.openlibrary.org/b/id/12345-L.jpg"},
+        )
+
+    assert resp.status_code == 200
+
+
+async def test_cover_proxy_rejects_private_addresses(client):
+    # The same SSRF guard used by download_cover applies here — a
+    # loopback/link-local target must be rejected before any request is made,
+    # without needing to mock httpx (resolves instantly, no network access).
+    resp = await client.get("/api/v1/lookup/cover-proxy", params={"url": "http://127.0.0.1/secret.jpg"})
+    assert resp.status_code == 404
+
+    resp = await client.get("/api/v1/lookup/cover-proxy", params={"url": "http://169.254.169.254/latest/meta-data/"})
+    assert resp.status_code == 404
+
+
+# ── Barcode image scan ───────────────────────────────────────────────────────
+
+# EAN-13 module width tables, used to render a real decodable barcode image
+# for /lookup/scan tests (mirrors the encoding the camera scanner is reading).
+_EAN13_L_CODES = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011']
+_EAN13_G_CODES = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111']
+_EAN13_R_CODES = ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100']
+_EAN13_PARITY = {
+    0: 'LLLLLL', 1: 'LLGLGG', 2: 'LLGGLG', 3: 'LLGGGL', 4: 'LGLLGG',
+    5: 'LGGLLG', 6: 'LGGGLL', 7: 'LGLGLG', 8: 'LGLGGL', 9: 'LGGLGL',
+}
+
+
+def _ean13_png(digits: str) -> bytes:
+    from PIL import Image as PILImage
+
+    parity = _EAN13_PARITY[int(digits[0])]
+    left_bits = ''.join(
+        _EAN13_L_CODES[int(d)] if p == 'L' else _EAN13_G_CODES[int(d)]
+        for d, p in zip(digits[1:7], parity)
+    )
+    right_bits = ''.join(_EAN13_R_CODES[int(d)] for d in digits[7:13])
+    bits = '101' + left_bits + '01010' + right_bits + '101'
+
+    module_width, quiet, height = 4, 10, 100
+    width = (len(bits) + 2 * quiet) * module_width
+    img = PILImage.new('L', (width, height), 255)
+    px = img.load()
+    for m, b in enumerate(bits):
+        if b == '1':
+            for w in range(module_width):
+                x = (quiet + m) * module_width + w
+                for y in range(height):
+                    px[x, y] = 0
+
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return buf.getvalue()
+
+
+async def test_scan_decodes_barcode_image(client, auth_headers):
+    pytest.importorskip("zxingcpp")
+
+    files = {"file": ("frame.png", _ean13_png("9781529052008"), "image/png")}
+    resp = await client.post("/api/v1/lookup/scan", files=files, headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    results = resp.json()["results"]
+    assert any(r["text"] == "9781529052008" for r in results)
+
+
+async def test_scan_returns_no_results_for_blank_image(client, auth_headers):
+    pytest.importorskip("zxingcpp")
+    from PIL import Image as PILImage
+
+    buf = io.BytesIO()
+    PILImage.new('L', (200, 100), 255).save(buf, format='PNG')
+
+    files = {"file": ("frame.png", buf.getvalue(), "image/png")}
+    resp = await client.post("/api/v1/lookup/scan", files=files, headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["results"] == []
+
+
+async def test_scan_rejects_unsupported_content_type(client, auth_headers):
+    files = {"file": ("frame.txt", b"not an image", "text/plain")}
+    resp = await client.post("/api/v1/lookup/scan", files=files, headers=auth_headers)
+    assert resp.status_code == 400
+
+
+async def test_scan_requires_auth(client):
+    files = {"file": ("frame.png", PNG_1X1, "image/png")}
+    resp = await client.post("/api/v1/lookup/scan", files=files)
+    assert resp.status_code == 401

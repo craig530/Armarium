@@ -1,13 +1,4 @@
 """Tests for app.database engine configuration."""
-import os
-
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("ADMIN_USERNAME", "admin")
-os.environ.setdefault("ADMIN_PASSWORD", "testpass123")
-os.environ.setdefault("JWT_SECRET", "test-secret-key-not-for-production")
-os.environ.setdefault("COVERS_DIR", "/tmp/armarium_test_covers")
-os.environ.setdefault("BACKUP_DIR", "/tmp/armarium_test_backups")
-
 from sqlalchemy import text
 
 
