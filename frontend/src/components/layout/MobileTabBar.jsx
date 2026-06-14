@@ -1,13 +1,8 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, Music, Clapperboard, BookOpen, Settings } from 'lucide-react'
+import { LayoutGrid, Settings } from 'lucide-react'
 import clsx from 'clsx'
 import { CATEGORIES } from '../../lib/categories'
-
-const CATEGORY_ICONS = {
-  music: Music,
-  films_tv: Clapperboard,
-  books: BookOpen,
-}
+import { CATEGORY_ICONS } from '../../lib/mediaIcons'
 
 const TABS = [
   { to: '/', label: 'All', icon: LayoutGrid, end: true },

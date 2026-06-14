@@ -15,7 +15,11 @@ const NAME_ICONS = {
   audiobook: Headphones,
 }
 
-const CATEGORY_FALLBACK_ICONS = {
+// Per-category icon, used both as the fallback for getSubtypeIcon (a custom
+// subtype with no specific NAME_ICONS entry) and directly wherever a
+// category (rather than a subtype) needs an icon — nav links, the add-item
+// type picker, cover-image placeholders, etc.
+export const CATEGORY_ICONS = {
   music: Music,
   films_tv: Clapperboard,
   books: BookOpen,
@@ -24,7 +28,7 @@ const CATEGORY_FALLBACK_ICONS = {
 export function getSubtypeIcon(subtype) {
   if (!subtype) return null
   const byName = NAME_ICONS[subtype.name?.toLowerCase().trim()]
-  return byName || CATEGORY_FALLBACK_ICONS[subtype.category] || null
+  return byName || CATEGORY_ICONS[subtype.category] || null
 }
 
 export const OWNERSHIP_ICONS = {

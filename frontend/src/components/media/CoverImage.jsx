@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Music, Clapperboard, BookOpen } from 'lucide-react'
+import { BookOpen } from 'lucide-react'
 import clsx from 'clsx'
 import { coverProxyUrl } from '../../api/lookup'
+import { CATEGORY_ICONS } from '../../lib/mediaIcons'
 
-const CATEGORY_ICONS = { music: Music, films_tv: Clapperboard, books: BookOpen }
 const CATEGORY_BG = {
   music: 'bg-rose-100 dark:bg-rose-900/30 text-rose-400',
   films_tv: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-400',

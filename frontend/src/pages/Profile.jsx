@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { Sun, Moon, ShieldCheck, LogOut, Download, User } from 'lucide-react'
 import { useAuthStore, useThemeStore } from '../store'
-import { MANAGE_LINKS } from '../components/layout/Navbar'
+import { MANAGE_LINKS } from '../lib/navigation'
 import { exportLibrary } from '../lib/export'
 import toast from 'react-hot-toast'
 

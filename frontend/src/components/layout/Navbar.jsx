@@ -1,18 +1,14 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Sun, Moon, Plus, LayoutGrid, Music, Clapperboard, BookOpen, Settings, ShieldCheck, LogOut, User, Download, ChevronDown, MapPin, Tv, Tags, Cast } from 'lucide-react'
+import { Sun, Moon, Plus, LayoutGrid, Settings, ShieldCheck, LogOut, User, Download, ChevronDown } from 'lucide-react'
 import { useThemeStore, useAuthStore, hasPermission } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { CATEGORIES } from '../../lib/categories'
+import { CATEGORY_ICONS } from '../../lib/mediaIcons'
+import { MANAGE_LINKS } from '../../lib/navigation'
 import { exportLibrary } from '../../lib/export'
 import Logo from '../ui/Logo'
-
-const CATEGORY_ICONS = {
-  music: Music,
-  films_tv: Clapperboard,
-  books: BookOpen,
-}
 
 const navItems = [
   { to: '/', label: 'All', icon: LayoutGrid, end: true },
@@ -22,13 +18,6 @@ const navItems = [
     icon: CATEGORY_ICONS[c.value],
     value: c.value,
   })),
-]
-
-export const MANAGE_LINKS = [
-  { to: '/settings/locations', label: 'Manage Locations', icon: MapPin },
-  { to: '/settings/platforms', label: 'Manage Platforms', icon: Tv },
-  { to: '/settings/media-subtypes', label: 'Manage Media Types', icon: Tags },
-  { to: '/settings/plex', label: 'Plex Sync', icon: Cast },
 ]
 
 export default function Navbar({ stats }) {

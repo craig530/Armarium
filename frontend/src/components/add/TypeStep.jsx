@@ -1,8 +1,8 @@
-import { Music, Clapperboard, BookOpen, Disc3, Cloud } from 'lucide-react'
+import { Disc3, Cloud } from 'lucide-react'
 import clsx from 'clsx'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
+import { CATEGORY_ICONS } from '../../lib/mediaIcons'
 
-const CATEGORY_ICONS = { music: Music, films_tv: Clapperboard, books: BookOpen }
 const SUPERTYPE_ICONS = { physical: Disc3, digital: Cloud }
 
 const TILE_BASE = 'flex flex-col items-center gap-2 py-4 rounded-xl text-sm font-medium transition-colors border'
