@@ -436,6 +436,95 @@ async def test_auto_link_on_matching_tmdb_id(client, auth_headers):
     assert resp.status_code == 204
 
 
+async def test_auto_link_falls_back_to_title_and_year_match(client, auth_headers):
+    cd_subtype_id = await _subtype_id(client, auth_headers, "CD")
+    music_digital_subtype_id = await _subtype_id(client, auth_headers, "Music")
+
+    # Simulates a Plex-synced digital item, which has no musicbrainz_id.
+    digital_resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "Number Ones", "media_subtype_id": music_digital_subtype_id,
+            "artist": "Michael Jackson", "year": 2003,
+        },
+        headers=auth_headers,
+    )
+    assert digital_resp.status_code == 201
+    digital_id = digital_resp.json()["id"]
+    assert digital_resp.json()["ownership"] == "digital"
+    assert digital_resp.json()["linked_items"] == []
+
+    # A scanned CD with a populated musicbrainz_id (which doesn't match the
+    # digital item's NULL musicbrainz_id) but the same title and year — the
+    # title/year fallback should still link them.
+    cd_resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "Number Ones", "media_subtype_id": cd_subtype_id,
+            "artist": "Michael Jackson", "year": 2003,
+            "musicbrainz_id": "11111111-1111-1111-1111-111111111111",
+        },
+        headers=auth_headers,
+    )
+    assert cd_resp.status_code == 201
+    cd_item_id = cd_resp.json()["id"]
+    assert cd_resp.json()["ownership"] == "both"
+    assert [li["id"] for li in cd_resp.json()["linked_items"]] == [digital_id]
+
+    resp = await client.get(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.json()["ownership"] == "both"
+    assert [li["id"] for li in resp.json()["linked_items"]] == [cd_item_id]
+
+    # Cleanup
+    resp = await client.delete(f"/api/v1/media/{cd_item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_auto_link_title_year_fallback_skips_edition_mismatch(client, auth_headers):
+    cd_subtype_id = await _subtype_id(client, auth_headers, "CD")
+    music_digital_subtype_id = await _subtype_id(client, auth_headers, "Music")
+
+    digital_resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "Number Ones", "media_subtype_id": music_digital_subtype_id,
+            "artist": "Michael Jackson", "year": 2003, "edition": "Remastered",
+        },
+        headers=auth_headers,
+    )
+    assert digital_resp.status_code == 201
+    digital_id = digital_resp.json()["id"]
+
+    # Same title/year, but an explicitly different edition — the title/year
+    # fallback must not link these.
+    cd_resp = await client.post(
+        "/api/v1/media",
+        json={
+            "title": "Number Ones", "media_subtype_id": cd_subtype_id,
+            "artist": "Michael Jackson", "year": 2003,
+            "edition": "Anniversary Edition",
+            "musicbrainz_id": "22222222-2222-2222-2222-222222222222",
+        },
+        headers=auth_headers,
+    )
+    assert cd_resp.status_code == 201
+    cd_item_id = cd_resp.json()["id"]
+    assert cd_resp.json()["ownership"] == "physical"
+    assert cd_resp.json()["linked_items"] == []
+
+    resp = await client.get(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.json()["ownership"] == "digital"
+    assert resp.json()["linked_items"] == []
+
+    # Cleanup
+    resp = await client.delete(f"/api/v1/media/{cd_item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
 async def test_multi_link_connected_component(client, auth_headers):
     bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
     digital_film_id = await _subtype_id(client, auth_headers, "Film")

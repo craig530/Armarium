@@ -24,6 +24,16 @@ AUTO_LINK_FIELD = {
 }
 
 
+def _editions_compatible(a: Optional[str], b: Optional[str]) -> bool:
+    """Whether two items' `edition` fields conflict. Either side being blank
+    means "no information", so it's treated as compatible — this only
+    suppresses a title/year match when both sides explicitly disagree (e.g.
+    "Remastered" vs "Anniversary Edition")."""
+    if not a or not b:
+        return True
+    return a.strip().lower() == b.strip().lower()
+
+
 class MediaItemRepository(BaseRepository[MediaItem]):
     model = MediaItem
 
@@ -394,28 +404,50 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         return created
 
     async def auto_link_item(self, item: MediaItem, subtype: MediaSubtype) -> int:
-        """Find other items in the same category sharing `item`'s auto-link field
-        (tmdb_id/musicbrainz_id/isbn) and link any not already linked. Returns the
-        number of new links created."""
+        """Find other items in the same category that are clearly the same
+        title and link any not already linked. Returns the number of new
+        links created.
+
+        Primary match is `item`'s auto-link field (tmdb_id/musicbrainz_id/
+        isbn) — an exact external-id match is a strong enough signal to link
+        regardless of other metadata. If that finds nothing (e.g. a
+        Plex-synced item with no musicbrainz_id), fall back to a same-category
+        title+year match, guarded by `_editions_compatible` so an explicit
+        edition mismatch (e.g. "Remastered" vs "Anniversary Edition") doesn't
+        produce a false-positive link.
+        """
         field = AUTO_LINK_FIELD.get(subtype.category)
-        if field is None:
-            return 0
+        candidates: Sequence[MediaItem] = []
 
-        value = getattr(item, field)
-        if not value:
-            return 0
+        if field is not None:
+            value = getattr(item, field)
+            if value:
+                candidates = (
+                    await self.db.execute(
+                        select(MediaItem)
+                        .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
+                        .where(
+                            MediaSubtype.category == subtype.category,
+                            getattr(MediaItem, field) == value,
+                            MediaItem.id != item.id,
+                        )
+                    )
+                ).scalars().all()
 
-        candidates = (
-            await self.db.execute(
-                select(MediaItem)
-                .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
-                .where(
-                    MediaSubtype.category == subtype.category,
-                    getattr(MediaItem, field) == value,
-                    MediaItem.id != item.id,
+        if not candidates and item.title and item.year is not None:
+            title_year_matches = (
+                await self.db.execute(
+                    select(MediaItem)
+                    .join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
+                    .where(
+                        MediaSubtype.category == subtype.category,
+                        MediaItem.title.ilike(item.title),
+                        MediaItem.year == item.year,
+                        MediaItem.id != item.id,
+                    )
                 )
-            )
-        ).scalars().all()
+            ).scalars().all()
+            candidates = [c for c in title_year_matches if _editions_compatible(item.edition, c.edition)]
 
         return await self.link_unlinked(item, candidates)
 
