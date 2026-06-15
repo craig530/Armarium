@@ -18,6 +18,7 @@ class MediaItemCreate(BaseModel):
     barcode: Optional[str] = Field(None, max_length=50)
     edition: Optional[str] = Field(None, max_length=200)
     notes: Optional[str] = Field(None, max_length=TEXT_FIELD_MAX)
+    user_rating: Optional[int] = Field(None, ge=1, le=5)
 
     # Music
     artist: Optional[str] = Field(None, max_length=300)
@@ -29,6 +30,7 @@ class MediaItemCreate(BaseModel):
     studio: Optional[str] = Field(None, max_length=300)
     runtime_minutes: Optional[int] = Field(None, ge=0, le=10000)
     rating: Optional[str] = Field(None, max_length=20)
+    tmdb_rating: Optional[float] = None
     cast_list: Optional[str] = Field(None, max_length=TEXT_FIELD_MAX)
     seasons_owned: Optional[str] = Field(None, max_length=100)
     episode_count: Optional[int] = Field(None, ge=0, le=100000)
@@ -61,6 +63,7 @@ class MediaItemUpdate(BaseModel):
     barcode: Optional[str] = Field(None, max_length=50)
     edition: Optional[str] = Field(None, max_length=200)
     notes: Optional[str] = Field(None, max_length=TEXT_FIELD_MAX)
+    user_rating: Optional[int] = Field(None, ge=1, le=5)
     artist: Optional[str] = Field(None, max_length=300)
     label: Optional[str] = Field(None, max_length=300)
     track_count: Optional[int] = Field(None, ge=0, le=999)
@@ -68,6 +71,7 @@ class MediaItemUpdate(BaseModel):
     studio: Optional[str] = Field(None, max_length=300)
     runtime_minutes: Optional[int] = Field(None, ge=0, le=10000)
     rating: Optional[str] = Field(None, max_length=20)
+    tmdb_rating: Optional[float] = None
     cast_list: Optional[str] = Field(None, max_length=TEXT_FIELD_MAX)
     seasons_owned: Optional[str] = Field(None, max_length=100)
     episode_count: Optional[int] = Field(None, ge=0, le=100000)
@@ -130,6 +134,7 @@ class MediaItemResponse(BaseModel):
     barcode: Optional[str] = None
     edition: Optional[str] = None
     notes: Optional[str] = None
+    user_rating: Optional[int] = None
     artist: Optional[str] = None
     label: Optional[str] = None
     track_count: Optional[int] = None
@@ -137,6 +142,7 @@ class MediaItemResponse(BaseModel):
     studio: Optional[str] = None
     runtime_minutes: Optional[int] = None
     rating: Optional[str] = None
+    tmdb_rating: Optional[float] = None
     cast_list: Optional[str] = None
     seasons_owned: Optional[str] = None
     episode_count: Optional[int] = None

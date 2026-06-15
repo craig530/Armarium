@@ -68,4 +68,17 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
         engine.dispose()
 
     assert count == 10
-    assert version == "0001"
+    assert version == "0002"
+
+
+def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            columns = {col["name"] for col in inspect(conn).get_columns("media_items")}
+    finally:
+        engine.dispose()
+
+    assert {"tmdb_rating", "user_rating"}.issubset(columns)

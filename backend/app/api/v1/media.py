@@ -108,9 +108,9 @@ def _item_to_response(
             col: getattr(item, col)
             for col in [
                 "id", "title", "year", "genres", "description",
-                "cover_image_path", "cover_image_url", "barcode", "edition", "notes",
+                "cover_image_path", "cover_image_url", "barcode", "edition", "notes", "user_rating",
                 "artist", "label", "track_count", "director", "studio",
-                "runtime_minutes", "rating", "cast_list", "seasons_owned", "episode_count",
+                "runtime_minutes", "rating", "tmdb_rating", "cast_list", "seasons_owned", "episode_count",
                 "author", "publisher", "page_count", "isbn", "language",
                 "musicbrainz_id", "tmdb_id", "openlibrary_id",
                 "media_subtype_id", "location_id", "platform_id",

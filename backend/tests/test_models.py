@@ -85,6 +85,21 @@ async def test_media_item_requires_media_subtype(session):
         await session.commit()
 
 
+async def test_media_item_user_rating_range(session):
+    subtype_id = None
+    for value in (None, 1, 5):
+        item = await _make_item(session, user_rating=value)
+        await session.commit()
+        assert item.user_rating == value
+        subtype_id = item.media_subtype_id
+
+    for invalid in (0, 6):
+        session.add(MediaItem(title="Bad rating", media_subtype_id=subtype_id, user_rating=invalid))
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()
+
+
 async def test_plex_config_is_singleton(session):
     platform = Platform(name="Plex")
     session.add(platform)

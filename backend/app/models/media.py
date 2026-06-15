@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, func
+from sqlalchemy import CheckConstraint, Column, Float, Integer, String, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from ..database import Base
@@ -6,6 +6,9 @@ from ..database import Base
 
 class MediaItem(Base):
     __tablename__ = "media_items"
+    __table_args__ = (
+        CheckConstraint("user_rating IS NULL OR (user_rating BETWEEN 1 AND 5)", name="ck_media_items_user_rating_range"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(500), nullable=False, index=True)
@@ -17,6 +20,7 @@ class MediaItem(Base):
     barcode = Column(String(50), index=True)
     edition = Column(String(200))            # e.g. "4K UHD", "Special Edition"
     notes = Column(Text)
+    user_rating = Column(Integer, nullable=True)  # personal 1-5 star rating, all categories
 
     # Music / CD
     artist = Column(String(300))
@@ -28,6 +32,7 @@ class MediaItem(Base):
     studio = Column(String(300))
     runtime_minutes = Column(Integer)
     rating = Column(String(20))
+    tmdb_rating = Column(Float, nullable=True)  # TMDB vote_average (0-10), films_tv only
     cast_list = Column(Text)   # JSON array stored as string
 
     # Book
