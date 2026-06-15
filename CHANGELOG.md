@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-06-15
+
+### Fixed
+
+- Migration `0003_add_media_lists` failed with `type "mediacategory" already
+  exists` when upgrading an existing deployment from v1.0.x/v1.1.0 on
+  PostgreSQL, leaving the backend crash-looping. The `item_lists.category`
+  column declared its enum as `sa.Enum(..., create_type=False)`, but the
+  generic `sa.Enum`'s `create_type` flag is silently dropped when SQLAlchemy
+  adapts it to PostgreSQL's native `ENUM` type, so Alembic still attempted
+  (and failed) to recreate the already-existing `mediacategory` type. Fixed
+  by using `postgresql.ENUM(..., create_type=False)` directly, which
+  correctly suppresses the `CREATE TYPE`.
+
 ## [1.1.0] - 2026-06-15
 
 ### Added
@@ -174,7 +188,8 @@ Initial public release.
 - Versioned Docker images published to GHCR for each tagged release — see
   [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-[Unreleased]: https://github.com/craig530/Armarium/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/craig530/Armarium/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/craig530/Armarium/releases/tag/v1.1.1
 [1.1.0]: https://github.com/craig530/Armarium/releases/tag/v1.1.0
 [1.0.1]: https://github.com/craig530/Armarium/releases/tag/v1.0.1
 [1.0.0]: https://github.com/craig530/Armarium/releases/tag/v1.0.0

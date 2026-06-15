@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -23,9 +24,15 @@ def upgrade() -> None:
         'item_lists',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('name', sa.String(length=200), nullable=False),
-        # create_type=False — the `mediacategory` Postgres enum type is already
-        # created by the media_subtypes table in 0001_baseline.
-        sa.Column('category', sa.Enum('MUSIC', 'FILMS_TV', 'BOOKS', name='mediacategory', create_type=False), nullable=False),
+        # postgresql.ENUM(..., create_type=False) — unlike plain sa.Enum,
+        # this actually suppresses CREATE TYPE on the Postgres backend (the
+        # `mediacategory` type already exists, created by media_subtypes in
+        # 0001_baseline). A plain sa.Enum(..., create_type=False) here would
+        # silently lose the create_type flag during dialect adaptation and
+        # attempt (and fail) a duplicate CREATE TYPE whenever this revision
+        # runs in a fresh Alembic invocation where 0001 was already applied
+        # in a prior run (e.g. on an existing deployment being upgraded).
+        sa.Column('category', postgresql.ENUM('MUSIC', 'FILMS_TV', 'BOOKS', name='mediacategory', create_type=False), nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
         sa.PrimaryKeyConstraint('id'),
