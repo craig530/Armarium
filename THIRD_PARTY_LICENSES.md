@@ -141,10 +141,13 @@ then `pip-licenses --format=markdown --with-urls --order=license`.
 | [react-hot-toast](https://github.com/timolins/react-hot-toast) | 2.6.x | [MIT](https://spdx.org/licenses/MIT.html) | Toast notifications |
 | [clsx](https://github.com/lukeed/clsx) | 2.1.x | [MIT](https://spdx.org/licenses/MIT.html) | Conditional class names |
 | [lucide-react](https://lucide.dev/) | 1.18.x | [ISC](https://spdx.org/licenses/ISC.html) | UI icons & built-in location icons |
+| [react-barcode](https://github.com/kciter/react-barcode) | 1.6.x | [ISC](https://spdx.org/licenses/ISC.html) | Renders an item's barcode as a scannable image on its detail page |
+| [jsbarcode](https://github.com/lindell/JsBarcode) | 3.12.x | [MIT](https://spdx.org/licenses/MIT.html) | Barcode rendering engine used by react-barcode |
 
-Barcode scanning is decoded server-side via
-[zxing-cpp](#backend-dependencies-python) — there is no frontend barcode
-decoding dependency.
+Barcode *scanning* is decoded server-side via
+[zxing-cpp](#backend-dependencies-python). react-barcode/jsbarcode are used
+only to *display* an already-known barcode value as an image — both render
+client-side to an inline SVG, with no network fetches.
 
 ### Build tooling (development only — not shipped in the production bundle)
 
@@ -160,12 +163,13 @@ decoding dependency.
 <details>
 <summary>Full production dependency tree (incl. transitive dependencies)</summary>
 
-Generated with `npx license-checker --production`. Of the 40 third-party
+Generated with `npx license-checker --production`. Of the 47 third-party
 packages in the resolved production dependency tree (mostly small transitive
 utilities pulled in by axios, react-router and zustand):
 
-- **39 packages** are licensed under the **MIT License**.
-- **1 package** (`lucide-react`) is licensed under **ISC** (see table above).
+- **45 packages** are licensed under the **MIT License**.
+- **2 packages** (`lucide-react`, `react-barcode`) are licensed under **ISC**
+  (see table above).
 
 No GPL, LGPL, AGPL, MPL, or proprietary-licensed packages appear anywhere in
 the frontend production dependency tree.

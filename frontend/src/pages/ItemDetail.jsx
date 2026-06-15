@@ -17,6 +17,7 @@ import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import StarRating from '../components/ui/StarRating'
 import TMDBAttribution from '../components/ui/TMDBAttribution'
+import BarcodeDisplay from '../components/ui/BarcodeDisplay'
 import { CATEGORIES, categoryLabel, supertypeLabel } from '../lib/categories'
 import { useConfirm } from '../hooks/useConfirm'
 import toast from 'react-hot-toast'
@@ -537,6 +538,12 @@ export default function ItemDetail() {
             </dl>
             {item.category === 'films_tv' && <TMDBAttribution className="mt-3" />}
           </div>
+
+          {(item.category === 'films_tv' || item.category === 'music') && item.barcode && (
+            <div className="flex justify-end">
+              <BarcodeDisplay value={item.barcode} />
+            </div>
+          )}
 
           {item.notes && (
             <div className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4">
