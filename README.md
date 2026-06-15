@@ -53,9 +53,12 @@ instead of illuminated manuscripts.
 - **Track where things live** — organise physical items into a hierarchy of
   locations (shelves, boxes, rooms) with custom icons, and digital items by
   the platform they're on (with platform logos).
+- **Curated lists** — group items into your own named lists within each
+  category (e.g. "Want to read", "Favourites"), assignable from any item's
+  form and filterable from the library views.
 - **Fast search and filtering** — full-text search across your whole
-  collection, plus filters by category, type, location, platform, genre and
-  year.
+  collection, plus filters by category, type, location, platform, list, genre
+  and year.
 - **Multi-user with admin roles** — secure JWT-based login, with an admin
   panel for managing additional user accounts.
 - **Export and import** — back up or migrate your library as CSV or JSON.
@@ -64,8 +67,8 @@ instead of illuminated manuscripts.
 - **Installable as an app (PWA)** — add Armarium to your phone's home screen
   and browse your library offline.
 - **Dark mode** and **keyboard shortcuts** for fast, comfortable browsing.
-- **Fully customisable** — add, rename or reorder media types, locations and
-  platforms to match your own collection from the Settings area.
+- **Fully customisable** — add, rename or reorder media types, locations,
+  platforms and lists to match your own collection from the Settings area.
 
 ## Tech Stack
 

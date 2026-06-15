@@ -28,6 +28,7 @@ async def create_user(payload: UserCreate, _=Depends(get_current_admin), repo: U
         can_manage_locations=payload.can_manage_locations,
         can_manage_platforms=payload.can_manage_platforms,
         can_manage_media_types=payload.can_manage_media_types,
+        can_manage_lists=payload.can_manage_lists,
     )
     repo.add(user)
     await repo.commit()
@@ -68,6 +69,8 @@ async def update_user(user_id: int, payload: UserUpdate, current_user: User = De
         user.can_manage_platforms = payload.can_manage_platforms
     if payload.can_manage_media_types is not None:
         user.can_manage_media_types = payload.can_manage_media_types
+    if payload.can_manage_lists is not None:
+        user.can_manage_lists = payload.can_manage_lists
 
     await repo.commit()
     await repo.refresh(user)

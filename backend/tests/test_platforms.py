@@ -75,7 +75,7 @@ async def test_reference_data_lists_have_no_cache_control_header(client, auth_he
     # A `Cache-Control` header on these list endpoints previously caused the
     # browser to serve stale data after a rename/delete/reorder, making those
     # actions appear to silently fail.
-    for path in ("/api/v1/locations", "/api/v1/platforms", "/api/v1/media-subtypes"):
+    for path in ("/api/v1/locations", "/api/v1/platforms", "/api/v1/media-subtypes", "/api/v1/lists"):
         resp = await client.get(path, headers=auth_headers)
         assert resp.status_code == 200
         assert "cache-control" not in {h.lower() for h in resp.headers}

@@ -42,4 +42,38 @@ describe('TypeStep', () => {
     expect(screen.getByText('Physical').closest('button').className).toContain('bg-brand-600')
     expect(screen.getByText('Books').closest('button').className).not.toContain('bg-brand-600')
   })
+
+  it('renders a "List" tile and calls onSelectList when clicked', () => {
+    const onSelectList = vi.fn()
+    render(
+      <TypeStep
+        category={null}
+        supertype={null}
+        onChangeCategory={vi.fn()}
+        onChangeSupertype={vi.fn()}
+        onSelectList={onSelectList}
+      />
+    )
+
+    fireEvent.click(screen.getByText('List'))
+
+    expect(onSelectList).toHaveBeenCalled()
+  })
+
+  it('highlights the "List" tile when creatingList is true, and not the supertypes', () => {
+    render(
+      <TypeStep
+        category="music"
+        supertype={null}
+        creatingList
+        onChangeCategory={vi.fn()}
+        onChangeSupertype={vi.fn()}
+        onSelectList={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('List').closest('button').className).toContain('bg-brand-600')
+    expect(screen.getByText('Physical').closest('button').className).not.toContain('bg-brand-600')
+    expect(screen.getByText('Digital').closest('button').className).not.toContain('bg-brand-600')
+  })
 })

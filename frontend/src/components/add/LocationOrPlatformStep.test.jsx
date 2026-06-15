@@ -4,11 +4,13 @@ import LocationOrPlatformStep from './LocationOrPlatformStep'
 import { locationsApi } from '../../api/locations'
 import { platformsApi } from '../../api/platforms'
 import { mediaSubtypesApi } from '../../api/mediaSubtypes'
+import { listsApi } from '../../api/lists'
 import { useReferenceDataStore } from '../../store'
 
 vi.mock('../../api/locations', () => ({ locationsApi: { list: vi.fn(), create: vi.fn() } }))
 vi.mock('../../api/platforms', () => ({ platformsApi: { list: vi.fn(), create: vi.fn() } }))
 vi.mock('../../api/mediaSubtypes', () => ({ mediaSubtypesApi: { list: vi.fn() } }))
+vi.mock('../../api/lists', () => ({ listsApi: { list: vi.fn() } }))
 
 const noop = {
   onSelectLocation: () => {},
@@ -23,6 +25,7 @@ beforeEach(() => {
   locationsApi.list.mockResolvedValue([])
   platformsApi.list.mockResolvedValue([])
   mediaSubtypesApi.list.mockResolvedValue([])
+  listsApi.list.mockResolvedValue([])
 })
 
 afterEach(() => {

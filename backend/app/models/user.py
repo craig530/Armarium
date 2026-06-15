@@ -20,6 +20,7 @@ class User(Base):
     can_manage_locations = Column(Boolean, nullable=False, default=True, server_default=true())
     can_manage_platforms = Column(Boolean, nullable=False, default=True, server_default=true())
     can_manage_media_types = Column(Boolean, nullable=False, default=False, server_default=false())
+    can_manage_lists = Column(Boolean, nullable=False, default=True, server_default=true())
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

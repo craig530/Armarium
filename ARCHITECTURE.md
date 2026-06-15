@@ -114,14 +114,33 @@ Every repository:
   endpoint's behaviour.
 
 Current repositories: `MediaItemRepository`, `MediaSubtypeRepository`,
-`PlatformRepository`, `LocationRepository`, `UserRepository`,
-`PlexConfigRepository`, `PlexLibraryMappingRepository`.
+`PlatformRepository`, `LocationRepository`, `ItemListRepository`,
+`UserRepository`, `PlexConfigRepository`, `PlexLibraryMappingRepository`.
 
 `LocationRepository.descendant_ids(location_id)` returns that location's id
 plus every id nested beneath it (BFS over the parent→children map built from
 `flat_rows()`). `GET /media?location_id=` resolves this set and passes it to
 `MediaItemRepository.search(location_ids=...)`, so filtering by a parent
-location also matches items stored in its descendant locations.
+location also matches items stored in its descendant locations. Similarly,
+`GET /media?list_id=` joins `media_item_lists` and filters to items linked to
+that `ItemList`, via `MediaItemRepository.search(list_id=...)`.
+
+**Many-to-many relationships** follow the pattern established by
+`ItemList`/`media_item_lists` (`app/models/item_list.py`) — the first M2M in
+the codebase. The association table is a plain `Table(...)` (not a mapped
+class) alongside the "many" side's model, with `ondelete="CASCADE"` on both
+FKs. `MediaItem.lists = relationship("ItemList", secondary=media_item_lists,
+lazy="selectin")` is one-directional — no `back_populates`, since `ItemList`
+doesn't need an `.items` collection (item counts are computed via
+`ItemListRepository.item_count_map()`, a `GROUP BY` over the association
+table, mirroring `PlatformRepository.item_count_map`). Membership is set via
+`MediaItemRepository.set_item_lists(item, list_ids, category)`, which
+validates every id exists and belongs to the item's category before replacing
+`item.lists` wholesale — follow the same validate-then-replace approach for
+any new M2M where one side is category- or type-scoped. CRUD on `ItemList`
+itself is gated by the `can_manage_lists` permission flag (mirrors
+`can_manage_locations`/`can_manage_platforms`); `GET /lists` only requires
+`get_current_user`, since all users need it for filtering.
 
 `MediaItemRepository.auto_link_item(item, subtype)`, run after creating an
 item, links it to other items of the same category that are clearly the same
@@ -260,9 +279,9 @@ Zustand stores in `src/store/index.js`, one slice per concern:
   semantics change.
 - `useLibraryStore` — view mode + filters for the Library page.
 - `useReferenceDataStore` — lazily-loaded, shared cache of
-  locations/platforms/media subtypes (`ensureLoaded()` / `invalidate()`).
-  Call `invalidate()` after any create/update/delete in the Settings
-  managers so the next `ensureLoaded()` picks up the change.
+  locations/platforms/media subtypes/lists (`ensureLoaded()` /
+  `invalidate()`). Call `invalidate()` after any create/update/delete in the
+  Settings managers so the next `ensureLoaded()` picks up the change.
 
 Theme bootstrap: `index.html` has an inline, non-module `<script>` *before*
 the deferred `type="module"` entry point. `type="module"` scripts always run
@@ -307,6 +326,16 @@ directly; pages/components call the wrapper functions.
   `item.barcode` as an actual barcode image (via `react-barcode`/`jsbarcode`,
   client-side SVG, no network calls), theme-aware via `useThemeStore`. Shown
   on films_tv/music item detail pages, under the Details card.
+- `ListsMultiSelect` (`src/components/lists/ListsMultiSelect.jsx`) is a
+  chip-toggle picker for an item's list memberships, scoped to its category
+  via `useReferenceDataStore`'s `lists` — renders nothing if no lists exist
+  yet for that category. Used by `MetadataForm` (add flow) and `ItemDetail`
+  (edit mode).
+- The Add Item flow (`AddFlow.jsx`) has a third option alongside
+  Physical/Digital on its type step — "List" — which creates a new `ItemList`
+  for the chosen category (`ListNameStep.jsx`), then lets the user search the
+  library and add items to it (`ListItemsStep.jsx`), before landing on that
+  category's Library view pre-filtered to the new list.
 
 ### 5.4 Data loading pattern
 
@@ -414,6 +443,11 @@ npm audit                        # dependency CVEs
 6. **Tests**: `backend/tests/test_<name>.py`.
 7. **Frontend**: `src/api/<name>.js` wrapper, store slice if shared state is
    needed, page/component, route in `src/App.jsx`, nav entry if applicable.
+
+If the new model has a many-to-many relationship with another model, follow
+the `ItemList`/`media_item_lists` pattern described in §4.2 (association
+`Table`, one-directional `relationship(secondary=...)`, and a repository
+method that validates and replaces the collection wholesale).
 
 ## 10. Known tradeoffs & areas for deeper review
 

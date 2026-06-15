@@ -18,11 +18,13 @@ const mockUsers = [
   {
     id: 1, username: 'admin', is_admin: true, is_active: true, is_read_only: false,
     can_add_items: true, can_manage_locations: true, can_manage_platforms: true, can_manage_media_types: true,
+    can_manage_lists: true,
     created_at: '2024-01-01T00:00:00Z',
   },
   {
     id: 2, username: 'alice', is_admin: false, is_active: true, is_read_only: false,
     can_add_items: true, can_manage_locations: false, can_manage_platforms: false, can_manage_media_types: false,
+    can_manage_lists: false,
     created_at: '2024-02-01T00:00:00Z',
   },
 ]

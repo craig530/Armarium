@@ -5,6 +5,7 @@ import Button from '../ui/Button'
 import SelectMenu from '../ui/SelectMenu'
 import PlatformLogo from '../ui/PlatformLogo'
 import LocationPicker from '../locations/LocationPicker'
+import ListsMultiSelect from '../lists/ListsMultiSelect'
 import { mediaApi } from '../../api/media'
 import { platformsApi } from '../../api/platforms'
 import { coverProxyUrl } from '../../api/lookup'
@@ -70,6 +71,7 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
         // Ownership
         location_id: item.location_id != null ? String(item.location_id) : '',
         platform_id: item.platform_id != null ? String(item.platform_id) : '',
+        list_ids: item.list_ids || [],
       }
     }
 
@@ -109,6 +111,7 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
       // Ownership
       location_id: locationId || '',
       platform_id: platformId || '',
+      list_ids: [],
     }
   })
 
@@ -262,6 +265,8 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
 
         <Input label="Genre(s)" value={form.genres} onChange={(e) => set('genres', e.target.value)} placeholder="e.g. Rock, Alternative" />
         <Input label="Edition" value={form.edition} onChange={(e) => set('edition', e.target.value)} placeholder="e.g. Special Edition, 4K UHD" />
+
+        <ListsMultiSelect category={category} value={form.list_ids} onChange={(ids) => set('list_ids', ids)} className="sm:col-span-2" />
 
         <Input label="Barcode" value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
 

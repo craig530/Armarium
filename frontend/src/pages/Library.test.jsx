@@ -6,6 +6,7 @@ import { mediaApi } from '../api/media'
 import { locationsApi } from '../api/locations'
 import { platformsApi } from '../api/platforms'
 import { mediaSubtypesApi } from '../api/mediaSubtypes'
+import { listsApi } from '../api/lists'
 import { useLibraryStore, useReferenceDataStore } from '../store'
 
 vi.mock('../api/media', () => ({
@@ -17,6 +18,7 @@ vi.mock('../api/media', () => ({
 vi.mock('../api/locations', () => ({ locationsApi: { list: vi.fn() } }))
 vi.mock('../api/platforms', () => ({ platformsApi: { list: vi.fn() } }))
 vi.mock('../api/mediaSubtypes', () => ({ mediaSubtypesApi: { list: vi.fn() } }))
+vi.mock('../api/lists', () => ({ listsApi: { list: vi.fn() } }))
 
 const mockSubtype = { id: 1, name: 'CD', category: 'music', supertype: 'physical', sort_order: 1 }
 
@@ -51,14 +53,15 @@ beforeEach(() => {
   locationsApi.list.mockResolvedValue([])
   platformsApi.list.mockResolvedValue([])
   mediaSubtypesApi.list.mockResolvedValue([mockSubtype])
+  listsApi.list.mockResolvedValue([])
   useLibraryStore.setState({
     viewMode: 'grid',
     filters: {
       q: '', supertype: '', media_subtype_id: '', platform_id: '',
-      genre: '', year: '', location_id: '', sort: 'created_at', order: 'desc',
+      genre: '', year: '', location_id: '', list_id: '', sort: 'created_at', order: 'desc',
     },
   })
-  useReferenceDataStore.setState({ locations: [], platforms: [], mediaSubtypes: [], loaded: false, loading: null })
+  useReferenceDataStore.setState({ locations: [], platforms: [], mediaSubtypes: [], lists: [], loaded: false, loading: null })
 })
 
 afterEach(() => {
@@ -124,6 +127,24 @@ describe('Library', () => {
     await waitFor(() => {
       expect(mediaApi.list).toHaveBeenLastCalledWith(
         expect.objectContaining({ page: 2 }),
+        expect.anything()
+      )
+    })
+  })
+
+  it('filters by list when a list is selected from the filter panel', async () => {
+    listsApi.list.mockResolvedValue([{ id: 9, name: 'Want to relisten', category: 'music', item_count: 1 }])
+    mediaApi.list.mockResolvedValue({ items: [mockItem], total: 1, page: 1, pages: 1, per_page: 24 })
+
+    renderLibrary()
+    await screen.findByText('Abbey Road')
+
+    fireEvent.click(screen.getByText('All lists'))
+    fireEvent.click(screen.getByText('Want to relisten'))
+
+    await waitFor(() => {
+      expect(mediaApi.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ list_id: '9' }),
         expect.anything()
       )
     })

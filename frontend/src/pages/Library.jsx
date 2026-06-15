@@ -29,7 +29,7 @@ export default function Library() {
   const { category: categorySlug } = useParams()
   const category = categoryFromSlug(categorySlug)
   const { viewMode, setViewMode, filters, setFilter } = useLibraryStore()
-  const { locations, mediaSubtypes, platforms, ensureLoaded } = useReferenceDataStore()
+  const { locations, mediaSubtypes, platforms, lists, ensureLoaded } = useReferenceDataStore()
 
   const [data, setData] = useState(null)
   const [page, setPage] = useState(1)
@@ -58,6 +58,7 @@ export default function Library() {
         ...(filters.genre && { genre: filters.genre }),
         ...(filters.year && { year: filters.year }),
         ...(filters.location_id && { location_id: filters.location_id }),
+        ...(filters.list_id && { list_id: filters.list_id }),
       }
       const result = await mediaApi.list(params, { signal: controller.signal })
       setData(result)
@@ -99,6 +100,7 @@ export default function Library() {
   // immediately clear it again.
   useEffect(() => {
     if (filters.media_subtype_id) setFilter('media_subtype_id', '')
+    if (filters.list_id) setFilter('list_id', '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category])
 
@@ -166,7 +168,7 @@ export default function Library() {
 
       {/* Filters — collapsed by default on mobile (toggled above), always visible from sm: up */}
       <div className={clsx(!filtersOpen && 'hidden sm:block')}>
-        <FilterPanel locations={locations} mediaSubtypes={mediaSubtypes} platforms={platforms} category={category} />
+        <FilterPanel locations={locations} mediaSubtypes={mediaSubtypes} platforms={platforms} lists={lists} category={category} />
       </div>
 
       {/* Empty library */}

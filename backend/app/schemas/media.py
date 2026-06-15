@@ -52,6 +52,10 @@ class MediaItemCreate(BaseModel):
     location_id: Optional[int] = None
     platform_id: Optional[int] = None
 
+    # Lists (e.g. "Want to read") this item should belong to. Must all be
+    # in the same category as the item's media subtype.
+    list_ids: Optional[List[int]] = None
+
 
 class MediaItemUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=500)
@@ -85,6 +89,7 @@ class MediaItemUpdate(BaseModel):
     openlibrary_id: Optional[str] = Field(None, max_length=50)
     location_id: Optional[int] = None
     platform_id: Optional[int] = None
+    list_ids: Optional[List[int]] = None
 
 
 class MediaSubtypeSummary(BaseModel):
@@ -171,6 +176,7 @@ class MediaItemResponse(BaseModel):
 
     linked_items: List[LinkedItemSummary] = []        # computed
     ownership: str = "physical"                       # computed: physical | digital | both
+    list_ids: List[int] = []                          # computed, from item.lists
 
     created_at: datetime
     updated_at: datetime

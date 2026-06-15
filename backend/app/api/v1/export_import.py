@@ -164,7 +164,9 @@ async def import_library(
         if supertype != Supertype.DIGITAL or item_create.platform_id not in valid_platforms:
             item_create.platform_id = None
 
-        media_repo.add(MediaItem(**item_create.model_dump()))
+        item_data = item_create.model_dump()
+        item_data.pop("list_ids")
+        media_repo.add(MediaItem(**item_data))
         created += 1
 
     await media_repo.commit()

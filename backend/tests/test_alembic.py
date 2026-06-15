@@ -19,6 +19,8 @@ EXPECTED_TABLES = {
     "plex_config",
     "plex_library_mappings",
     "item_links",
+    "item_lists",
+    "media_item_lists",
 }
 
 
@@ -68,7 +70,7 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
         engine.dispose()
 
     assert count == 10
-    assert version == "0002"
+    assert version == "0003"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
@@ -82,3 +84,18 @@ def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
         engine.dispose()
 
     assert {"tmdb_rating", "user_rating"}.issubset(columns)
+
+
+def test_upgrade_head_adds_lists_tables_and_permission(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            tables = set(inspect(conn).get_table_names())
+            user_columns = {col["name"] for col in inspect(conn).get_columns("users")}
+    finally:
+        engine.dispose()
+
+    assert {"item_lists", "media_item_lists"}.issubset(tables)
+    assert "can_manage_lists" in user_columns

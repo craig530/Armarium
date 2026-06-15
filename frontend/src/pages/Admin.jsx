@@ -20,6 +20,7 @@ const PERMISSION_FLAGS = [
   { key: 'can_manage_locations', label: 'Manage locations' },
   { key: 'can_manage_platforms', label: 'Manage platforms' },
   { key: 'can_manage_media_types', label: 'Manage mediums' },
+  { key: 'can_manage_lists', label: 'Manage lists' },
 ]
 
 const EMPTY_FORM = {
@@ -31,6 +32,7 @@ const EMPTY_FORM = {
   can_manage_locations: true,
   can_manage_platforms: true,
   can_manage_media_types: false,
+  can_manage_lists: true,
 }
 
 function PermissionToggles({ value, onChange }) {

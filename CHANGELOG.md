@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Lists** — create named, category-scoped lists (e.g. "Want to read" under
+  Books, "Favourites" under Music) and organise your items into them:
+  - A new "List" option alongside Physical/Digital in the Add Item flow lets
+    you name a new list and immediately search your library to add items to
+    it.
+  - Manage lists (rename, delete, view item counts) from a new Settings →
+    Lists section, alongside Locations and Platforms.
+  - Edit an item's list memberships directly from its create/edit forms via a
+    chip-style multi-select.
+  - Filter the All, Music, Films & TV and Books screens by list.
+  - A new `can_manage_lists` permission (on by default) controls who can
+    create, rename or delete lists; everyone can still filter by and assign
+    them.
 - A personal 5-star rating, settable on any item from its detail page —
   click a star to rate, click the current rating again to clear it.
 - Films & TV item details now show TMDB's user rating ("TMDB Rating") when

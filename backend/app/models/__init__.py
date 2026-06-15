@@ -1,5 +1,6 @@
 from .enums import LinkMatchType, MediaCategory, Supertype
 from .item_link import ItemLink
+from .item_list import ItemList
 from .location import Location
 from .media import MediaItem
 from .media_subtype import MediaSubtype
@@ -16,6 +17,7 @@ __all__ = [
     "MediaCategory",
     "Supertype",
     "ItemLink",
+    "ItemList",
     "Location",
     "MediaItem",
     "MediaSubtype",

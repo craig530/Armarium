@@ -4,6 +4,7 @@ import client from '../api/client'
 import { locationsApi } from '../api/locations'
 import { platformsApi } from '../api/platforms'
 import { mediaSubtypesApi } from '../api/mediaSubtypes'
+import { listsApi } from '../api/lists'
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,7 @@ const DEFAULT_FILTERS = {
   genre: '',
   year: '',
   location_id: '',
+  list_id: '',
   sort: 'created_at',
   order: 'desc',
 }
@@ -152,13 +154,14 @@ export const useReferenceDataStore = create((set, get) => ({
   locations: [],
   platforms: [],
   mediaSubtypes: [],
+  lists: [],
   loaded: false,
   loading: null,
   ensureLoaded() {
     if (get().loaded || get().loading) return get().loading
-    const promise = Promise.all([locationsApi.list(), platformsApi.list(), mediaSubtypesApi.list()])
-      .then(([locations, platforms, mediaSubtypes]) => {
-        set({ locations, platforms, mediaSubtypes, loaded: true, loading: null })
+    const promise = Promise.all([locationsApi.list(), platformsApi.list(), mediaSubtypesApi.list(), listsApi.list()])
+      .then(([locations, platforms, mediaSubtypes, lists]) => {
+        set({ locations, platforms, mediaSubtypes, lists, loaded: true, loading: null })
       })
       .catch(() => set({ loading: null }))
     set({ loading: promise })

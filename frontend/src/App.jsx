@@ -17,6 +17,7 @@ const SettingsLayout = lazy(() => import('./pages/Settings/SettingsLayout'))
 const SettingsLocations = lazy(() => import('./pages/Settings/SettingsLocations'))
 const SettingsPlatforms = lazy(() => import('./pages/Settings/SettingsPlatforms'))
 const SettingsMediaSubtypes = lazy(() => import('./pages/Settings/SettingsMediaSubtypes'))
+const SettingsLists = lazy(() => import('./pages/Settings/SettingsLists'))
 const SettingsPlex = lazy(() => import('./pages/Settings/SettingsPlex'))
 
 const router = createBrowserRouter(
@@ -50,6 +51,7 @@ const router = createBrowserRouter(
           <Route path="locations" element={<SettingsLocations />} />
           <Route path="platforms" element={<SettingsPlatforms />} />
           <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
+          <Route path="lists" element={<SettingsLists />} />
         </Route>
         <Route path="settings/plex" element={<SettingsPlex />} />
         <Route

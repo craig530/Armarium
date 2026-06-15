@@ -13,6 +13,7 @@ import PlatformLogo from '../components/ui/PlatformLogo'
 import Input, { Textarea, Select } from '../components/ui/Input'
 import SelectMenu from '../components/ui/SelectMenu'
 import LocationPicker from '../components/locations/LocationPicker'
+import ListsMultiSelect from '../components/lists/ListsMultiSelect'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import StarRating from '../components/ui/StarRating'
@@ -404,6 +405,8 @@ export default function ItemDetail() {
           <Input label="Year" type="number" value={form.year || ''} onChange={(e) => set('year', e.target.value)} />
           <Input label="Genre(s)" value={form.genres || ''} onChange={(e) => set('genres', e.target.value)} />
           <Input label="Edition" value={form.edition || ''} onChange={(e) => set('edition', e.target.value)} />
+
+          <ListsMultiSelect category={item.category} value={form.list_ids || []} onChange={(ids) => set('list_ids', ids)} className="col-span-2" />
 
           {item.category === 'music' && <>
             <Input label="Artist" value={form.artist || ''} onChange={(e) => set('artist', e.target.value)} />

@@ -13,11 +13,13 @@ import ScanOrSearch from './ScanOrSearch'
 import DigitalSearch from './DigitalSearch'
 import EditionSelector from './EditionSelector'
 import MetadataForm from './MetadataForm'
+import ListNameStep from './ListNameStep'
+import ListItemsStep from './ListItemsStep'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import Button from '../ui/Button'
 import { lookupApi } from '../../api/lookup'
 import { mediaApi } from '../../api/media'
-import { useReferenceDataStore } from '../../store'
+import { useReferenceDataStore, useLibraryStore } from '../../store'
 import { useStepHistory } from '../../hooks/useStepHistory'
 import { CATEGORIES } from '../../lib/categories'
 
@@ -43,14 +45,17 @@ function loadBatchSession() {
 // `form` returns straight to `search`/`digitalSearch`.
 //
 // type -> location | platform -> batchMode -> search | digitalSearch -> [edition] -> form
+// type -> listName -> listItems (the "List" branch — see handleSelectListMode)
 const STEP_GROUPS = {
   type: 0,
   location: 1,
   platform: 1,
   batchMode: 1,
+  listName: 1,
   search: 2,
   digitalSearch: 2,
   edition: 2,
+  listItems: 2,
   form: 3,
 }
 
@@ -72,6 +77,8 @@ export default function AddFlow({ onSaved }) {
   const [locationId, setLocationId] = useState(restored?.locationId ?? '')
   const [platformId, setPlatformId] = useState(restored?.platformId ?? '')
   const [batchMode, setBatchMode] = useState(restored?.batchMode ?? false)
+  const [creatingList, setCreatingList] = useState(false)
+  const [newList, setNewList] = useState(null)
   const [sessionItems, setSessionItems] = useState(restored?.sessionItems ?? [])
   const [recentItems, setRecentItems] = useState([])
   const [editingItem, setEditingItem] = useState(null)
@@ -90,7 +97,9 @@ export default function AddFlow({ onSaved }) {
 
   const step = stepStack[stepStack.length - 1]
   const groupIndex = STEP_GROUPS[step]
-  const groupLabels = ['Type', supertype === 'digital' ? 'Platform' : 'Location', 'Search', 'Confirm details']
+  const groupLabels = creatingList
+    ? ['Type', 'Name', 'Items', '']
+    : ['Type', supertype === 'digital' ? 'Platform' : 'Location', 'Search', 'Confirm details']
   const stepLabel = step === 'batchMode' ? 'Batch mode' : groupLabels[groupIndex]
 
   // Persist the batch session (config + item list) so it survives a full
@@ -124,12 +133,38 @@ export default function AddFlow({ onSaved }) {
 
   const handleChangeCategory = (value) => {
     setCategory(value)
-    if (supertype) push(supertype === 'physical' ? 'location' : 'platform')
+    if (creatingList) {
+      push('listName')
+    } else if (supertype) {
+      push(supertype === 'physical' ? 'location' : 'platform')
+    }
   }
 
   const handleChangeSupertype = (value) => {
     setSupertype(value)
+    setCreatingList(false)
     if (category) push(value === 'physical' ? 'location' : 'platform')
+  }
+
+  // Third option alongside Physical/Digital on the type step — branches into
+  // the listName -> listItems steps instead of location/platform -> search.
+  const handleSelectListMode = () => {
+    setCreatingList(true)
+    setSupertype(null)
+    if (category) push('listName')
+  }
+
+  const handleListCreated = (list) => {
+    setNewList(list)
+    push('listItems')
+  }
+
+  // Mirrors handleExitBatch's navigation: land on the category's library
+  // view, pre-filtered to the list just populated.
+  const handleListItemsDone = () => {
+    useLibraryStore.getState().setFilter('list_id', String(newList.id))
+    const slug = CATEGORIES.find((c) => c.value === category)?.slug
+    navigate(slug ? `/library/${slug}` : '/library')
   }
 
   const handleSelectLocation = (id) => {
@@ -278,9 +313,19 @@ export default function AddFlow({ onSaved }) {
         <TypeStep
           category={category}
           supertype={supertype}
+          creatingList={creatingList}
           onChangeCategory={handleChangeCategory}
           onChangeSupertype={handleChangeSupertype}
+          onSelectList={handleSelectListMode}
         />
+      )}
+
+      {!enriching && step === 'listName' && (
+        <ListNameStep category={category} onBack={back} onCreated={handleListCreated} />
+      )}
+
+      {!enriching && step === 'listItems' && newList && (
+        <ListItemsStep list={newList} onBack={back} onDone={handleListItemsDone} />
       )}
 
       {!enriching && (step === 'location' || step === 'platform') && (

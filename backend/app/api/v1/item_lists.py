@@ -1,0 +1,88 @@
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+
+from ...models.enums import MediaCategory
+from ...models.item_list import ItemList
+from ...repositories.item_list import ItemListRepository, get_item_list_repository
+from ...schemas.item_list import ItemListCreate, ItemListUpdate, ItemListResponse
+from ...services.auth import get_current_user, require_permission
+
+router = APIRouter()
+
+
+def _to_response(item_list: ItemList, item_count: int = 0) -> ItemListResponse:
+    return ItemListResponse(
+        id=item_list.id,
+        name=item_list.name,
+        category=item_list.category,
+        item_count=item_count,
+        created_at=item_list.created_at,
+        updated_at=item_list.updated_at,
+    )
+
+
+@router.get("", response_model=List[ItemListResponse])
+async def list_lists(
+    category: Optional[MediaCategory] = None,
+    _=Depends(get_current_user),
+    repo: ItemListRepository = Depends(get_item_list_repository),
+):
+    rows = await repo.list_ordered()
+    if category is not None:
+        rows = [r for r in rows if r.category == category]
+    counts = await repo.item_count_map()
+    return [_to_response(r, counts.get(r.id, 0)) for r in rows]
+
+
+@router.post("", response_model=ItemListResponse, status_code=201)
+async def create_list(
+    payload: ItemListCreate,
+    _=Depends(require_permission("can_manage_lists")),
+    repo: ItemListRepository = Depends(get_item_list_repository),
+):
+    existing = await repo.find_by_name(payload.category, payload.name)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="A list with this name already exists for this category")
+
+    item_list = ItemList(name=payload.name, category=payload.category)
+    repo.add(item_list)
+    await repo.commit()
+    await repo.refresh(item_list)
+    return _to_response(item_list, 0)
+
+
+@router.put("/{list_id}", response_model=ItemListResponse)
+async def update_list(
+    list_id: int,
+    payload: ItemListUpdate,
+    _=Depends(require_permission("can_manage_lists")),
+    repo: ItemListRepository = Depends(get_item_list_repository),
+):
+    item_list = await repo.get(list_id)
+    if not item_list:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    if payload.name != item_list.name:
+        existing = await repo.find_by_name(item_list.category, payload.name, exclude_id=list_id)
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="A list with this name already exists for this category")
+        item_list.name = payload.name
+
+    await repo.commit()
+    await repo.refresh(item_list)
+    counts = await repo.item_count_map()
+    return _to_response(item_list, counts.get(item_list.id, 0))
+
+
+@router.delete("/{list_id}", status_code=204)
+async def delete_list(
+    list_id: int,
+    _=Depends(require_permission("can_manage_lists")),
+    repo: ItemListRepository = Depends(get_item_list_repository),
+):
+    item_list = await repo.get(list_id)
+    if not item_list:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    await repo.delete(item_list)
+    await repo.commit()

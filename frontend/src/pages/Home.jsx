@@ -26,13 +26,14 @@ const DEFAULT_FILTERS = {
   media_subtype_id: '',
   platform_id: '',
   location_id: '',
+  list_id: '',
   sort: 'created_at',
   order: 'desc',
 }
 
 export default function Home() {
   const navigate = useNavigate()
-  const { locations, mediaSubtypes, platforms, ensureLoaded } = useReferenceDataStore()
+  const { locations, mediaSubtypes, platforms, lists, ensureLoaded } = useReferenceDataStore()
 
   // Unfiltered "browse" rows
   const [recent, setRecent] = useState(null)
@@ -54,7 +55,7 @@ export default function Home() {
 
   const hasActiveFilters = !!(
     filters.q || filters.category || filters.supertype ||
-    filters.media_subtype_id || filters.platform_id || filters.location_id
+    filters.media_subtype_id || filters.platform_id || filters.location_id || filters.list_id
   )
 
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
@@ -100,6 +101,7 @@ export default function Home() {
         ...(filters.media_subtype_id && { media_subtype_id: filters.media_subtype_id }),
         ...(filters.platform_id && { platform_id: filters.platform_id }),
         ...(filters.location_id && { location_id: filters.location_id }),
+        ...(filters.list_id && { list_id: filters.list_id }),
       }
       const result = await mediaApi.list(params, { signal: controller.signal })
       setData(result)
@@ -162,6 +164,7 @@ export default function Home() {
           locations={locations}
           mediaSubtypes={mediaSubtypes}
           platforms={platforms}
+          lists={lists}
           filters={filters}
           setFilter={setFilter}
           resetFilters={resetFilters}

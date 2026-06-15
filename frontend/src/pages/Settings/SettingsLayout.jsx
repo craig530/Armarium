@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { MapPin, Tv, Tags } from 'lucide-react'
+import { MapPin, Tv, Tags, ListChecks } from 'lucide-react'
 import clsx from 'clsx'
 
 const TABS = [
@@ -23,6 +23,13 @@ const TABS = [
     icon: Tags,
     title: 'Mediums',
     description: 'Subtypes within each category and format, e.g. CD, Blu-ray, Streaming Film.',
+  },
+  {
+    to: '/settings/lists',
+    label: 'Lists',
+    icon: ListChecks,
+    title: 'Lists',
+    description: "Curated collections within each category, e.g. \"Want to read\", \"Favourites\".",
   },
 ]
 

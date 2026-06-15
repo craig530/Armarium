@@ -18,6 +18,7 @@ export default function FilterPanel({
   locations = [],
   mediaSubtypes = [],
   platforms = [],
+  lists = [],
   category,
   showCategory = false,
   filters: filtersProp,
@@ -57,11 +58,12 @@ export default function FilterPanel({
   const handleCategoryChange = (value) => {
     setFilter('category', value)
     if (filters.media_subtype_id) setFilter('media_subtype_id', '')
+    if (filters.list_id) setFilter('list_id', '')
   }
 
   const hasActiveFilters = !!(
     filters.q || filters.supertype || filters.media_subtype_id || filters.platform_id ||
-    filters.genre || filters.year || filters.location_id || (showCategory && filters.category)
+    filters.genre || filters.year || filters.location_id || filters.list_id || (showCategory && filters.category)
   )
 
   const categoryGroups = [{
@@ -91,6 +93,27 @@ export default function FilterPanel({
       ...platforms.map((p) => ({ value: String(p.id), label: p.name, platform: p })),
     ],
   }]
+
+  const listGroups = effectiveCategory
+    ? [{
+        options: [
+          { value: '', label: 'All lists' },
+          ...lists
+            .filter((l) => l.category === effectiveCategory)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((l) => ({ value: String(l.id), label: l.name })),
+        ],
+      }]
+    : [
+        { options: [{ value: '', label: 'All lists' }] },
+        ...CATEGORIES.map((c) => ({
+          label: c.label,
+          options: lists
+            .filter((l) => l.category === c.value)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((l) => ({ value: String(l.id), label: l.name })),
+        })).filter((g) => g.options.length > 0),
+      ]
 
   const sortGroups = [{ options: SORT_OPTIONS.map((s) => ({ value: s.value, label: s.label })) }]
 
@@ -128,6 +151,10 @@ export default function FilterPanel({
         placeholder="All locations"
         className="w-48"
       />
+
+      {lists.length > 0 && (
+        <SelectMenu groups={listGroups} value={filters.list_id} onChange={(value) => setFilter('list_id', value)} className="w-40" />
+      )}
 
       <SelectMenu groups={sortGroups} value={filters.sort} onChange={(value) => setFilter('sort', value)} className="w-40" />
 

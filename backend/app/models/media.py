@@ -2,6 +2,7 @@ from sqlalchemy import CheckConstraint, Column, Float, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from ..database import Base
+from .item_list import media_item_lists
 
 
 class MediaItem(Base):
@@ -62,6 +63,9 @@ class MediaItem(Base):
     # Films & TV — seasons/episodes owned (physical box sets or digital)
     seasons_owned = Column(String(100))
     episode_count = Column(Integer)
+
+    # User-curated lists (e.g. "Want to read") within this item's category
+    lists = relationship("ItemList", secondary=media_item_lists, lazy="selectin")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

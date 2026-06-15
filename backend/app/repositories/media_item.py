@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from ..database import get_db
 from ..models.enums import LinkMatchType, MediaCategory, Supertype
 from ..models.item_link import ItemLink
+from ..models.item_list import ItemList, media_item_lists
 from ..models.location import Location
 from ..models.media import MediaItem
 from ..models.media_subtype import MediaSubtype
@@ -61,6 +62,7 @@ class MediaItemRepository(BaseRepository[MediaItem]):
                 selectinload(MediaItem.location),
                 selectinload(MediaItem.media_subtype),
                 selectinload(MediaItem.platform),
+                selectinload(MediaItem.lists),
             )
             .execution_options(populate_existing=True)
         )
@@ -100,6 +102,7 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         genre: Optional[str] = None,
         year: Optional[int] = None,
         location_ids: Optional[set[int]] = None,
+        list_id: Optional[int] = None,
         sort: str = "created_at",
         order: str = "desc",
         page: int = 1,
@@ -152,6 +155,10 @@ class MediaItemRepository(BaseRepository[MediaItem]):
                 filters.append(MediaSubtype.category == category)
             if supertype is not None:
                 filters.append(MediaSubtype.supertype == supertype)
+
+        if list_id is not None:
+            stmt = stmt.join(media_item_lists, media_item_lists.c.media_item_id == MediaItem.id)
+            filters.append(media_item_lists.c.item_list_id == list_id)
 
         if filters:
             stmt = stmt.where(and_(*filters))
@@ -313,6 +320,34 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         platform = (await self.db.execute(select(Platform).where(Platform.id == platform_id))).scalar_one_or_none()
         if not platform:
             raise HTTPException(status_code=404, detail="Platform not found")
+
+    # ---- Lists ----
+
+    async def get_subtype_category(self, media_subtype_id: int) -> Optional[MediaCategory]:
+        return (
+            await self.db.execute(select(MediaSubtype.category).where(MediaSubtype.id == media_subtype_id))
+        ).scalar_one_or_none()
+
+    async def set_item_lists(self, item: MediaItem, list_ids: list[int], category: Optional[MediaCategory]) -> None:
+        """Replace `item.lists` with the `ItemList`s identified by `list_ids`.
+
+        Raises `ValueError` if any id doesn't exist or belongs to a different
+        category than `item` — the router maps this to a 400.
+        """
+        if not list_ids:
+            item.lists = []
+            return
+
+        lists = (await self.db.execute(select(ItemList).where(ItemList.id.in_(list_ids)))).scalars().all()
+        found_ids = {lst.id for lst in lists}
+        missing = set(list_ids) - found_ids
+        if missing:
+            raise ValueError(f"List(s) not found: {sorted(missing)}")
+        mismatched = [lst.id for lst in lists if lst.category != category]
+        if mismatched:
+            raise ValueError(f"List(s) do not match item category: {sorted(mismatched)}")
+
+        item.lists = list(lists)
 
     # ---- Stats ----
 

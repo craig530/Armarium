@@ -129,6 +129,7 @@ def _item_to_response(
         platform=PlatformSummary(**platform_info) if platform_info else None,
         linked_items=linked,
         ownership=ownership,
+        list_ids=[lst.id for lst in item.lists],
     )
 
 
@@ -160,6 +161,7 @@ async def list_media(
     genre: Optional[str] = None,
     year: Optional[int] = None,
     location_id: Optional[int] = None,
+    list_id: Optional[int] = None,
     sort: str = Query("created_at", pattern="^(title|year|created_at)$"),
     order: str = Query("desc", pattern="^(asc|desc)$"),
     _=Depends(get_current_user),
@@ -170,7 +172,7 @@ async def list_media(
     items, total = await repo.search(
         q=q, category=category, supertype=supertype, media_subtype_id=media_subtype_id,
         platform_id=platform_id, genre=genre, year=year, location_ids=location_ids,
-        sort=sort, order=order, page=page, per_page=per_page,
+        list_id=list_id, sort=sort, order=order, page=page, per_page=per_page,
     )
 
     return MediaListResponse(
@@ -219,7 +221,19 @@ async def create_media(
     await repo.check_platform_exists(payload.platform_id)
     _validate_ownership_fields(subtype.supertype, payload.location_id, payload.platform_id)
 
-    item = MediaItem(**payload.model_dump())
+    data = payload.model_dump()
+    list_ids = data.pop("list_ids")
+    item = MediaItem(**data)
+
+    # Resolve and attach lists before the item is added to the session — once
+    # persistent, assigning to `item.lists` would trigger a lazy load of its
+    # (nonexistent) current value, which isn't safe in an async context.
+    if list_ids is not None:
+        try:
+            await repo.set_item_lists(item, list_ids, subtype.category)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
     repo.add(item)
     await repo.flush()
 
@@ -302,8 +316,17 @@ async def update_media(
     _validate_ownership_fields(subtype.supertype, new_location_id, new_platform_id)
 
     old_url = item.cover_image_url
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    update_data = payload.model_dump(exclude_unset=True)
+    list_ids = update_data.pop("list_ids", None)
+    for field, value in update_data.items():
         setattr(item, field, value)
+
+    if list_ids is not None:
+        category = await repo.get_subtype_category(item.media_subtype_id)
+        try:
+            await repo.set_item_lists(item, list_ids, category)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     if payload.cover_image_url and payload.cover_image_url != old_url:
         background_tasks.add_task(_fetch_cover_in_background, item.id, payload.cover_image_url)

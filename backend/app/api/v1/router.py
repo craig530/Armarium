@@ -7,6 +7,7 @@ from .users import router as users_router
 from .export_import import router as export_router
 from .media_subtypes import router as media_subtypes_router
 from .platforms import router as platforms_router
+from .item_lists import router as item_lists_router
 from .admin import router as admin_router
 from .plex import router as plex_router
 
@@ -19,5 +20,6 @@ router.include_router(lookup_router, prefix="/lookup", tags=["lookup"])
 router.include_router(export_router, prefix="/library", tags=["library"])
 router.include_router(media_subtypes_router, prefix="/media-subtypes", tags=["media-subtypes"])
 router.include_router(platforms_router, prefix="/platforms", tags=["platforms"])
+router.include_router(item_lists_router, prefix="/lists", tags=["lists"])
 router.include_router(admin_router, prefix="/admin", tags=["admin"])
 router.include_router(plex_router, prefix="/admin/plex", tags=["plex"])

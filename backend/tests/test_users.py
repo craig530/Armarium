@@ -16,6 +16,7 @@ async def test_create_user_default_permissions(client, auth_headers):
     assert user["can_manage_locations"] is True
     assert user["can_manage_platforms"] is True
     assert user["can_manage_media_types"] is False
+    assert user["can_manage_lists"] is True
 
     resp = await client.delete(f"/api/v1/users/{user['id']}", headers=auth_headers)
     assert resp.status_code == 204
@@ -32,6 +33,7 @@ async def test_create_user_custom_permissions(client, auth_headers):
             "can_manage_locations": False,
             "can_manage_platforms": False,
             "can_manage_media_types": True,
+            "can_manage_lists": False,
         },
         headers=auth_headers,
     )
@@ -42,6 +44,7 @@ async def test_create_user_custom_permissions(client, auth_headers):
     assert user["can_manage_locations"] is False
     assert user["can_manage_platforms"] is False
     assert user["can_manage_media_types"] is True
+    assert user["can_manage_lists"] is False
 
     resp = await client.delete(f"/api/v1/users/{user['id']}", headers=auth_headers)
     assert resp.status_code == 204
