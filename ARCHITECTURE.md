@@ -163,6 +163,25 @@ produce a false-positive link.
 - `alembic/versions/0001_baseline.py` is the v1 baseline — it creates every
   table with its full v1 constraints and seeds the 10 default media subtypes.
   There is no pre-v1 migration history; this baseline *is* the schema.
+- **Shared Postgres enum types (`mediacategory`, `supertype`) — use
+  `postgresql.ENUM(..., create_type=False)`, not `sa.Enum(...,
+  create_type=False)`.** The generic `sa.Enum`'s `create_type` flag is
+  silently dropped when SQLAlchemy adapts it to Postgres's native `ENUM`
+  during DDL, so `sa.Enum(..., create_type=False)` still attempts (and
+  fails with `DuplicateObjectError`) `CREATE TYPE` whenever a migration
+  referencing that enum runs in an Alembic invocation where an earlier
+  migration already created the type in a *previously committed*
+  transaction (i.e. any upgrade of an existing deployment — a fresh-DB CI
+  run masks this because the type-creating and type-reusing migrations run
+  in one transaction). `0003_add_media_lists.py` uses
+  `sqlalchemy.dialects.postgresql.ENUM(..., create_type=False)`, which
+  correctly suppresses `CREATE TYPE` regardless of transaction history —
+  follow that pattern for any new table referencing `mediacategory` or
+  `supertype`. (`0001_baseline.py`'s own `plex_library_mappings.category`
+  and the FTS-setup `sa.column(...)` enum refs use the ineffective
+  `sa.Enum(..., create_type=False)` form too, but are harmless there since
+  they run in the same transaction as the type's creation — left as-is since
+  editing an already-applied migration is out of scope.)
 - `main.py`'s `lifespan()`:
   - In-memory test DBs (`sqlite+aiosqlite:///:memory:`) skip Alembic and use
     `Base.metadata.create_all` directly — schema-equivalent to the baseline
