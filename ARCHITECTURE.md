@@ -117,6 +117,12 @@ Current repositories: `MediaItemRepository`, `MediaSubtypeRepository`,
 `PlatformRepository`, `LocationRepository`, `UserRepository`,
 `PlexConfigRepository`, `PlexLibraryMappingRepository`.
 
+`LocationRepository.descendant_ids(location_id)` returns that location's id
+plus every id nested beneath it (BFS over the parent→children map built from
+`flat_rows()`). `GET /media?location_id=` resolves this set and passes it to
+`MediaItemRepository.search(location_ids=...)`, so filtering by a parent
+location also matches items stored in its descendant locations.
+
 ### 4.3 Database & migrations
 
 - Schema is defined once, in the SQLAlchemy models (`app/models/*.py`,
@@ -201,6 +207,24 @@ Current repositories: `MediaItemRepository`, `MediaSubtypeRepository`,
   purposes only (cache keys, content-addressed filenames) — never for
   passwords or tokens. New non-crypto hash usage should follow the same
   `usedforsecurity=False` convention so bandit doesn't flag it as B324.
+- **Cover fallback chains**, scoped to single-item lookups (barcode/ISBN
+  scan) rather than multi-result `search_*` (which would multiply HTTP calls
+  10-20x):
+  - TMDB: `_cover_image_url()` prefers `poster_path`, falling back to
+    `backdrop_path` (free — same API response). Used by both single-item
+    detail lookups and `search_titles`.
+  - MusicBrainz (`lookup_by_barcode`): HEAD-probes the release-level Cover
+    Art Archive URL and, on a miss, falls back to the release-group's front
+    cover (`coverartarchive.org/release-group/{id}/front-250`).
+  - Open Library (`lookup_by_isbn`): if neither Open Library's own
+    `cover.large/medium/small` yields a cover, falls back to Google Books
+    (`/books/v1/volumes?q=isbn:...`, no API key) for
+    `imageLinks.thumbnail`/`smallThumbnail`.
+- `MediaItem.tmdb_rating` (nullable `Float`) stores TMDB's `vote_average`,
+  returned by `get_movie_details`/`get_tv_details` and shown as "TMDB Rating"
+  on Films & TV item detail pages. `MediaItem.user_rating` (nullable
+  `Integer`, CHECK-constrained to 1-5) is the user's personal star rating,
+  settable on any item via the `StarRating` component.
 
 ## 5. Frontend architecture
 
@@ -221,6 +245,18 @@ Zustand stores in `src/store/index.js`, one slice per concern:
   locations/platforms/media subtypes (`ensureLoaded()` / `invalidate()`).
   Call `invalidate()` after any create/update/delete in the Settings
   managers so the next `ensureLoaded()` picks up the change.
+
+Theme bootstrap: `index.html` has an inline, non-module `<script>` *before*
+the deferred `type="module"` entry point. `type="module"` scripts always run
+after a plain inline script earlier in `<body>`, so this script applies the
+`.dark` class and the PWA `theme-color` meta tag from
+`localStorage`/`matchMedia('(prefers-color-scheme: dark)')` before
+`useThemeStore`'s module-eval-time `initialDark` is computed — avoiding a
+light-mode flash on devices with a dark OS theme. `store/index.js` also
+registers a `matchMedia` `change` listener (guarded with `typeof
+window.matchMedia === 'function'` for jsdom) so the app follows live OS theme
+changes, but only while the user hasn't manually overridden the theme (no
+`armarium-theme` key in `localStorage`).
 
 ### 5.2 API layer
 

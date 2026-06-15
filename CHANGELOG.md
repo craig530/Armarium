@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A personal 5-star rating, settable on any item from its detail page —
+  click a star to rate, click the current rating again to clear it.
+- Films & TV item details now show TMDB's user rating ("TMDB Rating") when
+  available.
+
+### Changed
+
+- Filtering the Library by a location now also includes items stored in that
+  location's sub-locations (e.g. filtering by "Office" also matches items in
+  "Office → Shelf").
+- Single-item lookups (barcode/ISBN scan) now fall back to additional cover
+  art sources when the primary provider has none: MusicBrainz barcode
+  lookups fall back from a release's cover to its release-group's cover, and
+  ISBN lookups fall back to Google Books when Open Library has no cover.
+  Films & TV lookups fall back from a missing poster to the backdrop image.
+
+### Fixed
+
+- Light/dark mode now correctly follows the device's `prefers-color-scheme`
+  on first load in mobile browsers and the installed PWA, and live-updates if
+  the OS theme changes while the app is open (unless you've manually toggled
+  the theme).
+
 ## [1.0.1] - 2026-06-15
 
 ### Changed
