@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   click a star to rate, click the current rating again to clear it.
 - Films & TV item details now show TMDB's user rating ("TMDB Rating") when
   available.
+- Films & TV and music items with a scanned barcode now show it as an actual
+  barcode image on their detail page, alongside the existing text value.
 
 ### Changed
 
@@ -24,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lookups fall back from a release's cover to its release-group's cover, and
   ISBN lookups fall back to Google Books when Open Library has no cover.
   Films & TV lookups fall back from a missing poster to the backdrop image.
+- Auto-linking items of the same title now also matches by title and release
+  year when no exact TMDB/MusicBrainz/ISBN id match is found (e.g. linking a
+  newly-scanned CD to a Plex-synced digital copy that has no MusicBrainz id),
+  guarded against linking items with an explicitly different `edition`.
+- The "Manage Media Types" permission toggle in user settings is now labelled
+  "Manage Mediums", matching the 1.0.1 "Mediums" rename.
 
 ### Fixed
 
@@ -31,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on first load in mobile browsers and the installed PWA, and live-updates if
   the OS theme changes while the app is open (unless you've manually toggled
   the theme).
+- Scanning a Films & TV barcode (e.g. a Blu-ray/DVD) now returns results —
+  previously always returned nothing, since TMDB has no barcode lookup of
+  its own and no fallback was wired up.
 
 ## [1.0.1] - 2026-06-15
 

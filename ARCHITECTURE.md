@@ -123,6 +123,16 @@ plus every id nested beneath it (BFS over the parent→children map built from
 `MediaItemRepository.search(location_ids=...)`, so filtering by a parent
 location also matches items stored in its descendant locations.
 
+`MediaItemRepository.auto_link_item(item, subtype)`, run after creating an
+item, links it to other items of the same category that are clearly the same
+title. Primary match is an exact `AUTO_LINK_FIELD` comparison
+(`tmdb_id`/`musicbrainz_id`/`isbn`, by category) — a strong enough signal to
+link regardless of other metadata. If that finds nothing (e.g. a Plex-synced
+item with no `musicbrainz_id`), it falls back to a same-category
+title+year match, filtered through `_editions_compatible()` so an explicit
+`edition` mismatch (e.g. "Remastered" vs "Anniversary Edition") doesn't
+produce a false-positive link.
+
 ### 4.3 Database & migrations
 
 - Schema is defined once, in the SQLAlchemy models (`app/models/*.py`,
@@ -203,6 +213,14 @@ location also matches items stored in its descendant locations.
   (`lookup_cache`), used by `services/tmdb.py`,
   `services/musicbrainz.py` and `services/openlibrary.py` to avoid
   re-hitting third-party metadata APIs for repeated lookups.
+- TMDB has no barcode lookup of its own. `GET /lookup/barcode/{barcode}` for
+  a films_tv (or unspecified-category) barcode that MusicBrainz didn't
+  resolve falls back to `services/upc.lookup_films_tv_by_barcode()`: looks
+  the barcode up on UPCitemdb's free trial endpoint
+  (`api.upcitemdb.com/prod/trial/lookup`, fixed host, no API key — same SSRF
+  posture as the other providers), strips bracketed format/region tags from
+  the returned product title (`_clean_title()`), and searches TMDB by the
+  cleaned title via `tmdb.search_titles()`.
 - `hashlib.md5(..., usedforsecurity=False)` is used for non-cryptographic
   purposes only (cache keys, content-addressed filenames) — never for
   passwords or tokens. New non-crypto hash usage should follow the same
@@ -285,6 +303,10 @@ directly; pages/components call the wrapper functions.
 - UI primitives live in `src/components/ui/` (Button, Modal, Input,
   SelectMenu, Skeleton, Badge, etc.) — prefer these over ad-hoc markup for
   new UI.
+- `BarcodeDisplay` (`src/components/ui/BarcodeDisplay.jsx`) renders a stored
+  `item.barcode` as an actual barcode image (via `react-barcode`/`jsbarcode`,
+  client-side SVG, no network calls), theme-aware via `useThemeStore`. Shown
+  on films_tv/music item detail pages, under the Details card.
 
 ### 5.4 Data loading pattern
 
