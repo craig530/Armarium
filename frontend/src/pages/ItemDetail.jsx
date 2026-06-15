@@ -15,6 +15,7 @@ import SelectMenu from '../components/ui/SelectMenu'
 import LocationPicker from '../components/locations/LocationPicker'
 import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
+import StarRating from '../components/ui/StarRating'
 import TMDBAttribution from '../components/ui/TMDBAttribution'
 import { CATEGORIES, categoryLabel, supertypeLabel } from '../lib/categories'
 import { useConfirm } from '../hooks/useConfirm'
@@ -257,6 +258,16 @@ export default function ItemDetail() {
     setShowLinkSearch(false)
   }
 
+  const handleRatingChange = async (rating) => {
+    try {
+      const updated = await mediaApi.update(id, { user_rating: rating })
+      setItem(updated)
+      setForm(updated)
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
   if (loading) return <PageLoader />
   if (!item) return <div className="text-center py-20 text-gray-400">Item not found</div>
 
@@ -315,6 +326,7 @@ export default function ItemDetail() {
             {item.edition && <span className="text-sm px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{item.edition}</span>}
           </div>
           {creator && <p className="text-gray-600 dark:text-gray-300">{creator}</p>}
+          <StarRating value={item.user_rating} onChange={handleRatingChange} />
           {item.genres && (
             <div className="flex flex-wrap gap-1">
               {item.genres.split(',').map((g) => (
@@ -502,6 +514,7 @@ export default function ItemDetail() {
                 ['Studio', item.studio],
                 ['Runtime', item.runtime_minutes && `${item.runtime_minutes} min`],
                 ['Rating', item.rating],
+                ['TMDB Rating', item.category === 'films_tv' && item.tmdb_rating ? `${item.tmdb_rating.toFixed(1)} / 10` : null],
                 ['Seasons', item.seasons_owned],
                 ['Episodes', item.episode_count],
                 ['Author', item.author],

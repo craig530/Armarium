@@ -95,6 +95,7 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
       rating: m.rating || '',
       seasons_owned: m.seasons_owned || '',
       episode_count: m.episode_count || '',
+      tmdb_rating: m.tmdb_rating ?? null,
       // Books
       author: m.author || '',
       publisher: m.publisher || '',
