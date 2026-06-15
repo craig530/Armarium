@@ -24,6 +24,13 @@ Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 PROXY_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_PROXY_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 
+# Maximum redirect hops followed for an external cover URL, each
+# re-validated by _is_safe_url. covers.openlibrary.org redirects to an
+# archive.org mirror, and archive.org itself sometimes adds a second redirect
+# for files stored inside a zipped collection
+# (.../download/<collection>.zip/<file> -> .../view_archive.php?archive=...).
+MAX_REDIRECTS = 3
+
 
 def _trim_border(img: Image.Image) -> Image.Image:
     """Crop a uniform-color border (e.g. letterbox bands) from `img`.
@@ -195,12 +202,12 @@ async def download_cover(url: str, item_id: int, force: bool = False) -> Optiona
     if not force and (dest_dir / f"{stem}.jpg").exists():
         return rel_url
 
-    # At most one redirect hop is followed, with the target re-validated the
-    # same way as the original URL — a "safe" URL could otherwise redirect to
-    # an internal address, bypassing the check above. covers.openlibrary.org
-    # in particular 302s every cover request to an archive.org mirror.
+    # Redirects are followed manually (up to MAX_REDIRECTS hops), with each
+    # target re-validated the same way as the original URL — a "safe" URL
+    # could otherwise redirect to an internal address, bypassing the check
+    # above.
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
-        for _ in range(2):
+        for _ in range(MAX_REDIRECTS + 1):
             try:
                 resp = await client.get(url)
             except httpx.HTTPError:
@@ -233,15 +240,15 @@ async def fetch_remote_image(url: str) -> Optional[tuple]:
     setups have client-side DNS/network rules that block hosts like
     `image.tmdb.org` even though the server (with its own DNS) can reach them.
 
-    Nothing is written to disk. At most one redirect hop is followed (e.g.
-    Cover Art Archive's `front-250` 307s to an archive.org mirror), with the
-    redirect target re-validated the same way as the original URL.
+    Redirects are followed manually (up to MAX_REDIRECTS hops, e.g. Cover Art
+    Archive's `front-250` 307s to an archive.org mirror), with each redirect
+    target re-validated the same way as the original URL.
     """
     if not await _is_safe_url(url):
         return None
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-        for _ in range(2):
+        for _ in range(MAX_REDIRECTS + 1):
             try:
                 resp = await client.get(url)
             except httpx.HTTPError:

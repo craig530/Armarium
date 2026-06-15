@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-15
+
 ### Changed
 
 - Renamed the "Manage Locations" / "Manage Platforms" / "Manage Media Types"
@@ -37,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Plex Sync settings page no longer overflows on mobile/PWA — each
   library's sync status, sync button and remove button now wrap onto their
   own row instead of pushing the remove button off-screen.
+- Book covers from Open Library's `covers.openlibrary.org` host failed to
+  download or display when archive.org served them via a second redirect
+  (`.../download/<collection>.zip/<file>` → `.../view_archive.php?...`,
+  used for covers stored inside a zipped collection). The cover fetcher only
+  followed a single redirect hop; it now follows up to three.
 
 ## [1.0.0] - 2026-06-14
 
@@ -116,5 +123,6 @@ Initial public release.
 - Versioned Docker images published to GHCR for each tagged release — see
   [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-[Unreleased]: https://github.com/craig530/Armarium/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/craig530/Armarium/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/craig530/Armarium/releases/tag/v1.0.1
 [1.0.0]: https://github.com/craig530/Armarium/releases/tag/v1.0.0

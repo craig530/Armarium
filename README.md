@@ -42,6 +42,9 @@ instead of illuminated manuscripts.
 - **Automatic metadata and cover art** — titles, artwork, release years, genres
   and more are fetched from [TMDB](https://www.themoviedb.org/),
   [MusicBrainz](https://musicbrainz.org/) and [Open Library](https://openlibrary.org/).
+- **Plex library sync** — connect a Plex Media Server and import your Films &
+  TV and Music libraries as digital items, with per-library media-type
+  mapping, progress tracking, and cleanup of items removed from Plex.
 - **Track where things live** — organise physical items into a hierarchy of
   locations (shelves, boxes, rooms) with custom icons, and digital items by
   the platform they're on (with platform logos).
