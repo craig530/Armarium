@@ -32,6 +32,21 @@ export const useThemeStore = create((set) => {
   }
 })
 
+// Follow OS theme changes live while the app is open, but only if the user
+// hasn't manually overridden the theme (no 'armarium-theme' in localStorage).
+// Re-checks localStorage inside the handler in case toggle() set an override
+// mid-session, after this listener was registered. matchMedia is unavailable
+// in the jsdom test environment, hence the guard.
+if (typeof window.matchMedia === 'function') {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (localStorage.getItem('armarium-theme')) return
+    const next = e.matches
+    document.documentElement.classList.toggle('dark', next)
+    applyThemeColor(next)
+    useThemeStore.setState({ dark: next })
+  })
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 // The JWT itself lives in an httpOnly cookie set by the server, so the

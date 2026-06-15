@@ -20,6 +20,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Runs before the deferred module script below, so the .dark class
+      // and PWA status-bar colour are correct from first paint — avoids a
+      // light-mode flash on devices with a dark OS theme. Mirrors
+      // applyThemeColor() in src/store/index.js.
+      (function () {
+        var saved = localStorage.getItem('armarium-theme')
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        var dark = saved === 'dark' || (!saved && prefersDark)
+        if (dark) document.documentElement.classList.add('dark')
+        var meta = document.querySelector('meta[name="theme-color"]')
+        if (meta) meta.setAttribute('content', dark ? '#15100C' : '#FFFFFF')
+      })()
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
