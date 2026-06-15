@@ -1,6 +1,7 @@
 """Tests for app.api.v1.lookup — barcode lookup, cover proxy, and image scan."""
 import io
 
+import httpx
 import pytest
 from unittest.mock import patch, AsyncMock
 
@@ -244,3 +245,192 @@ async def test_scan_requires_auth(client):
     files = {"file": ("frame.png", PNG_1X1, "image/png")}
     resp = await client.post("/api/v1/lookup/scan", files=files)
     assert resp.status_code == 401
+
+
+# ── Cover fallbacks & TMDB rating (service layer) ───────────────────────────
+
+def _patched_client(module_path, handler):
+    transport = httpx.MockTransport(handler)
+
+    class _Client(httpx.AsyncClient):
+        def __init__(self, *args, **kwargs):
+            kwargs["transport"] = transport
+            super().__init__(*args, **kwargs)
+
+    return patch(f"{module_path}.httpx.AsyncClient", _Client)
+
+
+async def test_tmdb_movie_details_falls_back_to_backdrop_and_includes_rating(monkeypatch):
+    from app.config import settings
+    from app.services import tmdb
+
+    monkeypatch.setattr(settings, "tmdb_api_key", "test-key")
+
+    def handler(request):
+        return httpx.Response(200, json={
+            "title": "No Poster Movie",
+            "release_date": "2020-01-01",
+            "backdrop_path": "/backdrop.jpg",
+            "vote_average": 7.8,
+            "genres": [],
+            "production_companies": [],
+            "credits": {"cast": [], "crew": []},
+        })
+
+    with _patched_client("app.services.tmdb", handler):
+        details = await tmdb.get_movie_details(123)
+
+    assert details["cover_image_url"] == f"{tmdb.IMAGE_BASE}/backdrop.jpg"
+    assert details["tmdb_rating"] == 7.8
+
+
+async def test_tmdb_tv_details_falls_back_to_backdrop_and_includes_rating(monkeypatch):
+    from app.config import settings
+    from app.services import tmdb
+
+    monkeypatch.setattr(settings, "tmdb_api_key", "test-key")
+
+    def handler(request):
+        return httpx.Response(200, json={
+            "name": "No Poster Show",
+            "first_air_date": "2020-01-01",
+            "backdrop_path": "/tv-backdrop.jpg",
+            "vote_average": 8.2,
+            "genres": [],
+            "networks": [],
+            "created_by": [],
+            "credits": {"cast": []},
+        })
+
+    with _patched_client("app.services.tmdb", handler):
+        details = await tmdb.get_tv_details(456)
+
+    assert details["cover_image_url"] == f"{tmdb.IMAGE_BASE}/tv-backdrop.jpg"
+    assert details["tmdb_rating"] == 8.2
+
+
+async def test_tmdb_search_falls_back_to_backdrop_for_results_without_poster(monkeypatch):
+    from app.config import settings
+    from app.services import tmdb
+
+    monkeypatch.setattr(settings, "tmdb_api_key", "test-key")
+
+    def handler(request):
+        return httpx.Response(200, json={
+            "results": [{
+                "media_type": "movie",
+                "title": "No Poster Movie",
+                "release_date": "2020-01-01",
+                "backdrop_path": "/search-backdrop.jpg",
+                "id": 789,
+            }],
+        })
+
+    with _patched_client("app.services.tmdb", handler):
+        candidates = await tmdb.search_titles("no poster")
+
+    assert candidates[0].cover_url == f"{tmdb.IMAGE_BASE}/search-backdrop.jpg"
+
+
+async def test_musicbrainz_barcode_falls_back_to_release_group_cover():
+    from app.services import musicbrainz
+
+    release_id = "11111111-1111-1111-1111-111111111111"
+    release_group_id = "22222222-2222-2222-2222-222222222222"
+    release_front_url = f"https://coverartarchive.org/release/{release_id}/front-250"
+    fallback_url = f"https://coverartarchive.org/release-group/{release_group_id}/front-250"
+
+    def handler(request):
+        url = str(request.url)
+        if "musicbrainz.org" in url:
+            return httpx.Response(200, json={"releases": [{
+                "id": release_id,
+                "title": "Some Album",
+                "release-group": {"id": release_group_id},
+            }]})
+        if url == release_front_url:
+            return httpx.Response(404)
+        raise AssertionError(f"unexpected request to {url}")
+
+    with _patched_client("app.services.musicbrainz", handler):
+        candidates = await musicbrainz.lookup_by_barcode("0123456789012")
+
+    assert candidates[0].cover_url == fallback_url
+    assert candidates[0].metadata["cover_image_url"] == fallback_url
+
+
+async def test_musicbrainz_barcode_keeps_release_cover_when_available():
+    from app.services import musicbrainz
+
+    release_id = "11111111-1111-1111-1111-111111111111"
+    release_group_id = "22222222-2222-2222-2222-222222222222"
+    release_front_url = f"https://coverartarchive.org/release/{release_id}/front-250"
+
+    def handler(request):
+        url = str(request.url)
+        if "musicbrainz.org" in url:
+            return httpx.Response(200, json={"releases": [{
+                "id": release_id,
+                "title": "Some Album",
+                "release-group": {"id": release_group_id},
+            }]})
+        if url == release_front_url:
+            return httpx.Response(200)
+        raise AssertionError(f"unexpected request to {url}")
+
+    with _patched_client("app.services.musicbrainz", handler):
+        candidates = await musicbrainz.lookup_by_barcode("0123456789012")
+
+    assert candidates[0].cover_url == release_front_url
+
+
+async def test_openlibrary_isbn_falls_back_to_google_books_cover():
+    from app.services import openlibrary
+
+    isbn = "9780356521657"
+
+    def handler(request):
+        url = str(request.url)
+        if "openlibrary.org/api/books" in url:
+            return httpx.Response(200, json={
+                f"ISBN:{isbn}": {
+                    "title": "Some Book",
+                    "authors": [],
+                    "publishers": [],
+                },
+            })
+        if "googleapis.com/books" in url:
+            return httpx.Response(200, json={
+                "items": [{"volumeInfo": {"imageLinks": {"thumbnail": "http://books.google.com/cover.jpg"}}}],
+            })
+        raise AssertionError(f"unexpected request to {url}")
+
+    with _patched_client("app.services.openlibrary", handler):
+        candidates = await openlibrary.lookup_by_isbn(isbn)
+
+    assert candidates[0].cover_url == "http://books.google.com/cover.jpg"
+    assert candidates[0].metadata["cover_image_url"] == "http://books.google.com/cover.jpg"
+
+
+async def test_openlibrary_isbn_does_not_query_google_books_when_cover_present():
+    from app.services import openlibrary
+
+    isbn = "9780134685991"
+
+    def handler(request):
+        url = str(request.url)
+        if "openlibrary.org/api/books" in url:
+            return httpx.Response(200, json={
+                f"ISBN:{isbn}": {
+                    "title": "Effective Java",
+                    "authors": [],
+                    "publishers": [],
+                    "cover": {"large": "https://covers.openlibrary.org/b/id/1-L.jpg"},
+                },
+            })
+        raise AssertionError(f"unexpected request to {url}")
+
+    with _patched_client("app.services.openlibrary", handler):
+        candidates = await openlibrary.lookup_by_isbn(isbn)
+
+    assert candidates[0].cover_url == "https://covers.openlibrary.org/b/id/1-L.jpg"

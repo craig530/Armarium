@@ -26,7 +26,37 @@ async def lookup_by_isbn(isbn: str) -> List[LookupCandidate]:
             logger.warning("OpenLibrary ISBN lookup failed for %s: %s", clean, e)
             return []
 
-    return [c for c in (_isbn_book_to_candidate(book, clean) for book in data.values()) if c]
+        candidates = [c for c in (_isbn_book_to_candidate(book, clean) for book in data.values()) if c]
+
+        for candidate in candidates:
+            if not candidate.cover_url:
+                cover_url = await _google_books_cover(client, clean)
+                if cover_url:
+                    candidate.cover_url = cover_url
+                    candidate.metadata["cover_image_url"] = cover_url
+
+    return candidates
+
+
+async def _google_books_cover(client: httpx.AsyncClient, isbn: str) -> Optional[str]:
+    """Fall back to Google Books (no API key required) for a cover image
+    when Open Library has none for this ISBN."""
+    try:
+        resp = await client.get(
+            "https://www.googleapis.com/books/v1/volumes",
+            params={"q": f"isbn:{isbn}"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning("Google Books cover fallback failed for %s: %s", isbn, e)
+        return None
+
+    items = data.get("items", [])
+    if not items:
+        return None
+    image_links = items[0].get("volumeInfo", {}).get("imageLinks", {})
+    return image_links.get("thumbnail") or image_links.get("smallThumbnail")
 
 
 async def search_books(query: str, limit: int = 10) -> List[LookupCandidate]:

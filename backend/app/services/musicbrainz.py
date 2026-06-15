@@ -23,7 +23,7 @@ async def lookup_by_barcode(barcode: str) -> List[LookupCandidate]:
                     "query": f"barcode:{barcode}",
                     "fmt": "json",
                     "limit": 10,
-                    "inc": "artist-credits labels",
+                    "inc": "artist-credits labels release-groups",
                 },
             )
             resp.raise_for_status()
@@ -32,7 +32,35 @@ async def lookup_by_barcode(barcode: str) -> List[LookupCandidate]:
             logger.warning("MusicBrainz barcode lookup failed for %s: %s", barcode, e)
             return []
 
-    return [c for c in (_release_to_candidate(r) for r in data.get("releases", [])) if c]
+        candidates = []
+        for release in data.get("releases", []):
+            candidate = _release_to_candidate(release)
+            if not candidate:
+                continue
+            await _apply_cover_art_fallback(client, candidate, release)
+            candidates.append(candidate)
+
+    return candidates
+
+
+async def _apply_cover_art_fallback(client: httpx.AsyncClient, candidate: LookupCandidate, release: dict) -> None:
+    """Cover Art Archive often has art at the release-group level even when
+    the specific release has none. Probe the release-level front cover and
+    fall back to the release-group's front cover on a miss."""
+    release_group_id = release.get("release-group", {}).get("id")
+    if not release_group_id or not candidate.cover_url:
+        return
+
+    try:
+        resp = await client.head(candidate.cover_url, timeout=5.0)
+        if resp.status_code == 200:
+            return
+    except Exception as e:
+        logger.debug("CAA release-level cover probe failed for %s: %s", candidate.cover_url, e)
+
+    fallback_url = f"https://coverartarchive.org/release-group/{release_group_id}/front-250"
+    candidate.cover_url = fallback_url
+    candidate.metadata["cover_image_url"] = fallback_url
 
 
 def _escape_lucene_phrase(value: str) -> str:

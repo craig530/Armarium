@@ -11,6 +11,13 @@ BASE_URL = "https://api.themoviedb.org/3"
 IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
 
 
+def _cover_image_url(data: dict) -> Optional[str]:
+    """Prefer the poster; fall back to the backdrop when no poster art is
+    available (still free — both paths come from the same API response)."""
+    path = data.get("poster_path") or data.get("backdrop_path")
+    return (IMAGE_BASE + path) if path else None
+
+
 async def search_titles(query: str, limit: int = 10, media_kind: Optional[str] = None) -> List[LookupCandidate]:
     if not settings.tmdb_api_key:
         return []
@@ -76,7 +83,8 @@ async def get_movie_details(tmdb_id: int) -> Optional[dict]:
         "cast_list": str(cast),
         "tmdb_id": tmdb_id,
         "media_kind": "movie",
-        "cover_image_url": (IMAGE_BASE + data["poster_path"]) if data.get("poster_path") else None,
+        "cover_image_url": _cover_image_url(data),
+        "tmdb_rating": data.get("vote_average"),
     }
 
 
@@ -117,7 +125,8 @@ async def get_tv_details(tmdb_id: int) -> Optional[dict]:
         "cast_list": str(cast),
         "tmdb_id": tmdb_id,
         "media_kind": "tv",
-        "cover_image_url": (IMAGE_BASE + data["poster_path"]) if data.get("poster_path") else None,
+        "cover_image_url": _cover_image_url(data),
+        "tmdb_rating": data.get("vote_average"),
     }
 
 
@@ -132,8 +141,7 @@ def _result_to_candidate(result: dict, mt: str) -> Optional[LookupCandidate]:
     if not title:
         return None
 
-    poster = result.get("poster_path")
-    cover_url = (IMAGE_BASE + poster) if poster else None
+    cover_url = _cover_image_url(result)
     tmdb_id = result.get("id")
 
     metadata = {
