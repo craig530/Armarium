@@ -5,6 +5,7 @@ import math
 from ...database import AsyncSessionLocal
 from ...models.media import MediaItem
 from ...models.enums import LinkMatchType, MediaCategory, Supertype
+from ...repositories.location import LocationRepository, get_location_repository
 from ...repositories.media_item import MediaItemRepository, get_media_item_repository
 from ...schemas.media import (
     MediaItemCreate, MediaItemUpdate, MediaItemResponse, MediaListResponse, LibraryStats,
@@ -163,10 +164,12 @@ async def list_media(
     order: str = Query("desc", pattern="^(asc|desc)$"),
     _=Depends(get_current_user),
     repo: MediaItemRepository = Depends(get_media_item_repository),
+    location_repo: LocationRepository = Depends(get_location_repository),
 ):
+    location_ids = await location_repo.descendant_ids(location_id) if location_id else None
     items, total = await repo.search(
         q=q, category=category, supertype=supertype, media_subtype_id=media_subtype_id,
-        platform_id=platform_id, genre=genre, year=year, location_id=location_id,
+        platform_id=platform_id, genre=genre, year=year, location_ids=location_ids,
         sort=sort, order=order, page=page, per_page=per_page,
     )
 

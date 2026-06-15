@@ -100,6 +100,26 @@ class LocationRepository(BaseRepository[Location]):
             ).scalar_one_or_none()
         return False
 
+    async def descendant_ids(self, location_id: int) -> set[int]:
+        """Return `location_id` plus the ids of every location nested under
+        it (children, grandchildren, etc.), via BFS over the parent→children
+        map. Used so filtering by a parent location also matches items
+        stored in its sub-locations."""
+        rows = await self.flat_rows()
+        children_by_parent: dict[Optional[int], list[int]] = {}
+        for row in rows:
+            children_by_parent.setdefault(row.parent_id, []).append(row.id)
+
+        result = {location_id}
+        queue = [location_id]
+        while queue:
+            current = queue.pop()
+            for child_id in children_by_parent.get(current, []):
+                if child_id not in result:
+                    result.add(child_id)
+                    queue.append(child_id)
+        return result
+
     async def unlink_items(self, loc_id: int) -> None:
         items = (await self.db.execute(select(MediaItem).where(MediaItem.location_id == loc_id))).scalars().all()
         for item in items:

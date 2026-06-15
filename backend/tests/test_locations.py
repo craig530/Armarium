@@ -233,6 +233,53 @@ async def test_location_icon_key_and_upload(client, auth_headers):
     assert resp.status_code == 204
 
 
+async def test_media_filter_by_location_includes_descendants(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+
+    parent_resp = await client.post("/api/v1/locations", json={"name": "Office"}, headers=auth_headers)
+    parent_id = parent_resp.json()["id"]
+
+    child_resp = await client.post(
+        "/api/v1/locations", json={"name": "Shelf", "parent_id": parent_id}, headers=auth_headers
+    )
+    child_id = child_resp.json()["id"]
+
+    parent_item_resp = await client.post(
+        "/api/v1/media",
+        json={"title": "In Office", "media_subtype_id": cd_id, "location_id": parent_id},
+        headers=auth_headers,
+    )
+    parent_item_id = parent_item_resp.json()["id"]
+
+    child_item_resp = await client.post(
+        "/api/v1/media",
+        json={"title": "In Shelf", "media_subtype_id": cd_id, "location_id": child_id},
+        headers=auth_headers,
+    )
+    child_item_id = child_item_resp.json()["id"]
+
+    # Filtering by the parent location returns items in both the parent and
+    # its descendant locations.
+    resp = await client.get(f"/api/v1/media?location_id={parent_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    titles = {item["title"] for item in resp.json()["items"]}
+    assert titles == {"In Office", "In Shelf"}
+
+    # Filtering by the child location returns only the child's item.
+    resp = await client.get(f"/api/v1/media?location_id={child_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    titles = {item["title"] for item in resp.json()["items"]}
+    assert titles == {"In Shelf"}
+
+    # Cleanup
+    for item_id in (parent_item_id, child_item_id):
+        resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+        assert resp.status_code == 204
+    for loc_id in (child_id, parent_id):
+        resp = await client.delete(f"/api/v1/locations/{loc_id}", headers=auth_headers)
+        assert resp.status_code == 204
+
+
 # ── Upload validation ────────────────────────────────────────────────────────
 
 async def test_location_icon_upload_rejects_svg(client, auth_headers):

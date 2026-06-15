@@ -89,7 +89,7 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         platform_id: Optional[int] = None,
         genre: Optional[str] = None,
         year: Optional[int] = None,
-        location_id: Optional[int] = None,
+        location_ids: Optional[set[int]] = None,
         sort: str = "created_at",
         order: str = "desc",
         page: int = 1,
@@ -129,8 +129,8 @@ class MediaItemRepository(BaseRepository[MediaItem]):
             filters.append(MediaItem.genres.ilike(f"%{genre}%"))
         if year:
             filters.append(MediaItem.year == year)
-        if location_id:
-            filters.append(MediaItem.location_id == location_id)
+        if location_ids:
+            filters.append(MediaItem.location_id.in_(location_ids))
         if media_subtype_id:
             filters.append(MediaItem.media_subtype_id == media_subtype_id)
         if platform_id:
