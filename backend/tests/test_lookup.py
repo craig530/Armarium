@@ -89,12 +89,83 @@ async def test_lookup_barcode_films_tv_category_does_not_query_musicbrainz(clien
     # MusicBrainz only knows about music releases — a UPC/EAN-13 scanned while
     # adding a film/TV item must not return mismatched (category=music)
     # candidates, and must not even call MusicBrainz.
-    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_lookup:
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_musicbrainz, \
+            patch("app.services.upc.lookup_films_tv_by_barcode", new=AsyncMock(return_value=[])) as mock_upc:
         resp = await client.get("/api/v1/lookup/barcode/075678563598?category=films_tv", headers=auth_headers)
 
     assert resp.status_code == 200
     assert resp.json() == []
-    mock_lookup.assert_not_awaited()
+    mock_musicbrainz.assert_not_awaited()
+    mock_upc.assert_awaited_once_with("075678563598")
+
+
+async def test_lookup_barcode_films_tv_category_queries_upc_fallback(client, auth_headers):
+    from app.models.enums import MediaCategory
+    from app.schemas.media import LookupCandidate
+    from app.services.cache import lookup_cache
+
+    lookup_cache.clear()
+
+    fake_candidate = LookupCandidate(
+        external_id="603",
+        source="tmdb",
+        title="Steins;Gate: The Complete Series",
+        category=MediaCategory.FILMS_TV,
+        media_kind="tv",
+    )
+
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_musicbrainz, \
+            patch("app.services.upc.lookup_films_tv_by_barcode", new=AsyncMock(return_value=[fake_candidate])) as mock_upc:
+        resp = await client.get("/api/v1/lookup/barcode/5022366813549?category=films_tv", headers=auth_headers)
+
+    assert resp.status_code == 200
+    results = resp.json()
+    assert len(results) == 1
+    assert results[0]["title"] == "Steins;Gate: The Complete Series"
+    # 13-digit EAN-13 -> tmdb_barcode == ean13.
+    mock_upc.assert_awaited_once_with("5022366813549")
+    # category=films_tv -> MusicBrainz must not be queried.
+    mock_musicbrainz.assert_not_awaited()
+
+
+async def test_lookup_barcode_unspecified_category_falls_back_to_upc_when_musicbrainz_empty(client, auth_headers):
+    from app.models.enums import MediaCategory
+    from app.schemas.media import LookupCandidate
+    from app.services.cache import lookup_cache
+
+    lookup_cache.clear()
+
+    fake_candidate = LookupCandidate(
+        external_id="362",
+        source="tmdb",
+        title="The Lion King",
+        category=MediaCategory.FILMS_TV,
+        media_kind="movie",
+    )
+
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_musicbrainz, \
+            patch("app.services.upc.lookup_films_tv_by_barcode", new=AsyncMock(return_value=[fake_candidate])) as mock_upc:
+        resp = await client.get("/api/v1/lookup/barcode/8717418440374", headers=auth_headers)
+
+    assert resp.status_code == 200
+    results = resp.json()
+    assert len(results) == 1
+    assert results[0]["title"] == "The Lion King"
+    mock_musicbrainz.assert_awaited_once_with("8717418440374")
+    mock_upc.assert_awaited_once_with("8717418440374")
+
+
+async def test_lookup_barcode_music_category_does_not_query_upc_fallback(client, auth_headers):
+    # category=music must not fall back to the films/TV (UPCitemdb->TMDB)
+    # path even when MusicBrainz finds nothing.
+    with patch("app.services.musicbrainz.lookup_by_barcode", new=AsyncMock(return_value=[])) as mock_musicbrainz, \
+            patch("app.services.upc.lookup_films_tv_by_barcode", new=AsyncMock(return_value=[])) as mock_upc:
+        resp = await client.get("/api/v1/lookup/barcode/075678563598?category=music", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == []
+    mock_musicbrainz.assert_awaited_once_with("0075678563598")
+    mock_upc.assert_not_awaited()
 
 
 async def test_lookup_barcode_isbn_queries_open_library(client, auth_headers):
@@ -410,6 +481,65 @@ async def test_openlibrary_isbn_falls_back_to_google_books_cover():
 
     assert candidates[0].cover_url == "http://books.google.com/cover.jpg"
     assert candidates[0].metadata["cover_image_url"] == "http://books.google.com/cover.jpg"
+
+
+# ── Films/TV barcode lookup via UPCitemdb -> TMDB (service layer) ──────────
+
+def test_clean_title_strips_brackets_and_trailing_text():
+    from app.services.upc import _clean_title
+
+    assert _clean_title("Steins;Gate: The Complete Series [Blu-ray]") == "Steins;Gate: The Complete Series"
+    assert _clean_title("The Lion King (2019) [Blu-ray] [Region Free]") == "The Lion King"
+    assert _clean_title("The Lion King, Walt Disney Studios, Blu-ray + DVD") == "The Lion King"
+
+
+async def test_upc_lookup_films_tv_by_barcode_searches_tmdb_with_cleaned_title():
+    from app.models.enums import MediaCategory
+    from app.schemas.media import LookupCandidate
+    from app.services import upc
+
+    def upc_handler(request):
+        assert request.url.params["upc"] == "5022366813549"
+        return httpx.Response(200, json={
+            "code": "OK",
+            "items": [{"title": "Steins;Gate: The Complete Series [Blu-ray]"}],
+        })
+
+    fake_candidate = LookupCandidate(
+        external_id="100", source="tmdb", title="Steins;Gate",
+        category=MediaCategory.FILMS_TV, media_kind="tv",
+    )
+
+    with _patched_client("app.services.upc", upc_handler), \
+            patch("app.services.upc.tmdb.search_titles", new=AsyncMock(return_value=[fake_candidate])) as mock_search:
+        candidates = await upc.lookup_films_tv_by_barcode("5022366813549")
+
+    assert candidates == [fake_candidate]
+    mock_search.assert_awaited_once_with("Steins;Gate: The Complete Series", 5)
+
+
+async def test_upc_lookup_films_tv_by_barcode_returns_empty_when_no_upcitemdb_match():
+    from app.services import upc
+
+    def upc_handler(request):
+        return httpx.Response(200, json={"code": "OK", "items": []})
+
+    with _patched_client("app.services.upc", upc_handler):
+        candidates = await upc.lookup_films_tv_by_barcode("0000000000000")
+
+    assert candidates == []
+
+
+async def test_upc_lookup_films_tv_by_barcode_returns_empty_on_upcitemdb_error():
+    from app.services import upc
+
+    def upc_handler(request):
+        return httpx.Response(500)
+
+    with _patched_client("app.services.upc", upc_handler):
+        candidates = await upc.lookup_films_tv_by_barcode("8717418440374")
+
+    assert candidates == []
 
 
 async def test_openlibrary_isbn_does_not_query_google_books_when_cover_present():

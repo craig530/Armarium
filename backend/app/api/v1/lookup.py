@@ -9,7 +9,7 @@ from ...models.enums import MediaCategory
 from ...schemas.media import LookupCandidate
 from ...models.user import User
 from ...repositories.media_item import MediaItemRepository, get_media_item_repository
-from ...services import openlibrary, musicbrainz, tmdb
+from ...services import openlibrary, musicbrainz, tmdb, upc
 from ...services.barcode import process_barcode
 from ...services.cache import lookup_cache
 from ...services.cover_art import fetch_remote_image
@@ -149,13 +149,18 @@ async def lookup_barcode(
     if candidates is None:
         if is_book:
             candidates = await openlibrary.lookup_by_isbn(lookups["open_library"])
-        elif category in (None, MediaCategory.MUSIC) and lookups["musicbrainz"]:
-            # MusicBrainz only knows about music releases — a UPC/EAN-13 scanned
-            # while adding a film/TV item has no matching provider here, so
-            # don't return mismatched (category=music) candidates for it.
-            candidates = await musicbrainz.lookup_by_barcode(lookups["musicbrainz"])
         else:
             candidates = []
+            if category in (None, MediaCategory.MUSIC) and lookups["musicbrainz"]:
+                # MusicBrainz only knows about music releases — a UPC/EAN-13
+                # scanned while adding a film/TV item has no matching
+                # provider here, so don't return mismatched (category=music)
+                # candidates for it.
+                candidates = await musicbrainz.lookup_by_barcode(lookups["musicbrainz"])
+            if not candidates and category in (None, MediaCategory.FILMS_TV) and lookups["tmdb_barcode"]:
+                # TMDB has no barcode lookup of its own — fall back to
+                # UPCitemdb for a product title, then search TMDB by title.
+                candidates = await upc.lookup_films_tv_by_barcode(lookups["tmdb_barcode"])
 
         if candidates:
             lookup_cache.set(cache_key, candidates)
