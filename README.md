@@ -25,9 +25,14 @@ instead of illuminated manuscripts.
 
 ## Screenshots
 
-> 📸 *Add screenshots here once you have a deployment running — for example
-> the library grid view, an item detail page, and the add-item flow. A short
-> animated GIF of the barcode scanner in action is a nice touch too.*
+|                                                 |                                                   |
+| ----------------------------------------------- | ------------------------------------------------- |
+| ![Library grid view](docs/screenshots/library.png) | ![Locations manager](docs/screenshots/locations.png) |
+| Library grid view, with search, filters and sorting | Locations manager — model your home as a nested tree of rooms, shelves and boxes |
+| ![Platforms manager](docs/screenshots/platforms.png) | ![Mediums manager](docs/screenshots/mediums.png) |
+| Platforms manager — track digital storefronts and streaming services, including synced sources like Plex | Mediums manager — customise the physical/digital media types within each category |
+| ![Admin users panel](docs/screenshots/admin-users.png) |  |
+| Admin panel — manage multiple users with granular per-user permissions |  |
 
 ## Features
 
