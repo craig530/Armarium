@@ -40,7 +40,14 @@ async def lookup_films_tv_by_barcode(barcode: str, limit: int = 5) -> List[Looku
     if not title:
         return []
 
-    return await tmdb.search_titles(title, limit)
+    candidates = await tmdb.search_titles(title, limit)
+    if not candidates and ":" in title:
+        # Box-set/edition titles (e.g. "Steins;Gate: The Complete Series")
+        # often don't match TMDB's search verbatim — retry with just the
+        # part before the colon, which is usually the show/film's own title.
+        candidates = await tmdb.search_titles(title.split(":")[0].strip(), limit)
+
+    return candidates
 
 
 async def _lookup_title(barcode: str) -> Optional[str]:

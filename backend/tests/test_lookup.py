@@ -518,6 +518,37 @@ async def test_upc_lookup_films_tv_by_barcode_searches_tmdb_with_cleaned_title()
     mock_search.assert_awaited_once_with("Steins;Gate: The Complete Series", 5)
 
 
+async def test_upc_lookup_films_tv_by_barcode_retries_without_colon_suffix_when_first_search_empty():
+    """TMDB has no match for "Steins;Gate: The Complete Series" verbatim
+    (real-world finding), so a second search for just "Steins;Gate" — the
+    part before the colon — must be tried before giving up."""
+    from app.models.enums import MediaCategory
+    from app.schemas.media import LookupCandidate
+    from app.services import upc
+
+    def upc_handler(request):
+        return httpx.Response(200, json={
+            "code": "OK",
+            "items": [{"title": "Steins;Gate: The Complete Series [Blu-ray]"}],
+        })
+
+    fake_candidate = LookupCandidate(
+        external_id="100", source="tmdb", title="Steins;Gate",
+        category=MediaCategory.FILMS_TV, media_kind="tv",
+    )
+
+    async def fake_search(query, limit):
+        return [fake_candidate] if query == "Steins;Gate" else []
+
+    with _patched_client("app.services.upc", upc_handler), \
+            patch("app.services.upc.tmdb.search_titles", new=AsyncMock(side_effect=fake_search)) as mock_search:
+        candidates = await upc.lookup_films_tv_by_barcode("5022366813549")
+
+    assert candidates == [fake_candidate]
+    mock_search.assert_awaited_with("Steins;Gate", 5)
+    assert mock_search.await_count == 2
+
+
 async def test_upc_lookup_films_tv_by_barcode_returns_empty_when_no_upcitemdb_match():
     from app.services import upc
 
