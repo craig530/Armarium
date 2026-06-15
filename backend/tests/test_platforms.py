@@ -1,5 +1,5 @@
 """Tests for app.api.v1.platforms — CRUD, logo upload, and lock-on-use."""
-from .conftest import _subtype_id, SVG_PAYLOAD, PNG_1X1
+from .conftest import _create_user_and_login, _subtype_id, SVG_PAYLOAD, PNG_1X1
 
 
 async def test_platform_crud_and_logo_upload(client, auth_headers):
@@ -79,6 +79,35 @@ async def test_reference_data_lists_have_no_cache_control_header(client, auth_he
         resp = await client.get(path, headers=auth_headers)
         assert resp.status_code == 200
         assert "cache-control" not in {h.lower() for h in resp.headers}
+
+
+# ── Permissions ──────────────────────────────────────────────────────────────
+
+async def test_can_manage_platforms_permission_enforced(client, auth_headers):
+    # Default for new users is can_manage_platforms=False.
+    _, headers = await _create_user_and_login(client, auth_headers, "platformsuser", can_manage_platforms=False)
+
+    resp = await client.get("/api/v1/platforms", headers=headers)
+    assert resp.status_code == 200
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Forbidden Platform"}, headers=headers)
+    assert resp.status_code == 403
+
+    platform_resp = await client.post("/api/v1/platforms", json={"name": "Existing Platform"}, headers=auth_headers)
+    platform_id = platform_resp.json()["id"]
+
+    resp = await client.put(f"/api/v1/platforms/{platform_id}", json={"name": "Renamed"}, headers=headers)
+    assert resp.status_code == 403
+
+    files = {"file": ("logo.png", PNG_1X1, "image/png")}
+    resp = await client.post(f"/api/v1/platforms/{platform_id}/logo", files=files, headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.delete(f"/api/v1/platforms/{platform_id}", headers=auth_headers)
+    assert resp.status_code == 204
 
 
 # ── Upload validation ────────────────────────────────────────────────────────

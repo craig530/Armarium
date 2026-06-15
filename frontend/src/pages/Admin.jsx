@@ -19,7 +19,7 @@ const PERMISSION_FLAGS = [
   { key: 'can_add_items', label: 'Add items' },
   { key: 'can_manage_locations', label: 'Manage locations' },
   { key: 'can_manage_platforms', label: 'Manage platforms' },
-  { key: 'can_manage_media_types', label: 'Manage media types' },
+  { key: 'can_manage_media_types', label: 'Manage mediums' },
 ]
 
 const EMPTY_FORM = {
@@ -794,7 +794,7 @@ function DangerZonePanel() {
 
   const handleReset = async () => {
     if (!await confirm(
-      'This will permanently delete all media, locations, and platforms, and restore the default media types. ' +
+      'This will permanently delete all media, locations, and platforms, and restore the default mediums. ' +
       'User accounts are kept.\n\nMake sure you’ve taken a backup first.',
       { title: 'Reset database?', confirmLabel: 'Continue', variant: 'danger' }
     )) return
@@ -823,7 +823,7 @@ function DangerZonePanel() {
       </div>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Reset the database to its default state — all media, locations, and platforms will be
-        permanently deleted, and the default media types will be restored. User accounts are
+        permanently deleted, and the default mediums will be restored. User accounts are
         not affected.
       </p>
       <Button size="sm" variant="danger" loading={resetting} onClick={handleReset}>

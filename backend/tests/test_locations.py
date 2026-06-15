@@ -1,5 +1,5 @@
 """Tests for app.api.v1.locations — CRUD, hierarchy, sort order, and icons."""
-from .conftest import _subtype_id, SVG_PAYLOAD, PNG_1X1
+from .conftest import _create_user_and_login, _subtype_id, SVG_PAYLOAD, PNG_1X1
 
 
 async def test_location_crud(client, auth_headers):
@@ -278,6 +278,35 @@ async def test_media_filter_by_location_includes_descendants(client, auth_header
     for loc_id in (child_id, parent_id):
         resp = await client.delete(f"/api/v1/locations/{loc_id}", headers=auth_headers)
         assert resp.status_code == 204
+
+
+# ── Permissions ──────────────────────────────────────────────────────────────
+
+async def test_can_manage_locations_permission_enforced(client, auth_headers):
+    # Default for new users is can_manage_locations=False.
+    _, headers = await _create_user_and_login(client, auth_headers, "locationsuser", can_manage_locations=False)
+
+    resp = await client.get("/api/v1/locations", headers=headers)
+    assert resp.status_code == 200
+
+    resp = await client.post("/api/v1/locations", json={"name": "Forbidden Shelf"}, headers=headers)
+    assert resp.status_code == 403
+
+    loc_resp = await client.post("/api/v1/locations", json={"name": "Existing Shelf"}, headers=auth_headers)
+    loc_id = loc_resp.json()["id"]
+
+    resp = await client.put(f"/api/v1/locations/{loc_id}", json={"name": "Renamed"}, headers=headers)
+    assert resp.status_code == 403
+
+    files = {"file": ("icon.png", PNG_1X1, "image/png")}
+    resp = await client.post(f"/api/v1/locations/{loc_id}/icon", files=files, headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.delete(f"/api/v1/locations/{loc_id}", headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.delete(f"/api/v1/locations/{loc_id}", headers=auth_headers)
+    assert resp.status_code == 204
 
 
 # ── Upload validation ────────────────────────────────────────────────────────

@@ -776,6 +776,17 @@ async def test_plex_sync_permission_enforced(client, auth_headers):
     resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync", headers=headers)
     assert resp.status_code == 403
 
+    resp = await client.get(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync/status", headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync/cancel", headers=headers)
+    assert resp.status_code == 403
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/remove-stale", json={"item_ids": []}, headers=headers
+    )
+    assert resp.status_code == 403
+
     resp = await client.delete("/api/v1/admin/plex/mappings/1", headers=headers)
     assert resp.status_code == 403
 
