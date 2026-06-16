@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import time
 from typing import List, Optional
 
@@ -129,6 +130,20 @@ def _result_to_candidate(game: dict) -> LookupCandidate:
     )
 
 
+# Strips trailing platform/format names that UPCitemdb appends to game titles,
+# e.g. "Indiana Jones and the Great Circle - Nintendo Switch 2" or
+# "Elden Ring [PlayStation 5]" (brackets already handled by upc._clean_title).
+_PLATFORM_SUFFIX_RE = re.compile(
+    r"\s*[-–]\s*(Nintendo Switch\s*\d*|PlayStation\s*\d*|PS\s*\d+|Xbox\s*(?:One|Series\s*[XS])?|"
+    r"PC|Windows|Steam|Nintendo\s*\d+DS|Game\s*Boy|Nintendo\s*64|Wii\s*U?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _clean_game_title(title: str) -> str:
+    return _PLATFORM_SUFFIX_RE.sub("", title).strip(" -:")
+
+
 _GAME_FIELDS = (
     "id,name,first_release_date,cover.url,genres.name,"
     "involved_companies.developer,involved_companies.company.name,summary"
@@ -160,20 +175,26 @@ async def get_game_details(igdb_id: int) -> Optional[LookupCandidate]:
 
 
 async def lookup_by_barcode(barcode: str) -> List[LookupCandidate]:
-    """Try to find a game via IGDB's external_games EAN/UPC lookup (category=10).
+    """Resolve a game barcode via UPCitemdb → product title → IGDB title search.
 
-    Falls back to a title search if the barcode itself returns nothing — game
-    barcode data in IGDB is sparse, especially for older releases.
+    IGDB's external_games table stores platform-storefront IDs (Steam, eShop,
+    etc.), not physical barcodes, so there is no direct barcode lookup in the
+    IGDB API. Instead we use the same UPCitemdb-then-search approach that the
+    films/TV flow uses for TMDB.
     """
     if not settings.igdb_client_id or not settings.igdb_client_secret:
         return []
 
-    # category 10 = EAN/UPC in IGDB's external_games schema
-    body = (
-        f'where external_games.category = 10 & external_games.uid = "{barcode}"; '
-        f"fields {_GAME_FIELDS}; limit 5;"
-    )
-    games = await _igdb_post("games", body)
-    if games:
-        return [_result_to_candidate(g) for g in games if g.get("name")]
-    return []
+    from . import upc  # local import to avoid circular at module load
+    raw_title = await upc.lookup_title(barcode)
+    if not raw_title:
+        return []
+
+    title = _clean_game_title(raw_title)
+    if not title:
+        return []
+
+    results = await search_games(title, limit=5)
+    if not results and ":" in title:
+        results = await search_games(title.split(":")[0].strip(), limit=5)
+    return results

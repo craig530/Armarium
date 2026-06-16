@@ -52,19 +52,46 @@ async def test_igdb_search_maps_response_fields():
     assert c.metadata["genres"] == "Platformer, Metroidvania"
 
 
-async def test_igdb_lookup_by_barcode_queries_external_games():
+async def test_igdb_lookup_by_barcode_uses_upc_then_title_search():
+    """Barcode lookup uses UPCitemdb to resolve a title, then searches IGDB
+    by that title — IGDB has no barcode database of its own."""
     from app.services import igdb
 
-    with patch("app.services.igdb._igdb_post", new=AsyncMock(return_value=[])) as mock_post:
+    fake_game = {
+        "id": 999,
+        "name": "Indiana Jones and the Great Circle",
+        "first_release_date": 1734307200,
+        "cover": {"url": "//images.igdb.com/igdb/image/upload/t_thumb/indy.jpg"},
+        "genres": [{"name": "Action-Adventure"}],
+        "involved_companies": [{"developer": True, "company": {"name": "MachineGames"}}],
+        "summary": "An epic adventure.",
+    }
+
+    with patch("app.services.upc.lookup_title", new=AsyncMock(return_value="Indiana Jones and the Great Circle - Nintendo Switch 2")), \
+            patch("app.services.igdb._igdb_post", new=AsyncMock(return_value=[fake_game])) as mock_post:
+        with patch("app.services.igdb.settings") as mock_settings:
+            mock_settings.igdb_client_id = "test_id"
+            mock_settings.igdb_client_secret = "test_secret"
+            results = await igdb.lookup_by_barcode("196388816279")
+
+    assert len(results) == 1
+    assert results[0].title == "Indiana Jones and the Great Circle"
+    # Platform suffix must be stripped before the IGDB search
+    call_body = mock_post.call_args[0][1]
+    assert "Nintendo Switch 2" not in call_body
+    assert "Indiana Jones" in call_body
+
+
+async def test_igdb_lookup_by_barcode_returns_empty_when_upc_finds_nothing():
+    from app.services import igdb
+
+    with patch("app.services.upc.lookup_title", new=AsyncMock(return_value=None)):
         with patch("app.services.igdb.settings") as mock_settings:
             mock_settings.igdb_client_id = "test_id"
             mock_settings.igdb_client_secret = "test_secret"
             results = await igdb.lookup_by_barcode("045496590475")
 
     assert results == []
-    call_body = mock_post.call_args[0][1]
-    assert "external_games.category = 10" in call_body
-    assert "045496590475" in call_body
 
 
 async def test_igdb_get_game_details_returns_none_when_not_found():

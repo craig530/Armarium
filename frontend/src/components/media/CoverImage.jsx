@@ -8,6 +8,7 @@ const CATEGORY_BG = {
   music: 'bg-rose-100 dark:bg-rose-900/30 text-rose-400',
   films_tv: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-400',
   books: 'bg-amber-100 dark:bg-amber-900/30 text-amber-400',
+  games: 'bg-violet-100 dark:bg-violet-900/30 text-violet-400',
 }
 
 export default function CoverImage({ src, src2x, category, title, className, size = 'md' }) {

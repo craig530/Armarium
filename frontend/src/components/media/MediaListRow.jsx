@@ -31,8 +31,8 @@ export default function MediaListRow({ item, onDeleted }) {
       onClick={() => navigate(`/item/${item.id}`)}
       className="flex items-center gap-4 p-3 rounded-xl hover:bg-white dark:hover:bg-gray-900 hover:shadow-xs transition-all cursor-pointer group"
     >
-      {/* Cover thumbnail */}
-      <div className="shrink-0 h-16 w-12 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">
+      {/* Cover thumbnail — square for music (album art), portrait for everything else */}
+      <div className={`shrink-0 ${item.category === 'music' ? 'h-12 w-12' : 'h-16 w-12'} rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800`}>
         <CoverImage src={item.cover_thumb_url} src2x={item.cover_url} category={item.category} title={item.title} size="sm" className="h-full w-full" />
       </div>
 

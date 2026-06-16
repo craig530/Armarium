@@ -50,6 +50,14 @@ async def lookup_films_tv_by_barcode(barcode: str, limit: int = 5) -> List[Looku
     return candidates
 
 
+async def lookup_title(barcode: str) -> Optional[str]:
+    """Resolve a UPC/EAN barcode to a product title via UPCitemdb.
+    Returns the cleaned title or None if not found.
+    Used by both films_tv and games barcode lookup flows.
+    """
+    return await _lookup_title(barcode)
+
+
 async def _lookup_title(barcode: str) -> Optional[str]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:

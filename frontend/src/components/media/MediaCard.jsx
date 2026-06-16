@@ -13,8 +13,8 @@ export default function MediaCard({ item }) {
       onClick={() => navigate(`/item/${item.id}`)}
       className="group text-left w-full flex flex-col gap-2 rounded-xl p-3 hover:bg-white dark:hover:bg-gray-900 hover:shadow-md transition-all"
     >
-      {/* Cover */}
-      <div className="relative overflow-hidden rounded-lg aspect-2/3 bg-gray-100 dark:bg-gray-800 w-full">
+      {/* Cover — square for music (album art), portrait for everything else */}
+      <div className={`relative overflow-hidden rounded-lg ${item.category === 'music' ? 'aspect-square' : 'aspect-2/3'} bg-gray-100 dark:bg-gray-800 w-full`}>
         <CoverImage
           src={item.cover_thumb_url}
           src2x={item.cover_url}

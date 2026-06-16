@@ -237,7 +237,7 @@ export default function Library() {
       {/* Skeleton grid/list while loading */}
       {loading && (
         viewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 items-start">
             {Array.from({ length: SKELETON_COUNT }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : (
@@ -251,7 +251,7 @@ export default function Library() {
       {!loading && data && data.items.length > 0 && (
         <>
           {viewMode === 'grid' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 items-start">
               {dedupeLinkedItems(data.items).map((item) => <MediaCard key={item.id} item={item} />)}
             </div>
           ) : (
