@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   overflow their chip container on item cards and list rows; chips are now
   capped at a maximum width and truncate cleanly.
 
+### Security
+
+- Upgraded `python-multipart` from 0.0.27 to 0.0.31 to resolve
+  CVE-2026-53538, CVE-2026-53539, and CVE-2026-53540.
+
 ## [1.1.1] - 2026-06-15
 
 ### Fixed
@@ -216,7 +221,8 @@ Initial public release.
 - Versioned Docker images published to GHCR for each tagged release — see
   [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-[Unreleased]: https://github.com/craig530/Armarium/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/craig530/Armarium/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/craig530/Armarium/releases/tag/v1.1.2
 [1.1.1]: https://github.com/craig530/Armarium/releases/tag/v1.1.1
 [1.1.0]: https://github.com/craig530/Armarium/releases/tag/v1.1.0
 [1.0.1]: https://github.com/craig530/Armarium/releases/tag/v1.0.1
