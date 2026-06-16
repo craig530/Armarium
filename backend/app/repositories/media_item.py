@@ -175,6 +175,51 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         items = (await self.db.execute(stmt)).scalars().all()
         return items, total
 
+    async def get_facets(
+        self,
+        *,
+        category: Optional[MediaCategory] = None,
+        supertype: Optional[Supertype] = None,
+        list_id: Optional[int] = None,
+        q: Optional[str] = None,
+    ) -> tuple[set[int], set[int]]:
+        """Return the sets of location_ids and platform_ids that are actually in
+        use for the given filters — used by the frontend to hide filter options
+        that would return zero results."""
+        filters = []
+        needs_subtype_join = category is not None or supertype is not None
+
+        if q:
+            term = f"%{q}%"
+            filters.append(
+                or_(
+                    MediaItem.title.ilike(term),
+                    MediaItem.artist.ilike(term),
+                    MediaItem.author.ilike(term),
+                    MediaItem.director.ilike(term),
+                )
+            )
+        if category is not None:
+            filters.append(MediaSubtype.category == category)
+        if supertype is not None:
+            filters.append(MediaSubtype.supertype == supertype)
+
+        def _base(col_expr):
+            stmt = select(col_expr).where(col_expr.isnot(None))
+            if needs_subtype_join:
+                stmt = stmt.join(MediaSubtype, MediaItem.media_subtype_id == MediaSubtype.id)
+            if list_id is not None:
+                stmt = stmt.join(media_item_lists, media_item_lists.c.media_item_id == MediaItem.id).where(
+                    media_item_lists.c.item_list_id == list_id
+                )
+            if filters:
+                stmt = stmt.where(and_(*filters))
+            return stmt.distinct()
+
+        loc_rows = (await self.db.execute(_base(MediaItem.location_id))).scalars().all()
+        plat_rows = (await self.db.execute(_base(MediaItem.platform_id))).scalars().all()
+        return set(loc_rows), set(plat_rows)
+
     async def recent(self, limit: int = 6) -> Sequence[MediaItem]:
         stmt = (
             select(MediaItem)

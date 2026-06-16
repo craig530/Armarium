@@ -2,6 +2,7 @@ import client from './client'
 
 export const mediaApi = {
   list: (params, config) => client.get('/media', { params, ...config }).then((r) => r.data),
+  facets: (params) => client.get('/media/facets', { params }).then((r) => r.data),
   get: (id) => client.get(`/media/${id}`).then((r) => r.data),
   create: (data) => client.post('/media', data).then((r) => r.data),
   update: (id, data) => client.put(`/media/${id}`, data).then((r) => r.data),

@@ -1,7 +1,11 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { MapPin, Tv, Tags, ListChecks } from 'lucide-react'
+import { MapPin, Tv, Tags } from 'lucide-react'
 import clsx from 'clsx'
 
+// Lists and Plex are standalone pages (see App.jsx) — keeping the tab count
+// to 3 here prevents the tab bar overflowing on narrow mobile viewports
+// (≤ 375 px). Add new settings sections as standalone pages in the sidebar
+// nav (lib/navigation.js MANAGE_LINKS) rather than adding more tabs here.
 const TABS = [
   {
     to: '/settings/locations',
@@ -23,13 +27,6 @@ const TABS = [
     icon: Tags,
     title: 'Mediums',
     description: 'Subtypes within each category and format, e.g. CD, Blu-ray, Streaming Film.',
-  },
-  {
-    to: '/settings/lists',
-    label: 'Lists',
-    icon: ListChecks,
-    title: 'Lists',
-    description: "Curated collections within each category, e.g. \"Want to read\", \"Favourites\".",
   },
 ]
 

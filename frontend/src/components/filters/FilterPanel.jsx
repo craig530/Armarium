@@ -1,5 +1,6 @@
 import { useLibraryStore } from '../../store'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
+import { flattenLocations, reachableLocationIds } from '../../lib/locations'
 import Button from '../ui/Button'
 import SelectMenu from '../ui/SelectMenu'
 import LocationPicker from '../locations/LocationPicker'
@@ -19,6 +20,8 @@ export default function FilterPanel({
   mediaSubtypes = [],
   platforms = [],
   lists = [],
+  facetLocationIds = null,
+  facetPlatformIds = null,
   category,
   showCategory = false,
   filters: filtersProp,
@@ -31,6 +34,29 @@ export default function FilterPanel({
   const resetFilters = resetFiltersProp || libraryStore.resetFilters
 
   const effectiveCategory = category || filters.category
+
+  // Limit locations to those reachable given facets (used IDs + ancestors).
+  // When facets aren't provided, show everything.
+  const visibleLocations = facetLocationIds
+    ? (() => {
+        const flat = flattenLocations(locations)
+        const reachable = reachableLocationIds(flat, facetLocationIds)
+        // Rebuild nested tree from the reachable flat set — LocationPicker
+        // accepts the original nested structure, so filter top-level and
+        // children recursively.
+        function filterTree(nodes) {
+          return nodes
+            .map((n) => ({ ...n, children: filterTree(n.children || []) }))
+            .filter((n) => reachable.has(n.id) || n.children.length > 0)
+        }
+        return filterTree(locations)
+      })()
+    : locations
+
+  // Limit platforms to those with items in current context.
+  const visiblePlatforms = facetPlatformIds
+    ? platforms.filter((p) => facetPlatformIds.has(p.id))
+    : platforms
 
   const supertypeFilteredSubtypes = mediaSubtypes
     .filter((s) => !filters.supertype || s.supertype === filters.supertype)
@@ -90,7 +116,7 @@ export default function FilterPanel({
   const platformGroups = [{
     options: [
       { value: '', label: 'All platforms' },
-      ...platforms.map((p) => ({ value: String(p.id), label: p.name, platform: p })),
+      ...visiblePlatforms.map((p) => ({ value: String(p.id), label: p.name, platform: p })),
     ],
   }]
 
@@ -134,7 +160,7 @@ export default function FilterPanel({
 
       <SelectMenu groups={mediaSubtypeGroups} value={filters.media_subtype_id} onChange={(value) => setFilter('media_subtype_id', value)} className="w-40" />
 
-      {platforms.length > 0 && (
+      {visiblePlatforms.length > 0 && (
         <SelectMenu
           groups={platformGroups}
           value={filters.platform_id}
@@ -144,13 +170,15 @@ export default function FilterPanel({
         />
       )}
 
-      <LocationPicker
-        locations={locations}
-        value={filters.location_id}
-        onChange={(value) => setFilter('location_id', value)}
-        placeholder="All locations"
-        className="w-48"
-      />
+      {visibleLocations.length > 0 && (
+        <LocationPicker
+          locations={visibleLocations}
+          value={filters.location_id}
+          onChange={(value) => setFilter('location_id', value)}
+          placeholder="All locations"
+          className="w-48"
+        />
+      )}
 
       {lists.length > 0 && (
         <SelectMenu groups={listGroups} value={filters.list_id} onChange={(value) => setFilter('list_id', value)} className="w-40" />

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-06-16
+
+### Added
+
+- **Smart filter options** — the location and platform filter selectors now only
+  show options that have at least one item in the current view (category,
+  supertype, list, and search query all applied). Empty locations and platforms
+  are hidden so every choice produces results. Powered by a new
+  `GET /api/v1/media/facets` endpoint.
+
+### Fixed
+
+- **"Add item" category row overflow** — Music, Films & TV, Books, and Games
+  now fit on a single row across all screen sizes (changed to a 4-column grid
+  with slightly smaller text/icons on mobile), keeping the supertype row
+  (Physical / Digital / List) on the row below.
+- **Settings > Lists on mobile** — the Lists section has been moved from the
+  settings tab bar to its own standalone page (like Plex), preventing the tab
+  bar from overflowing on narrow mobile viewports (≤ 375 px). It remains
+  accessible from the settings sidebar nav.
+- **Filter dropdown clipping** — the location and platform filter dropdowns now
+  expand to fit their content (up to a max width) rather than being clamped to
+  the button width, preventing long location names and deep hierarchy paths
+  from being clipped. The location button trigger also shows only the leaf
+  name, with the full path available as a tooltip.
+
 ## [1.2.0] - 2026-06-16
 
 ### Added
@@ -249,7 +275,8 @@ Initial public release.
 - Versioned Docker images published to GHCR for each tagged release — see
   [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-[Unreleased]: https://github.com/craig530/Armarium/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/craig530/Armarium/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/craig530/Armarium/compare/v1.2.0...v1.2.2
 [1.2.0]: https://github.com/craig530/Armarium/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/craig530/Armarium/releases/tag/v1.1.2
 [1.1.1]: https://github.com/craig530/Armarium/releases/tag/v1.1.1

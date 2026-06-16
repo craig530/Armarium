@@ -64,15 +64,18 @@ export default function LocationPicker({
             'focus:outline-hidden focus:ring-2 focus:ring-brand-500 focus:border-transparent'
           )}
         >
-          <span className={clsx('truncate flex items-center gap-2 min-w-0', !selected && 'text-gray-400 dark:text-gray-600')}>
+          <span
+            title={selected ? selected.path : undefined}
+            className={clsx('truncate flex items-center gap-2 min-w-0', !selected && 'text-gray-400 dark:text-gray-600')}
+          >
             {selected && <LocationIcon location={selected} size={14} className="shrink-0 text-gray-400" />}
-            <span className="truncate">{selected ? selected.path : placeholder}</span>
+            <span className="truncate">{selected ? selected.name : placeholder}</span>
           </span>
           <ChevronDown size={14} className="shrink-0 text-gray-400" />
         </button>
 
         {open && (
-          <div className="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg max-h-72 flex flex-col">
+          <div className="absolute z-20 mt-1 min-w-full w-max max-w-[22rem] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg max-h-72 flex flex-col">
             <div className="p-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
               <div className="relative">
                 <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />

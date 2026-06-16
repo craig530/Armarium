@@ -150,6 +150,23 @@ async def _build_response(repo: MediaItemRepository, item: MediaItem) -> MediaIt
     return (await _build_responses(repo, [item]))[0]
 
 
+@router.get("/facets")
+async def get_media_facets(
+    category: Optional[MediaCategory] = None,
+    supertype: Optional[Supertype] = None,
+    list_id: Optional[int] = None,
+    q: Optional[str] = None,
+    _=Depends(get_current_user),
+    repo: MediaItemRepository = Depends(get_media_item_repository),
+):
+    """Return the distinct location_ids and platform_ids in use for the given
+    filters — lets the frontend hide filter options that would return no results."""
+    location_ids, platform_ids = await repo.get_facets(
+        category=category, supertype=supertype, list_id=list_id, q=q,
+    )
+    return {"location_ids": sorted(location_ids), "platform_ids": sorted(platform_ids)}
+
+
 @router.get("", response_model=MediaListResponse)
 async def list_media(
     page: int = Query(1, ge=1),

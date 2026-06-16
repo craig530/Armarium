@@ -51,8 +51,8 @@ const router = createBrowserRouter(
           <Route path="locations" element={<SettingsLocations />} />
           <Route path="platforms" element={<SettingsPlatforms />} />
           <Route path="media-subtypes" element={<SettingsMediaSubtypes />} />
-          <Route path="lists" element={<SettingsLists />} />
         </Route>
+        <Route path="settings/lists" element={<SettingsLists />} />
         <Route path="settings/plex" element={<SettingsPlex />} />
         <Route
           path="admin"

@@ -19,16 +19,16 @@ export default function TypeStep({ category, supertype, creatingList, onChangeCa
 
       <div>
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {CATEGORIES.map((c) => {
             const Icon = CATEGORY_ICONS[c.value]
             return (
               <button
                 key={c.value}
                 onClick={() => onChangeCategory(c.value)}
-                className={clsx(TILE_BASE, category === c.value ? TILE_ACTIVE : TILE_INACTIVE)}
+                className={clsx(TILE_BASE, 'py-3 sm:py-4 text-xs sm:text-sm', category === c.value ? TILE_ACTIVE : TILE_INACTIVE)}
               >
-                <Icon size={22} />
+                <Icon size={20} />
                 {c.label}
               </button>
             )

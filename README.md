@@ -65,7 +65,8 @@ instead of illuminated manuscripts.
   form and filterable from the library views.
 - **Fast search and filtering** — full-text search across your whole
   collection, plus filters by category, type, location, platform, list, genre
-  and year.
+  and year. Location and platform filters are context-aware — only options that
+  have items in the current view are shown.
 - **Multi-user with admin roles** — secure JWT-based login, with an admin
   panel for managing additional user accounts.
 - **Export and import** — back up or migrate your library as CSV or JSON.

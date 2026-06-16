@@ -12,6 +12,7 @@ import { useLibraryStore, useReferenceDataStore } from '../store'
 vi.mock('../api/media', () => ({
   mediaApi: {
     list: vi.fn(),
+    facets: vi.fn(),
     delete: vi.fn(),
   },
 }))
@@ -62,6 +63,7 @@ beforeEach(() => {
     },
   })
   useReferenceDataStore.setState({ locations: [], platforms: [], mediaSubtypes: [], lists: [], loaded: false, loading: null })
+  mediaApi.facets.mockResolvedValue({ location_ids: [], platform_ids: [] })
 })
 
 afterEach(() => {

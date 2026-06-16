@@ -65,7 +65,7 @@ export default function SelectMenu({ groups, value, onChange, label, placeholder
         </button>
 
         {open && (
-          <div className="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg max-h-72 overflow-y-auto py-1">
+          <div className="absolute z-20 mt-1 min-w-full w-max max-w-[20rem] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg max-h-72 overflow-y-auto py-1">
             {groups.map((g, gi) => (
               <div key={g.label || gi}>
                 {g.label && (

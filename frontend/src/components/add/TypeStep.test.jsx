@@ -13,8 +13,18 @@ describe('TypeStep', () => {
     expect(screen.getByText('Music')).toBeTruthy()
     expect(screen.getByText('Films & TV')).toBeTruthy()
     expect(screen.getByText('Books')).toBeTruthy()
+    expect(screen.getByText('Games')).toBeTruthy()
     expect(screen.getByText('Physical')).toBeTruthy()
     expect(screen.getByText('Digital')).toBeTruthy()
+  })
+
+  it('calls onChangeCategory with "games" when the Games tile is clicked', () => {
+    const onChangeCategory = vi.fn()
+    render(<TypeStep category={null} supertype={null} onChangeCategory={onChangeCategory} onChangeSupertype={vi.fn()} />)
+
+    fireEvent.click(screen.getByText('Games'))
+
+    expect(onChangeCategory).toHaveBeenCalledWith('games')
   })
 
   it('calls onChangeCategory with the selected category value', () => {

@@ -15,6 +15,22 @@ export function flattenLocations(locations, parentPath = [], parentIds = [], dep
   return result
 }
 
+// Given a flat location list and a set of location IDs that are directly
+// used by items, return the set of IDs that should appear in a filter picker:
+// every used location plus all its ancestors (so the user can filter by a
+// parent location and still find items in sub-locations).
+export function reachableLocationIds(flat, usedIds) {
+  const used = new Set(usedIds)
+  const reachable = new Set()
+  for (const loc of flat) {
+    if (used.has(loc.id)) {
+      reachable.add(loc.id)
+      for (const aid of loc.ancestorIds) reachable.add(aid)
+    }
+  }
+  return reachable
+}
+
 // Removes a location and all of its descendants from a flattened list —
 // used when picking a *parent* for a location, so it can't be reparented
 // under itself or one of its own children.

@@ -657,3 +657,73 @@ async def test_list_endpoint_stays_fast_with_large_catalogue(client, auth_header
         async with AsyncSessionLocal() as db:
             await db.execute(delete(MediaItem).where(MediaItem.title.like("Perf Item %")))
             await db.commit()
+
+
+# ── Facets endpoint ───────────────────────────────────────────────────────────
+
+async def test_facets_returns_empty_when_no_items(client, auth_headers):
+    resp = await client.get("/api/v1/media/facets", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["location_ids"] == []
+    assert body["platform_ids"] == []
+
+
+async def test_facets_reflects_items_in_library(client, auth_headers):
+    # Use a digital subtype — physical items cannot have a platform_id.
+    music_digital_id = await _subtype_id(client, auth_headers, "Music")
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Facet Platform"}, headers=auth_headers)
+    plat_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Facet Track", "media_subtype_id": music_digital_id, "platform_id": plat_id},
+        headers=auth_headers,
+    )
+    item_id = resp.json()["id"]
+
+    resp = await client.get("/api/v1/media/facets?category=music", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert plat_id in body["platform_ids"]
+
+    await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    await client.delete(f"/api/v1/platforms/{plat_id}", headers=auth_headers)
+
+
+async def test_facets_category_filter_scopes_results(client, auth_headers):
+    """Facets for category=books should not include platform_ids from music items."""
+    music_digital_id = await _subtype_id(client, auth_headers, "Music")
+    book_id = await _subtype_id(client, auth_headers, "Book")
+
+    resp = await client.post("/api/v1/platforms", json={"name": "Music Only Platform"}, headers=auth_headers)
+    plat_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Category Scoped Track", "media_subtype_id": music_digital_id, "platform_id": plat_id},
+        headers=auth_headers,
+    )
+    music_id = resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Category Scoped Book", "media_subtype_id": book_id},
+        headers=auth_headers,
+    )
+    book_item_id = resp.json()["id"]
+
+    # facets scoped to books should not include the music-only platform
+    resp = await client.get("/api/v1/media/facets?category=books", headers=auth_headers)
+    assert resp.status_code == 200
+    assert plat_id not in resp.json()["platform_ids"]
+
+    await client.delete(f"/api/v1/media/{music_id}", headers=auth_headers)
+    await client.delete(f"/api/v1/media/{book_item_id}", headers=auth_headers)
+    await client.delete(f"/api/v1/platforms/{plat_id}", headers=auth_headers)
+
+
+async def test_facets_requires_auth(client):
+    resp = await client.get("/api/v1/media/facets")
+    assert resp.status_code == 401

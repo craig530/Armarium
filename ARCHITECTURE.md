@@ -378,7 +378,36 @@ inline comment explaining *why*, then `// eslint-disable-next-line
 react-hooks/exhaustive-deps` directly above the dependency array — see
 `Library.jsx` for examples.
 
-### 5.5 PWA / offline
+### 5.5 Mobile & PWA layout rules
+
+Armarium is installed as a PWA on phones; mobile layout regressions are as
+serious as desktop ones. **Every UI task must be visually verified at
+≤ 390 px viewport width** (iPhone 15 / SE size) before being considered done.
+
+Rules that prevent the most common regressions:
+
+- **`SettingsLayout` tab bar: max 3 tabs.** Four or more tabs overflow on
+  375 px screens. Route new settings sections as standalone pages (like
+  `settings/plex` and `settings/lists`) and add them to `MANAGE_LINKS` in
+  `lib/navigation.js`. Never add a fourth tab to `SettingsLayout`.
+- **Tile grids (`TypeStep`, etc.): max 3 columns on mobile.**
+  Use `grid-cols-2 sm:grid-cols-4` (or `grid-cols-4` with `text-xs sm:text-sm`
+  and `py-3 sm:py-4`) so tiles stay readable at 375 px. Long labels wrap
+  gracefully inside a tile; two-row labels are acceptable. Four columns
+  total is the maximum even on desktop — prefer 3 if labels are long.
+- **Dropdown panels:** use `min-w-full w-max max-w-[20rem]` on
+  `SelectMenu` dropdowns and `min-w-full w-max max-w-[22rem]` on
+  `LocationPicker` panels so they expand to fit content without overflowing.
+  The trigger button always `truncate`s its label; use `title=` for the full
+  value tooltip.
+- **Filter panels (`FilterPanel`):** use `flex flex-wrap gap-3`. Each
+  control has an explicit width class (`w-36`–`w-48`); controls stack
+  automatically on mobile. Do not add `overflow-hidden` to the filter row.
+- **`MobileTabBar`:** the bottom nav supports up to 6 tabs
+  (`grid-cols-6`). Do not add more tabs without considering icon-only mode
+  at 320 px.
+
+### 5.6 PWA / offline
 
 `public/sw.js` is a service worker caching `/api/` GET responses for offline
 browsing; `OfflineBanner` shows when `navigator.onLine` is false. The auth

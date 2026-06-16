@@ -43,6 +43,7 @@ export default function Home() {
   // Local search/filter state (kept separate from useLibraryStore so it
   // doesn't cross-contaminate Library's per-category filters)
   const [filters, setFiltersState] = useState(DEFAULT_FILTERS)
+  const [facets, setFacets] = useState(null)
   const [searchInput, setSearchInput] = useState('')
   const [data, setData] = useState(null)
   const [page, setPage] = useState(1)
@@ -103,8 +104,21 @@ export default function Home() {
         ...(filters.location_id && { location_id: filters.location_id }),
         ...(filters.list_id && { list_id: filters.list_id }),
       }
-      const result = await mediaApi.list(params, { signal: controller.signal })
+      const facetParams = {
+        ...(filters.q && { q: filters.q }),
+        ...(filters.category && { category: filters.category }),
+        ...(filters.supertype && { supertype: filters.supertype }),
+        ...(filters.list_id && { list_id: filters.list_id }),
+      }
+      const [result, facetData] = await Promise.all([
+        mediaApi.list(params, { signal: controller.signal }),
+        mediaApi.facets(facetParams),
+      ])
       setData(result)
+      setFacets({
+        locationIds: new Set(facetData.location_ids),
+        platformIds: new Set(facetData.platform_ids),
+      })
       setPage(p)
       setLoading(false)
     } catch (err) {
@@ -165,6 +179,8 @@ export default function Home() {
           mediaSubtypes={mediaSubtypes}
           platforms={platforms}
           lists={lists}
+          facetLocationIds={hasActiveFilters ? facets?.locationIds ?? null : null}
+          facetPlatformIds={hasActiveFilters ? facets?.platformIds ?? null : null}
           filters={filters}
           setFilter={setFilter}
           resetFilters={resetFilters}

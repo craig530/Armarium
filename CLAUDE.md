@@ -31,6 +31,11 @@ setup (including this file's role) in more depth.
 - **ESLint** (`eslint-plugin-react-hooks`) intentionally only enables
   `rules-of-hooks` + `exhaustive-deps`, not the v6+ "recommended" React
   Compiler-readiness rules — see ARCHITECTURE.md §7 before changing this.
+- **Mobile/PWA layout** — verify every UI change at ≤ 390 px. Hard rules:
+  `SettingsLayout` max **3 tabs** (add new sections as standalone pages);
+  tile grids max **4 columns** with `text-xs sm:text-sm` on mobile; dropdowns
+  use `min-w-full w-max max-w-[20rem]`. See ARCHITECTURE.md §5.5 for the
+  full set of constraints.
 
 ## Before considering a change done
 

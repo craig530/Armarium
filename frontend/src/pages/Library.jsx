@@ -36,6 +36,7 @@ export default function Library() {
   const [loading, setLoading] = useState(true)
   const [searchInput, setSearchInput] = useState(filters.q)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [facets, setFacets] = useState(null)
   const abortRef = useRef(null)
 
   const load = useCallback(async (p = 1) => {
@@ -60,8 +61,24 @@ export default function Library() {
         ...(filters.location_id && { location_id: filters.location_id }),
         ...(filters.list_id && { list_id: filters.list_id }),
       }
-      const result = await mediaApi.list(params, { signal: controller.signal })
+      // Fetch page data and facets in parallel; facets use category-level
+      // params only (no location/platform filter) so the picker always shows
+      // every option that has at least one item in this category.
+      const facetParams = {
+        category,
+        ...(filters.q && { q: filters.q }),
+        ...(filters.supertype && { supertype: filters.supertype }),
+        ...(filters.list_id && { list_id: filters.list_id }),
+      }
+      const [result, facetData] = await Promise.all([
+        mediaApi.list(params, { signal: controller.signal }),
+        mediaApi.facets(facetParams),
+      ])
       setData(result)
+      setFacets({
+        locationIds: new Set(facetData.location_ids),
+        platformIds: new Set(facetData.platform_ids),
+      })
       setPage(p)
       setLoading(false)
     } catch (err) {
@@ -168,7 +185,15 @@ export default function Library() {
 
       {/* Filters — collapsed by default on mobile (toggled above), always visible from sm: up */}
       <div className={clsx(!filtersOpen && 'hidden sm:block')}>
-        <FilterPanel locations={locations} mediaSubtypes={mediaSubtypes} platforms={platforms} lists={lists} category={category} />
+        <FilterPanel
+          locations={locations}
+          mediaSubtypes={mediaSubtypes}
+          platforms={platforms}
+          lists={lists}
+          facetLocationIds={facets?.locationIds ?? null}
+          facetPlatformIds={facets?.platformIds ?? null}
+          category={category}
+        />
       </div>
 
       {/* Empty library */}
