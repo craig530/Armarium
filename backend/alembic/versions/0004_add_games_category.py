@@ -9,7 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy import text, table, column as col, String, Integer
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = '0004'
@@ -28,13 +28,22 @@ _GAME_SUBTYPES = [
     {"name": "PlayStation Store", "category": "GAMES", "supertype": "DIGITAL", "sort_order": 2},
 ]
 
-# Ad-hoc table definition for bulk_insert (no ORM import needed).
-_media_subtypes = table(
+# Ad-hoc table for bulk_insert. category/supertype must use sa.Enum with
+# create_type=False (types already exist) so SQLAlchemy wraps the bound
+# parameters in CAST(... AS mediacategory/supertype) — plain String columns
+# cause a DatatypeMismatchError with asyncpg on PostgreSQL.
+_media_subtypes = sa.table(
     "media_subtypes",
-    col("name", String(100)),
-    col("category", String(20)),
-    col("supertype", String(20)),
-    col("sort_order", Integer),
+    sa.column("name", sa.String(100)),
+    sa.column("category", sa.Enum(
+        "MUSIC", "FILMS_TV", "BOOKS", "GAMES",
+        name="mediacategory", create_type=False,
+    )),
+    sa.column("supertype", sa.Enum(
+        "PHYSICAL", "DIGITAL",
+        name="supertype", create_type=False,
+    )),
+    sa.column("sort_order", sa.Integer),
 )
 
 
