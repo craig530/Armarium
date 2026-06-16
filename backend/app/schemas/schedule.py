@@ -2,8 +2,6 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
 
-from ..models.scheduled_job import ALL_JOB_TYPES
-
 VALID_INTERVALS = (1, 6, 12, 24, 168)   # hours: hourly / 6h / 12h / daily / weekly
 
 

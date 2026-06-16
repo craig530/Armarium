@@ -10,10 +10,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ...database import AsyncSessionLocal
 from ...models.scheduled_job import ADMIN_JOB_TYPES, ScheduledJob
 from ...repositories.scheduled_job import ScheduledJobRepository, get_scheduled_job_repository
-from ...schemas.schedule import ScheduleCreate, ScheduleResponse, ScheduleUpdate, VALID_INTERVALS
+from ...schemas.schedule import ScheduleCreate, ScheduleResponse, VALID_INTERVALS
 from ...services.auth import get_current_admin
 from ...services.scheduler import scheduler_service
 
