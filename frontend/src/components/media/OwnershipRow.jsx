@@ -1,5 +1,6 @@
-import { Tv } from 'lucide-react'
+import { Tv, Tag } from 'lucide-react'
 import clsx from 'clsx'
+import { useReferenceDataStore } from '../../store'
 import LocationIcon from '../ui/LocationIcon'
 import { platformLogoUrl } from '../../lib/platformLogos'
 
@@ -13,7 +14,7 @@ function IconBox({ children }) {
 
 function LocationChip({ record }) {
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-full">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]">
       <IconBox>
         <LocationIcon
           location={{ icon_key: record.location_icon_key, icon_url: record.location_icon_url }}
@@ -28,7 +29,7 @@ function LocationChip({ record }) {
 function PlatformChip({ record }) {
   const url = platformLogoUrl(record.platform)
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-full">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]">
       <IconBox>
         {url ? <img src={url} alt="" className="h-full w-full object-contain" /> : <Tv size={12} className="text-gray-400" />}
       </IconBox>
@@ -37,21 +38,25 @@ function PlatformChip({ record }) {
   )
 }
 
+function ListChip({ name }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-brand-50 dark:bg-brand-900/30 text-xs text-brand-700 dark:text-brand-300 min-w-0 max-w-[12rem]">
+      <Tag size={10} className="shrink-0 opacity-70" />
+      <span className="truncate">{name}</span>
+    </span>
+  )
+}
+
 const MAX_VISIBLE_CHIPS = 2
 
-/**
- * Renders compact "ownership chips" for a media item and all of its linked
- * copies — one LocationChip per physical member, one PlatformChip per
- * digital member. Beyond MAX_VISIBLE_CHIPS, the rest collapse into a "+N"
- * badge (hover for the full list).
- */
 export default function OwnershipRow({ item, className }) {
+  const { lists } = useReferenceDataStore()
+
   const members = [item, ...(item.linked_items || [])].filter(
     (m) => m.supertype === 'physical' || m.supertype === 'digital'
   )
-  if (members.length === 0) return null
 
-  const chips = members.map((m) =>
+  const ownershipChips = members.map((m) =>
     m.supertype === 'physical'
       ? {
           key: `loc-${m.id}`,
@@ -65,17 +70,25 @@ export default function OwnershipRow({ item, className }) {
         }
   )
 
-  const visible = chips.slice(0, MAX_VISIBLE_CHIPS)
-  const overflow = chips.slice(MAX_VISIBLE_CHIPS)
+  const listChips = (item.list_ids || [])
+    .map((id) => lists.find((l) => l.id === id))
+    .filter(Boolean)
+    .map((l) => ({ key: `list-${l.id}`, node: <ListChip name={l.name} />, label: l.name }))
+
+  const allChips = [...ownershipChips, ...listChips]
+  if (allChips.length === 0) return null
+
+  const visible = allChips.slice(0, MAX_VISIBLE_CHIPS)
+  const overflow = allChips.slice(MAX_VISIBLE_CHIPS)
 
   return (
-    <div className={clsx('flex items-center gap-1.5 flex-wrap', className)}>
+    <div className={clsx('flex items-center gap-1.5 flex-wrap overflow-hidden', className)}>
       {visible.map((c) => (
-        <span key={c.key}>{c.node}</span>
+        <span key={c.key} className="min-w-0">{c.node}</span>
       ))}
       {overflow.length > 0 && (
         <span
-          className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400"
+          className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 shrink-0"
           title={overflow.map((c) => c.label).join(', ')}
         >
           +{overflow.length}

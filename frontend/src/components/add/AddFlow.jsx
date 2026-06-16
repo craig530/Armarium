@@ -79,6 +79,7 @@ export default function AddFlow({ onSaved }) {
   const [batchMode, setBatchMode] = useState(restored?.batchMode ?? false)
   const [creatingList, setCreatingList] = useState(false)
   const [newList, setNewList] = useState(null)
+  const [batchListId, setBatchListId] = useState('')
   const [sessionItems, setSessionItems] = useState(restored?.sessionItems ?? [])
   const [recentItems, setRecentItems] = useState([])
   const [editingItem, setEditingItem] = useState(null)
@@ -92,7 +93,7 @@ export default function AddFlow({ onSaved }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [mediaKind, setMediaKind] = useState('movie')
 
-  const { locations, platforms, ensureLoaded } = useReferenceDataStore()
+  const { locations, platforms, lists, ensureLoaded } = useReferenceDataStore()
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
 
   const step = stepStack[stepStack.length - 1]
@@ -270,7 +271,7 @@ export default function AddFlow({ onSaved }) {
           <ChevronRight size={18} className="rotate-180" />
         </Button>
         <div className="flex items-center gap-2 flex-1">
-          {[0, 1, 2, 3].map((n) => (
+          {(creatingList ? [0, 1, 2] : [0, 1, 2, 3]).map((n, idx, arr) => (
             <div key={n} className="flex items-center gap-2 flex-1 last:flex-none">
               <div
                 className={clsx(
@@ -284,7 +285,7 @@ export default function AddFlow({ onSaved }) {
               >
                 {groupIndex > n ? '✓' : n + 1}
               </div>
-              {n < 3 && <div className={clsx('h-px flex-1', groupIndex > n ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700')} />}
+              {idx < arr.length - 1 && <div className={clsx('h-px flex-1', groupIndex > n ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700')} />}
             </div>
           ))}
         </div>
@@ -342,7 +343,15 @@ export default function AddFlow({ onSaved }) {
       )}
 
       {!enriching && step === 'batchMode' && (
-        <BatchModeStep batchMode={batchMode} onChange={setBatchMode} onContinue={handleBatchContinue} />
+        <BatchModeStep
+          batchMode={batchMode}
+          onChange={setBatchMode}
+          onContinue={handleBatchContinue}
+          category={category}
+          lists={lists}
+          batchListId={batchListId}
+          onBatchListChange={setBatchListId}
+        />
       )}
 
       {!enriching && step === 'search' && (
@@ -397,6 +406,7 @@ export default function AddFlow({ onSaved }) {
           supertype={supertype}
           locationId={locationId}
           platformId={platformId}
+          defaultListIds={batchListId ? [Number(batchListId)] : []}
           onBack={back}
           onSaved={handleItemSaved}
         />

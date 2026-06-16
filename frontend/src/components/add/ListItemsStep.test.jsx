@@ -5,10 +5,15 @@ import { mediaApi } from '../../api/media'
 
 vi.mock('../../api/media', () => ({ mediaApi: { list: vi.fn(), update: vi.fn() } }))
 
+// CoverImage renders an img; stub it to a simple img without loading real assets.
+vi.mock('../media/CoverImage', () => ({
+  default: ({ title }) => <img data-testid="cover" alt={title} />,
+}))
+
 const list = { id: 3, name: 'Want to read', category: 'books' }
 
-const itemA = { id: 1, title: 'Dune', author: 'Frank Herbert', list_ids: [] }
-const itemB = { id: 2, title: 'Foundation', author: 'Isaac Asimov', list_ids: [3] }
+const itemA = { id: 1, title: 'Dune', author: 'Frank Herbert', list_ids: [], cover_thumb_url: null, cover_url: null, category: 'books' }
+const itemB = { id: 2, title: 'Foundation', author: 'Isaac Asimov', list_ids: [3], cover_thumb_url: '/thumb.jpg', cover_url: '/cover.jpg', category: 'books' }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -27,6 +32,16 @@ describe('ListItemsStep', () => {
     expect(await screen.findByText('Dune')).toBeTruthy()
     expect(screen.getByText('Foundation')).toBeTruthy()
     expect(mediaApi.list).toHaveBeenCalledWith({ category: 'books', q: '', per_page: 20 })
+  })
+
+  it('renders a cover thumbnail for each item', async () => {
+    mediaApi.list.mockResolvedValue({ items: [itemA, itemB], total: 2, page: 1, pages: 1, per_page: 20 })
+
+    render(<ListItemsStep list={list} onBack={vi.fn()} onDone={vi.fn()} />)
+
+    await screen.findByText('Dune')
+    const covers = screen.getAllByTestId('cover')
+    expect(covers).toHaveLength(2)
   })
 
   it('shows a message when no items are found', async () => {

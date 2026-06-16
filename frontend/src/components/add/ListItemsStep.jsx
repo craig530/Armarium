@@ -3,6 +3,7 @@ import { Check, Plus } from 'lucide-react'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
 import LoadingSpinner from '../ui/LoadingSpinner'
+import CoverImage from '../media/CoverImage'
 import { mediaApi } from '../../api/media'
 import toast from 'react-hot-toast'
 
@@ -71,8 +72,16 @@ export default function ListItemsStep({ list, onBack, onDone }) {
             const inList = item.list_ids.includes(list.id)
             const creator = item.artist || item.director || item.author
             return (
-              <li key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-2.5">
-                <div className="min-w-0">
+              <li key={item.id} className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-2.5">
+                <CoverImage
+                  src={item.cover_thumb_url}
+                  src2x={item.cover_url}
+                  category={item.category}
+                  title={item.title}
+                  size="sm"
+                  className="h-12 w-9 shrink-0 rounded-md overflow-hidden"
+                />
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.title}</p>
                   {creator && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{creator}</p>}
                 </div>

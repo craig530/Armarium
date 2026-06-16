@@ -1,11 +1,13 @@
 import clsx from 'clsx'
 import Button from '../ui/Button'
+import { Select } from '../ui/Input'
 
 // Inserted between the location/platform step and search/scan. Batch mode
 // stays off by default — once enabled it persists for the rest of the
 // session (see AddFlow's sessionStorage-backed restore) until the user taps
 // "Exit batch" on the status bar.
-export default function BatchModeStep({ batchMode, onChange, onContinue }) {
+export default function BatchModeStep({ batchMode, onChange, onContinue, category, lists = [], batchListId, onBatchListChange }) {
+  const categoryLists = lists.filter((l) => l.category === category)
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -41,6 +43,24 @@ export default function BatchModeStep({ batchMode, onChange, onContinue }) {
           />
         </div>
       </button>
+
+      {categoryLists.length > 0 && (
+        <div>
+          <Select
+            label="Default list (optional)"
+            value={batchListId || ''}
+            onChange={(e) => onBatchListChange(e.target.value)}
+          >
+            <option value="">No list</option>
+            {categoryLists.map((l) => (
+              <option key={l.id} value={String(l.id)}>{l.name}</option>
+            ))}
+          </Select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Each item saved this session will be added to this list.
+          </p>
+        </div>
+      )}
 
       <Button onClick={onContinue} className="w-full">Continue</Button>
     </div>

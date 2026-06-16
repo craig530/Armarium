@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-06-16
+
+### Added
+
+- **More by same author/artist** — the item detail page for books and music now
+  shows a horizontal strip of other items in your library by the same author or
+  artist (excluding the item itself and any linked copies already shown in the
+  Ownership section).
+- **Author/artist as search link** — clicking the author name on a book detail
+  page or the artist name on a music detail page navigates to the library view
+  pre-filtered to that creator's name.
+- **Batch mode default list** — when one or more lists exist for the current
+  category, the Batch Mode step now offers an optional "Default list" picker so
+  every item saved in the session is automatically added to that list.
+- **Cover art in list item picker** — the "Add items to list" step in the Add
+  Item flow now shows a small cover thumbnail alongside each item row.
+- **List chips on item cards** — the library card and list-row views now show
+  which custom list(s) an item belongs to alongside its location/platform chips.
+- **Correct step count for the List branch** — the Add Item wizard now shows
+  three progress dots (Type → Name → Items) instead of four when creating a
+  new list, matching the actual number of steps in that branch.
+
+### Fixed
+
+- Long location paths, platform names, or deep location hierarchies no longer
+  overflow their chip container on item cards and list rows; chips are now
+  capped at a maximum width and truncate cleanly.
+
 ## [1.1.1] - 2026-06-15
 
 ### Fixed

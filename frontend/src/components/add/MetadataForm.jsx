@@ -32,7 +32,7 @@ const AUTO_SUBTYPE_NAME = {
 // existing item (rather than a lookup `candidate`), Save does a PUT instead
 // of a POST, and `onCancel` replaces `onBack`. Used both by the Add flow
 // (create) and the batch-mode/"Recently added" edit modal (update).
-export default function MetadataForm({ candidate, item, category, supertype, locationId, platformId, onBack, onCancel, onSaved }) {
+export default function MetadataForm({ candidate, item, category, supertype, locationId, platformId, defaultListIds = [], onBack, onCancel, onSaved }) {
   const isEdit = !!item
 
   const [form, setForm] = useState(() => {
@@ -111,7 +111,7 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
       // Ownership
       location_id: locationId || '',
       platform_id: platformId || '',
-      list_ids: [],
+      list_ids: [...defaultListIds],
     }
   })
 

@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink, RefreshCw } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { coverProxyUrl } from '../api/lookup'
-import { useReferenceDataStore } from '../store'
+import { useReferenceDataStore, useLibraryStore } from '../store'
 import { MediaSubtypeIcon, OwnershipIcon } from '../components/ui/Badge'
 import { OWNERSHIP_ICONS } from '../lib/mediaIcons'
 import CoverImage from '../components/media/CoverImage'
@@ -139,6 +139,7 @@ export default function ItemDetail() {
   const [refreshingCover, setRefreshingCover] = useState(false)
   const [deletingCover, setDeletingCover] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
+  const [moreByCreator, setMoreByCreator] = useState([])
 
   const load = () => {
     return mediaApi.get(id).then((updated) => {
@@ -158,6 +159,16 @@ export default function ItemDetail() {
       .catch(() => toast.error('Failed to load item'))
       .finally(() => setLoading(false))
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!item || (item.category !== 'books' && item.category !== 'music')) return
+    const creatorField = item.artist || item.author
+    if (!creatorField) return
+    const excludeIds = new Set([item.id, ...(item.linked_items || []).map((l) => l.id)])
+    mediaApi.list({ category: item.category, q: creatorField, per_page: 20 })
+      .then((r) => setMoreByCreator(r.items.filter((i) => !excludeIds.has(i.id))))
+      .catch(() => {})
+  }, [item])
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -327,7 +338,22 @@ export default function ItemDetail() {
             {item.year && <span className="text-sm text-gray-500">{item.year}</span>}
             {item.edition && <span className="text-sm px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{item.edition}</span>}
           </div>
-          {creator && <p className="text-gray-600 dark:text-gray-300">{creator}</p>}
+          {creator && (
+            (item.category === 'books' || item.category === 'music') ? (
+              <button
+                className="text-brand-600 dark:text-brand-400 hover:underline text-left"
+                onClick={() => {
+                  const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
+                  useLibraryStore.getState().setFilter('q', creator)
+                  navigate(slug ? `/library/${slug}` : '/library')
+                }}
+              >
+                {creator}
+              </button>
+            ) : (
+              <p className="text-gray-600 dark:text-gray-300">{creator}</p>
+            )
+          )}
           <StarRating value={item.user_rating} onChange={handleRatingChange} />
           {item.genres && (
             <div className="flex flex-wrap gap-1">
@@ -554,6 +580,36 @@ export default function ItemDetail() {
               <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">{item.notes}</p>
             </div>
           )}
+        </div>
+      )}
+
+      {moreByCreator.length > 0 && !editing && (
+        <div className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+            More by {item.artist || item.author}
+          </h3>
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {moreByCreator.map((related) => (
+              <button
+                key={related.id}
+                onClick={() => navigate(`/item/${related.id}`)}
+                className="flex-none flex flex-col gap-1 w-20 text-left hover:opacity-75 transition-opacity"
+              >
+                <div className="w-full rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                  <CoverImage
+                    src={related.cover_thumb_url}
+                    src2x={related.cover_url}
+                    category={related.category}
+                    title={related.title}
+                    size="sm"
+                    className="aspect-2/3 w-full"
+                  />
+                </div>
+                <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{related.title}</p>
+                {related.year && <p className="text-xs text-gray-400">{related.year}</p>}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
