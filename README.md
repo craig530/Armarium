@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/craig530/Armarium/actions/workflows/ci.yml/badge.svg)](https://github.com/craig530/Armarium/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/website-armarium.app-7b4a2e)](https://armarium.app)
 
 **Armarium is a self-hosted catalogue for your media collection.** Keep track of
 every CD, vinyl record, DVD, Blu-ray, book, graphic novel — and the streaming
@@ -11,6 +12,10 @@ browsable library that lives on your own hardware.
 It's built for people who collect physical media but also use digital
 platforms, and want one place to answer "do I already own this, and where is
 it?"
+
+**Project website:** [armarium.app](https://armarium.app) — feature overview,
+screenshots, and self-hosting information. The source repository will be made
+public shortly.
 
 ## What's in a name?
 
