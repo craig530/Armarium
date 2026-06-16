@@ -1,12 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from typing import List
+from pydantic import BaseModel
+from typing import List, Optional
 
 from ...models.location import Location
 from ...repositories.location import LocationRepository, get_location_repository, location_icon_url
+from ...repositories.media_item import MediaItemRepository, get_media_item_repository
 from ...schemas.location import LocationCreate, LocationUpdate, LocationResponse
 from ...services.auth import get_current_user, require_permission
 from ...services.asset_upload import save_asset, remove_asset
 from ...config import settings
+
+
+class MoveLocationItemsPayload(BaseModel):
+    to_location_id: Optional[int] = None
 
 router = APIRouter()
 
@@ -122,6 +128,23 @@ async def delete_location(
     remove_asset(settings.location_icons_dir, loc.icon_path)
     await repo.delete(loc)
     await repo.commit()
+
+
+@router.post("/{loc_id}/move-items")
+async def move_location_items(
+    loc_id: int,
+    payload: MoveLocationItemsPayload,
+    _=Depends(require_permission("can_manage_locations")),
+    repo: LocationRepository = Depends(get_location_repository),
+    media_repo: MediaItemRepository = Depends(get_media_item_repository),
+):
+    if not await repo.get(loc_id):
+        raise HTTPException(status_code=404, detail="Location not found")
+    if payload.to_location_id is not None and not await repo.get(payload.to_location_id):
+        raise HTTPException(status_code=404, detail="Target location not found")
+    moved = await media_repo.reassign_location(loc_id, payload.to_location_id)
+    await media_repo.commit()
+    return {"moved": moved}
 
 
 @router.post("/{loc_id}/icon", response_model=LocationResponse)

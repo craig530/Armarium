@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-16
+
+### Added
+
+- **Item counts on library views** — Music, Films & TV, Books, and Games pages
+  now display the total item count next to the category heading. When filters
+  are active the count shows as "X of Y items" so you can see what the filter
+  found versus the full catalogue.
+- **Rating filter** — all library and home views now include a "Rating" filter
+  with options: Any rating / No rating / 3 stars or more / 4 stars or more /
+  5 stars.
+- **Rating overlay on covers** — items with a user rating show a subtle
+  vertical star strip on the left edge of the cover image, starting below the
+  subtype badge, so ratings are visible without opening the item.
+- **Carousel navigation buttons** — the home-page category carousels now show
+  left/right scroll buttons, and the scroll container supports click-drag (mouse)
+  or touch-swipe.
+- **Location chip shows leaf name + full-path tooltip** — on item cards and
+  list rows, the location tag now shows only the leaf node name to save space.
+  On desktop, hovering shows the full hierarchy path as a tooltip; on mobile/PWA
+  a long-press (500 ms) reveals a popover with the full path that auto-dismisses.
+- **Add item — dynamic step counter** — the step counter on the "Add item"
+  wizard is now hidden until the user selects Physical, Digital, or List,
+  so the first screen is cleaner and avoids the misleading "Step 1 of 4"
+  before a mode is chosen.
+- **Delete location/platform with reassignment** — when deleting a location or
+  platform that still has items linked to it, a modal now offers to move all
+  those items to another location/platform first (or unassign for locations),
+  then deletes. Previously this resulted in a blocking error.
+- **Game icon background** — game platform icons (Nintendo Switch, Xbox,
+  PlayStation) on item cards now have the same coloured badge background as
+  all other subtype icons, matching Physical and Digital entries.
+
 ## [1.2.2] - 2026-06-16
 
 ### Added

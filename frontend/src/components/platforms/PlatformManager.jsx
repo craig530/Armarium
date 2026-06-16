@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Check, X, Lock } from 'lucide-react'
 import { platformsApi } from '../../api/platforms'
+import MoveItemsModal from '../ui/MoveItemsModal'
 import { matchPlatformLogo, PLATFORM_LOGOS } from '../../lib/platformLogos'
 import Input from '../ui/Input'
 import Button from '../ui/Button'
@@ -21,6 +22,7 @@ export default function PlatformManager() {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [confirm, confirmDialog] = useConfirm()
+  const [moveTarget, setMoveTarget] = useState(null)
 
   const load = () => {
     platformsApi.list().then(setPlatforms).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
@@ -56,8 +58,27 @@ export default function PlatformManager() {
   }
 
   const handleDelete = async (platform) => {
+    if (platform.item_count > 0) {
+      setMoveTarget(platform)
+      return
+    }
     if (!await confirm(`Delete "${platform.name}"?`)) return
     try {
+      await platformsApi.delete(platform.id)
+      toast.success('Platform deleted')
+      load()
+      useReferenceDataStore.getState().invalidate()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleMoveAndDelete = async (toPlatformId) => {
+    if (!moveTarget) return
+    const platform = moveTarget
+    setMoveTarget(null)
+    try {
+      await platformsApi.moveItems(platform.id, toPlatformId)
       await platformsApi.delete(platform.id)
       toast.success('Platform deleted')
       load()
@@ -181,6 +202,15 @@ export default function PlatformManager() {
       </p>
 
       {confirmDialog}
+
+      <MoveItemsModal
+        open={!!moveTarget}
+        onClose={() => setMoveTarget(null)}
+        type="platform"
+        item={moveTarget}
+        platforms={platforms}
+        onMoveAndDelete={handleMoveAndDelete}
+      />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-"""Tests for app.api.v1.locations — CRUD, hierarchy, sort order, and icons."""
+"""Tests for app.api.v1.locations — CRUD, hierarchy, sort order, icons, and move-items."""
 from .conftest import _create_user_and_login, _subtype_id, SVG_PAYLOAD, PNG_1X1
 
 
@@ -310,6 +310,49 @@ async def test_can_manage_locations_permission_enforced(client, auth_headers):
 
 
 # ── Upload validation ────────────────────────────────────────────────────────
+
+async def test_location_move_items(client, auth_headers):
+    """Moving items to another location (or unassigning) before delete."""
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+
+    # Create two locations
+    loc_a_id = (await client.post("/api/v1/locations", json={"name": "Shelf A"}, headers=auth_headers)).json()["id"]
+    loc_b_id = (await client.post("/api/v1/locations", json={"name": "Shelf B"}, headers=auth_headers)).json()["id"]
+
+    # Create item assigned to loc_a
+    item_id = (await client.post(
+        "/api/v1/media",
+        json={"title": "Move Test Album", "media_subtype_id": cd_id, "location_id": loc_a_id},
+        headers=auth_headers,
+    )).json()["id"]
+
+    # Move items from loc_a to loc_b
+    resp = await client.post(f"/api/v1/locations/{loc_a_id}/move-items", json={"to_location_id": loc_b_id}, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["moved"] == 1
+
+    # Item should now be in loc_b
+    item = (await client.get(f"/api/v1/media/{item_id}", headers=auth_headers)).json()
+    assert item["location_id"] == loc_b_id
+
+    # Move to null (unassign)
+    resp = await client.post(f"/api/v1/locations/{loc_b_id}/move-items", json={"to_location_id": None}, headers=auth_headers)
+    assert resp.status_code == 200
+    item = (await client.get(f"/api/v1/media/{item_id}", headers=auth_headers)).json()
+    assert item["location_id"] is None
+
+    # 404 on non-existent source
+    resp = await client.post("/api/v1/locations/99999/move-items", json={}, headers=auth_headers)
+    assert resp.status_code == 404
+
+    # 404 on non-existent target
+    resp = await client.post(f"/api/v1/locations/{loc_a_id}/move-items", json={"to_location_id": 99999}, headers=auth_headers)
+    assert resp.status_code == 404
+
+    await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    await client.delete(f"/api/v1/locations/{loc_a_id}", headers=auth_headers)
+    await client.delete(f"/api/v1/locations/{loc_b_id}", headers=auth_headers)
+
 
 async def test_location_icon_upload_rejects_svg(client, auth_headers):
     resp = await client.post("/api/v1/locations", json={"name": "Icon Upload Test Shelf"}, headers=auth_headers)

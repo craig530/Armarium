@@ -102,6 +102,8 @@ export default function AddFlow({ onSaved }) {
     ? ['Type', 'Name', 'Items', '']
     : ['Type', supertype === 'digital' ? 'Platform' : 'Location', 'Search', 'Confirm details']
   const stepLabel = step === 'batchMode' ? 'Batch mode' : groupLabels[groupIndex]
+  // Don't show step dots on the type step until the user makes a selection
+  const showStepProgress = step !== 'type' || supertype !== null || creatingList
 
   // Persist the batch session (config + item list) so it survives a full
   // page reload; cleared as soon as batch mode is off.
@@ -270,28 +272,34 @@ export default function AddFlow({ onSaved }) {
         >
           <ChevronRight size={18} className="rotate-180" />
         </Button>
-        <div className="flex items-center gap-2 flex-1">
-          {(creatingList ? [0, 1, 2] : [0, 1, 2, 3]).map((n, idx, arr) => (
-            <div key={n} className="flex items-center gap-2 flex-1 last:flex-none">
-              <div
-                className={clsx(
-                  'h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
-                  groupIndex === n
-                    ? 'bg-brand-600 text-white'
-                    : groupIndex > n
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
-                )}
-              >
-                {groupIndex > n ? '✓' : n + 1}
-              </div>
-              {idx < arr.length - 1 && <div className={clsx('h-px flex-1', groupIndex > n ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700')} />}
+        {showStepProgress ? (
+          <>
+            <div className="flex items-center gap-2 flex-1">
+              {(creatingList ? [0, 1, 2] : [0, 1, 2, 3]).map((n, idx, arr) => (
+                <div key={n} className="flex items-center gap-2 flex-1 last:flex-none">
+                  <div
+                    className={clsx(
+                      'h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
+                      groupIndex === n
+                        ? 'bg-brand-600 text-white'
+                        : groupIndex > n
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
+                    )}
+                  >
+                    {groupIndex > n ? '✓' : n + 1}
+                  </div>
+                  {idx < arr.length - 1 && <div className={clsx('h-px flex-1', groupIndex > n ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700')} />}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="ml-2 text-xs text-gray-500 dark:text-gray-400 shrink-0">
-          {stepLabel}
-        </div>
+            <div className="ml-2 text-xs text-gray-500 dark:text-gray-400 shrink-0">
+              {stepLabel}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1" />
+        )}
       </div>
 
       {batchMode && groupIndex >= 2 && (

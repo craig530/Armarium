@@ -1,3 +1,4 @@
+import { useState, useRef } from 'react'
 import { Tv, Tag } from 'lucide-react'
 import clsx from 'clsx'
 import { useReferenceDataStore } from '../../store'
@@ -13,15 +14,41 @@ function IconBox({ children }) {
 }
 
 function LocationChip({ record }) {
+  const [showPath, setShowPath] = useState(false)
+  const timerRef = useRef(null)
+  const path = record.location_path || null
+  const name = record.location_name || record.location_path || 'No location'
+
+  const startPress = () => {
+    if (!path || name === path) return
+    timerRef.current = setTimeout(() => setShowPath(true), 500)
+  }
+  const cancelPress = () => clearTimeout(timerRef.current)
+  const endPress = () => {
+    cancelPress()
+    if (showPath) setTimeout(() => setShowPath(false), 1800)
+  }
+
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]">
+    <span
+      className="relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]"
+      title={path}
+      onTouchStart={startPress}
+      onTouchEnd={endPress}
+      onTouchMove={cancelPress}
+    >
       <IconBox>
         <LocationIcon
           location={{ icon_key: record.location_icon_key, icon_url: record.location_icon_url }}
           size={12}
         />
       </IconBox>
-      <span className="truncate">{record.location_path || record.location_name || 'No location'}</span>
+      <span className="truncate">{name}</span>
+      {showPath && path && (
+        <span className="absolute bottom-full left-0 mb-1 z-50 bg-gray-900 dark:bg-gray-700 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis">
+          {path}
+        </span>
+      )}
     </span>
   )
 }

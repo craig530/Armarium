@@ -4,7 +4,7 @@ import axios from 'axios'
 import clsx from 'clsx'
 import { LayoutGrid, List, Plus, SlidersHorizontal } from 'lucide-react'
 import { mediaApi } from '../api/media'
-import { useLibraryStore, useReferenceDataStore } from '../store'
+import { useLibraryStore, useReferenceDataStore, useStatsStore } from '../store'
 import { DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/categories'
 import { dedupeLinkedItems } from '../lib/media'
 import MediaCard from '../components/media/MediaCard'
@@ -30,6 +30,7 @@ export default function Library() {
   const category = categoryFromSlug(categorySlug)
   const { viewMode, setViewMode, filters, setFilter } = useLibraryStore()
   const { locations, mediaSubtypes, platforms, lists, ensureLoaded } = useReferenceDataStore()
+  const unfilteredTotal = useStatsStore((s) => s.stats?.by_category?.[category] ?? null)
 
   const [data, setData] = useState(null)
   const [page, setPage] = useState(1)
@@ -60,6 +61,7 @@ export default function Library() {
         ...(filters.year && { year: filters.year }),
         ...(filters.location_id && { location_id: filters.location_id }),
         ...(filters.list_id && { list_id: filters.list_id }),
+        ...(filters.rating && { min_rating: filters.rating }),
       }
       // Fetch page data and facets in parallel; facets use category-level
       // params only (no location/platform filter) so the picker always shows
@@ -137,7 +139,20 @@ export default function Library() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{categoryLabel(category)}</h1>
+      <div className="flex items-baseline gap-3">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{categoryLabel(category)}</h1>
+        {!loading && data && data.total > 0 && (() => {
+          const displayed = unfilteredTotal ?? data.total
+          const label = displayed === 1 ? 'item' : 'items'
+          return (
+            <span className="text-sm text-gray-400 dark:text-gray-500">
+              {hasActiveFilters && unfilteredTotal !== null
+                ? `${data.total.toLocaleString()} of ${displayed.toLocaleString()} ${label}`
+                : `${displayed.toLocaleString()} ${label}`}
+            </span>
+          )
+        })()}
+      </div>
 
       {/* Search + view controls */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -263,10 +278,6 @@ export default function Library() {
           )}
 
           <IconLegend items={dedupeLinkedItems(data.items)} />
-
-          <p className="text-xs text-center text-gray-400">
-            {data.total} item{data.total !== 1 ? 's' : ''}
-          </p>
         </>
       )}
     </div>

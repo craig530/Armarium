@@ -129,6 +129,7 @@ const DEFAULT_FILTERS = {
   year: '',
   location_id: '',
   list_id: '',
+  rating: '',
   sort: 'created_at',
   order: 'desc',
 }
@@ -140,6 +141,14 @@ export const useLibraryStore = create((set) => ({
   setFilter: (key, value) =>
     set((s) => ({ filters: { ...s.filters, [key]: value } })),
   resetFilters: () => set({ filters: { ...DEFAULT_FILTERS } }),
+}))
+
+// ── Library stats (category totals) ──────────────────────────────────────────
+// Populated by Layout on every navigation; read by Library and Home to show
+// item counts alongside category headings without an extra per-page fetch.
+export const useStatsStore = create((set) => ({
+  stats: null,
+  setStats: (stats) => set({ stats }),
 }))
 
 // ── Reference data (locations / platforms / media subtypes) ────────────────

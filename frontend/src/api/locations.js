@@ -6,6 +6,7 @@ export const locationsApi = {
   create: (data) => client.post('/locations', data).then((r) => r.data),
   update: (id, data) => client.put(`/locations/${id}`, data).then((r) => r.data),
   delete: (id) => client.delete(`/locations/${id}`),
+  moveItems: (id, toLocationId) => client.post(`/locations/${id}/move-items`, { to_location_id: toLocationId }).then((r) => r.data),
   uploadIcon: (id, file) => {
     const fd = new FormData()
     fd.append('file', file)

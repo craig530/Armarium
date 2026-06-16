@@ -6,6 +6,7 @@ import Button from '../ui/Button'
 import LocationIcon from '../ui/LocationIcon'
 import LocationPicker from './LocationPicker'
 import IconPicker from '../settings/IconPicker'
+import MoveItemsModal from '../ui/MoveItemsModal'
 import { flattenLocations } from '../../lib/locations'
 import { reorderSiblings } from '../../lib/reorder'
 import { useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
@@ -36,6 +37,7 @@ export default function LocationManager() {
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [confirm, confirmDialog] = useConfirm()
+  const [moveTarget, setMoveTarget] = useState(null)
 
   const load = () => {
     locationsApi.list().then(setLocations).catch((err) => toast.error(err.message)).finally(() => setLoading(false))
@@ -77,11 +79,27 @@ export default function LocationManager() {
   }
 
   const handleDelete = async (loc) => {
-    const warning = loc.item_count > 0
-      ? `Delete "${loc.name}"? ${loc.item_count} item${loc.item_count === 1 ? '' : 's'} will be unassigned.`
-      : `Delete "${loc.name}"?`
-    if (!await confirm(warning)) return
+    if (loc.item_count > 0) {
+      setMoveTarget(loc)
+      return
+    }
+    if (!await confirm(`Delete "${loc.name}"?`)) return
     try {
+      await locationsApi.delete(loc.id)
+      toast.success('Location deleted')
+      load()
+      useReferenceDataStore.getState().invalidate()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleMoveAndDelete = async (toLocationId) => {
+    if (!moveTarget) return
+    const loc = moveTarget
+    setMoveTarget(null)
+    try {
+      await locationsApi.moveItems(loc.id, toLocationId)
       await locationsApi.delete(loc.id)
       toast.success('Location deleted')
       load()
@@ -233,6 +251,15 @@ export default function LocationManager() {
       )}
 
       {confirmDialog}
+
+      <MoveItemsModal
+        open={!!moveTarget}
+        onClose={() => setMoveTarget(null)}
+        type="location"
+        item={moveTarget}
+        locations={flatLocations}
+        onMoveAndDelete={handleMoveAndDelete}
+      />
     </div>
   )
 }

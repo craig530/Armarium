@@ -104,6 +104,7 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         year: Optional[int] = None,
         location_ids: Optional[set[int]] = None,
         list_id: Optional[int] = None,
+        min_rating: Optional[str] = None,
         sort: str = "created_at",
         order: str = "desc",
         page: int = 1,
@@ -160,6 +161,11 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         if list_id is not None:
             stmt = stmt.join(media_item_lists, media_item_lists.c.media_item_id == MediaItem.id)
             filters.append(media_item_lists.c.item_list_id == list_id)
+
+        if min_rating == "unrated":
+            filters.append(MediaItem.user_rating.is_(None))
+        elif min_rating in ("3", "4", "5"):
+            filters.append(MediaItem.user_rating >= int(min_rating))
 
         if filters:
             stmt = stmt.where(and_(*filters))
@@ -219,6 +225,18 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         loc_rows = (await self.db.execute(_base(MediaItem.location_id))).scalars().all()
         plat_rows = (await self.db.execute(_base(MediaItem.platform_id))).scalars().all()
         return set(loc_rows), set(plat_rows)
+
+    async def reassign_location(self, from_id: int, to_id: Optional[int]) -> int:
+        result = await self.db.execute(
+            update(MediaItem).where(MediaItem.location_id == from_id).values(location_id=to_id)
+        )
+        return result.rowcount
+
+    async def reassign_platform(self, from_id: int, to_id: Optional[int]) -> int:
+        result = await self.db.execute(
+            update(MediaItem).where(MediaItem.platform_id == from_id).values(platform_id=to_id)
+        )
+        return result.rowcount
 
     async def recent(self, limit: int = 6) -> Sequence[MediaItem]:
         stmt = (

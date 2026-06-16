@@ -89,7 +89,8 @@ export default function FilterPanel({
 
   const hasActiveFilters = !!(
     filters.q || filters.supertype || filters.media_subtype_id || filters.platform_id ||
-    filters.genre || filters.year || filters.location_id || filters.list_id || (showCategory && filters.category)
+    filters.genre || filters.year || filters.location_id || filters.list_id || filters.rating ||
+    (showCategory && filters.category)
   )
 
   const categoryGroups = [{
@@ -141,6 +142,16 @@ export default function FilterPanel({
         })).filter((g) => g.options.length > 0),
       ]
 
+  const ratingGroups = [{
+    options: [
+      { value: '', label: 'Any rating' },
+      { value: 'unrated', label: 'No rating' },
+      { value: '3', label: '3 stars or more' },
+      { value: '4', label: '4 stars or more' },
+      { value: '5', label: '5 stars' },
+    ],
+  }]
+
   const sortGroups = [{ options: SORT_OPTIONS.map((s) => ({ value: s.value, label: s.label })) }]
 
   const orderGroups = [{
@@ -183,6 +194,8 @@ export default function FilterPanel({
       {lists.length > 0 && (
         <SelectMenu groups={listGroups} value={filters.list_id} onChange={(value) => setFilter('list_id', value)} className="w-40" />
       )}
+
+      <SelectMenu groups={ratingGroups} value={filters.rating || ''} onChange={(value) => setFilter('rating', value)} className="w-40" />
 
       <SelectMenu groups={sortGroups} value={filters.sort} onChange={(value) => setFilter('sort', value)} className="w-40" />
 

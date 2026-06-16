@@ -6,6 +6,7 @@ const CATEGORY_COLORS = {
   music: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
   films_tv: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   books: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  games: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300',
 }
 
 export function MediaSubtypeBadge({ subtype, className }) {

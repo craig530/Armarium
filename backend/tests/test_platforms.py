@@ -1,4 +1,4 @@
-"""Tests for app.api.v1.platforms — CRUD, logo upload, and lock-on-use."""
+"""Tests for app.api.v1.platforms — CRUD, logo upload, lock-on-use, and move-items."""
 from .conftest import _create_user_and_login, _subtype_id, SVG_PAYLOAD, PNG_1X1
 
 
@@ -111,6 +111,44 @@ async def test_can_manage_platforms_permission_enforced(client, auth_headers):
 
 
 # ── Upload validation ────────────────────────────────────────────────────────
+
+async def test_platform_move_items(client, auth_headers):
+    """Moving items to another platform before delete."""
+    music_digital_id = await _subtype_id(client, auth_headers, "Music")
+
+    plat_a_id = (await client.post("/api/v1/platforms", json={"name": "Platform A"}, headers=auth_headers)).json()["id"]
+    plat_b_id = (await client.post("/api/v1/platforms", json={"name": "Platform B"}, headers=auth_headers)).json()["id"]
+
+    item_id = (await client.post(
+        "/api/v1/media",
+        json={"title": "Platform Move Track", "media_subtype_id": music_digital_id, "platform_id": plat_a_id},
+        headers=auth_headers,
+    )).json()["id"]
+
+    # Move items from plat_a to plat_b
+    resp = await client.post(f"/api/v1/platforms/{plat_a_id}/move-items", json={"to_platform_id": plat_b_id}, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["moved"] == 1
+
+    item = (await client.get(f"/api/v1/media/{item_id}", headers=auth_headers)).json()
+    assert item["platform"]["id"] == plat_b_id
+
+    # Same source and target rejected
+    resp = await client.post(f"/api/v1/platforms/{plat_b_id}/move-items", json={"to_platform_id": plat_b_id}, headers=auth_headers)
+    assert resp.status_code == 400
+
+    # 404 on non-existent source
+    resp = await client.post("/api/v1/platforms/99999/move-items", json={"to_platform_id": plat_b_id}, headers=auth_headers)
+    assert resp.status_code == 404
+
+    # 404 on non-existent target
+    resp = await client.post(f"/api/v1/platforms/{plat_a_id}/move-items", json={"to_platform_id": 99999}, headers=auth_headers)
+    assert resp.status_code == 404
+
+    await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    await client.delete(f"/api/v1/platforms/{plat_a_id}", headers=auth_headers)
+    await client.delete(f"/api/v1/platforms/{plat_b_id}", headers=auth_headers)
+
 
 async def test_platform_logo_upload_rejects_svg(client, auth_headers):
     resp = await client.post("/api/v1/platforms", json={"name": "Logo Upload Test Platform"}, headers=auth_headers)

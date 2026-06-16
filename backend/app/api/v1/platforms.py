@@ -1,13 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel
 from typing import List, Optional
 from pathlib import Path
 
 from ...models.platform import Platform
 from ...repositories.platform import PlatformRepository, get_platform_repository
+from ...repositories.media_item import MediaItemRepository, get_media_item_repository
 from ...schemas.platform import PlatformCreate, PlatformUpdate, PlatformResponse
 from ...services.auth import get_current_user, require_permission
 from ...services.asset_upload import save_asset, remove_asset
 from ...config import settings
+
+
+class MovePlatformItemsPayload(BaseModel):
+    to_platform_id: int
 
 router = APIRouter()
 
@@ -112,6 +118,25 @@ async def delete_platform(
     remove_asset(settings.platform_logos_dir, platform.logo_path)
     await repo.delete(platform)
     await repo.commit()
+
+
+@router.post("/{platform_id}/move-items")
+async def move_platform_items(
+    platform_id: int,
+    payload: MovePlatformItemsPayload,
+    _=Depends(require_permission("can_manage_platforms")),
+    repo: PlatformRepository = Depends(get_platform_repository),
+    media_repo: MediaItemRepository = Depends(get_media_item_repository),
+):
+    if not await repo.get(platform_id):
+        raise HTTPException(status_code=404, detail="Platform not found")
+    if payload.to_platform_id == platform_id:
+        raise HTTPException(status_code=400, detail="Target platform must differ from source")
+    if not await repo.get(payload.to_platform_id):
+        raise HTTPException(status_code=404, detail="Target platform not found")
+    moved = await media_repo.reassign_platform(platform_id, payload.to_platform_id)
+    await media_repo.commit()
+    return {"moved": moved}
 
 
 @router.post("/{platform_id}/logo", response_model=PlatformResponse)

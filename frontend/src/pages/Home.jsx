@@ -27,6 +27,7 @@ const DEFAULT_FILTERS = {
   platform_id: '',
   location_id: '',
   list_id: '',
+  rating: '',
   sort: 'created_at',
   order: 'desc',
 }
@@ -56,7 +57,7 @@ export default function Home() {
 
   const hasActiveFilters = !!(
     filters.q || filters.category || filters.supertype ||
-    filters.media_subtype_id || filters.platform_id || filters.location_id || filters.list_id
+    filters.media_subtype_id || filters.platform_id || filters.location_id || filters.list_id || filters.rating
   )
 
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
@@ -103,6 +104,7 @@ export default function Home() {
         ...(filters.platform_id && { platform_id: filters.platform_id }),
         ...(filters.location_id && { location_id: filters.location_id }),
         ...(filters.list_id && { list_id: filters.list_id }),
+        ...(filters.rating && { min_rating: filters.rating }),
       }
       const facetParams = {
         ...(filters.q && { q: filters.q }),
@@ -211,6 +213,7 @@ export default function Home() {
             <MediaRow
               key={c.value}
               title={c.label}
+              count={byCategory[c.value]?.total ?? null}
               items={byCategory[c.value] ? dedupeLinkedItems(byCategory[c.value].items) : []}
               seeAllHref={`/library/${c.slug}`}
               loading={browseLoading}

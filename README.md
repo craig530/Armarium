@@ -64,9 +64,11 @@ instead of illuminated manuscripts.
   category (e.g. "Want to read", "Favourites"), assignable from any item's
   form and filterable from the library views.
 - **Fast search and filtering** — full-text search across your whole
-  collection, plus filters by category, type, location, platform, list, genre
-  and year. Location and platform filters are context-aware — only options that
-  have items in the current view are shown.
+  collection, plus filters by category, type, location, platform, list, genre,
+  year, and star rating. Location and platform filters are context-aware — only
+  options that have items in the current view are shown.
+- **Star ratings at a glance** — items with a user rating show a subtle star
+  strip on the cover image so you can see your ratings without opening an item.
 - **Multi-user with admin roles** — secure JWT-based login, with an admin
   panel for managing additional user accounts.
 - **Export and import** — back up or migrate your library as CSV or JSON.

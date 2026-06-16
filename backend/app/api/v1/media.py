@@ -180,6 +180,7 @@ async def list_media(
     year: Optional[int] = None,
     location_id: Optional[int] = None,
     list_id: Optional[int] = None,
+    min_rating: Optional[str] = Query(None, pattern="^(unrated|3|4|5)$"),
     sort: str = Query("created_at", pattern="^(title|year|created_at)$"),
     order: str = Query("desc", pattern="^(asc|desc)$"),
     _=Depends(get_current_user),
@@ -190,7 +191,7 @@ async def list_media(
     items, total = await repo.search(
         q=q, category=category, supertype=supertype, media_subtype_id=media_subtype_id,
         platform_id=platform_id, genre=genre, year=year, location_ids=location_ids,
-        list_id=list_id, sort=sort, order=order, page=page, per_page=per_page,
+        list_id=list_id, min_rating=min_rating, sort=sort, order=order, page=page, per_page=per_page,
     )
 
     return MediaListResponse(

@@ -727,3 +727,41 @@ async def test_facets_category_filter_scopes_results(client, auth_headers):
 async def test_facets_requires_auth(client):
     resp = await client.get("/api/v1/media/facets")
     assert resp.status_code == 401
+
+
+# ── Rating filter ────────────────────────────────────────────────────────────
+
+async def test_min_rating_filter(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+
+    rated5 = (await client.post("/api/v1/media", json={"title": "Five Stars", "media_subtype_id": cd_id, "user_rating": 5}, headers=auth_headers)).json()["id"]
+    rated3 = (await client.post("/api/v1/media", json={"title": "Three Stars", "media_subtype_id": cd_id, "user_rating": 3}, headers=auth_headers)).json()["id"]
+    unrated = (await client.post("/api/v1/media", json={"title": "No Rating", "media_subtype_id": cd_id}, headers=auth_headers)).json()["id"]
+
+    # unrated filter
+    resp = await client.get("/api/v1/media?min_rating=unrated", headers=auth_headers)
+    ids = [i["id"] for i in resp.json()["items"]]
+    assert unrated in ids
+    assert rated5 not in ids
+    assert rated3 not in ids
+
+    # 4 star or more
+    resp = await client.get("/api/v1/media?min_rating=4", headers=auth_headers)
+    ids = [i["id"] for i in resp.json()["items"]]
+    assert rated5 in ids
+    assert rated3 not in ids
+    assert unrated not in ids
+
+    # 3 star or more
+    resp = await client.get("/api/v1/media?min_rating=3", headers=auth_headers)
+    ids = [i["id"] for i in resp.json()["items"]]
+    assert rated5 in ids
+    assert rated3 in ids
+    assert unrated not in ids
+
+    # invalid value rejected
+    resp = await client.get("/api/v1/media?min_rating=bad", headers=auth_headers)
+    assert resp.status_code == 422
+
+    for item_id in (rated5, rated3, unrated):
+        await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
