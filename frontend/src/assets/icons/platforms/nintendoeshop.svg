@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#E4000F">
+  <!-- Red background circle -->
+  <circle cx="12" cy="12" r="11" fill="#E4000F"/>
+  <!-- Nintendo N mark -->
+  <path d="M7 17 L7 7 L10 7 L14 13.5 L14 7 L17 7 L17 17 L14 17 L10 10.5 L10 17 Z" fill="white"/>
+</svg>

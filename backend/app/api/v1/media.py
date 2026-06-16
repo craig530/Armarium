@@ -112,6 +112,7 @@ def _item_to_response(
                 "artist", "label", "track_count", "director", "studio",
                 "runtime_minutes", "rating", "tmdb_rating", "cast_list", "seasons_owned", "episode_count",
                 "author", "publisher", "page_count", "isbn", "language",
+                "developer", "igdb_id",
                 "musicbrainz_id", "tmdb_id", "openlibrary_id",
                 "media_subtype_id", "location_id", "platform_id",
                 "created_at", "updated_at",

@@ -33,6 +33,8 @@ class Settings(BaseSettings):
 
     # External APIs
     tmdb_api_key: Optional[str] = None
+    igdb_client_id: Optional[str] = None
+    igdb_client_secret: Optional[str] = None
 
     # CORS — comma-separated origins, or * for all. Empty = same-origin only.
     cors_origins: str = "*"

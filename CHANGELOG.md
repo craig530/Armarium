@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-16
+
+### Added
+
+- **Games category** — a new top-level media category for video games, alongside
+  Music, Films & TV, and Books. Games appear in the "All" home view and have
+  their own nav link (desktop sidebar and mobile tab bar).
+- **Default game media types** — fresh installs (and reset installs) are seeded
+  with six game subtypes: Nintendo Switch, Xbox, and PlayStation (physical);
+  Nintendo eShop, Microsoft Store, and PlayStation Store (digital).
+- **IGDB metadata lookup** — search and barcode lookup for games powered by
+  [IGDB](https://www.igdb.com/) (Internet Game Database). Requires
+  `IGDB_CLIENT_ID` + `IGDB_CLIENT_SECRET` in `.env` (Twitch developer
+  credentials). IGDB attribution logo shown on game item pages and in the
+  game search picker.
+- **Developer field** — game items have a dedicated "Developer" field (the
+  studio/publisher) that shows on the item detail page.
+- **Barcode display for Games** — scanning a retail game barcode now shows it
+  as a visual barcode image on the item detail page, consistent with Films &
+  TV and Music.
+- **Game platform logos** — built-in platform logos for Steam, PlayStation,
+  Xbox, Nintendo eShop, Microsoft Store, Epic Games Store, GOG.com, and
+  itch.io, extracted from [simple-icons](https://simpleicons.org/) or
+  hand-crafted SVGs where a simple-icons entry doesn't exist.
+- **`IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` config** — new optional settings
+  in `.env.example`; game metadata lookup is gracefully disabled (503) when
+  not set.
+
 ## [1.1.2] - 2026-06-16
 
 ### Added
@@ -221,7 +249,8 @@ Initial public release.
 - Versioned Docker images published to GHCR for each tagged release — see
   [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-[Unreleased]: https://github.com/craig530/Armarium/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/craig530/Armarium/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/craig530/Armarium/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/craig530/Armarium/releases/tag/v1.1.2
 [1.1.1]: https://github.com/craig530/Armarium/releases/tag/v1.1.1
 [1.1.0]: https://github.com/craig530/Armarium/releases/tag/v1.1.0

@@ -9,7 +9,7 @@ from ...models.enums import MediaCategory
 from ...schemas.media import LookupCandidate
 from ...models.user import User
 from ...repositories.media_item import MediaItemRepository, get_media_item_repository
-from ...services import openlibrary, musicbrainz, tmdb, upc
+from ...services import openlibrary, musicbrainz, tmdb, upc, igdb
 from ...services.barcode import process_barcode
 from ...services.cache import lookup_cache
 from ...services.cover_art import fetch_remote_image
@@ -162,6 +162,9 @@ async def lookup_barcode(
                 # UPCitemdb for a product title, then search TMDB by title.
                 candidates = await upc.lookup_films_tv_by_barcode(lookups["tmdb_barcode"])
 
+        if not candidates and category in (None, MediaCategory.GAMES):
+            candidates = await igdb.lookup_by_barcode(processed["raw_cleaned"])
+
         if candidates:
             lookup_cache.set(cache_key, candidates)
 
@@ -199,12 +202,40 @@ async def search_lookup(
                 detail="TMDB_API_KEY is not configured. Add it to your .env file to enable film/TV lookup.",
             )
         results = await tmdb.search_titles(q, limit, media_kind=media_kind)
+    elif category == MediaCategory.GAMES:
+        if not settings.igdb_client_id or not settings.igdb_client_secret:
+            raise HTTPException(
+                status_code=503,
+                detail="IGDB_CLIENT_ID and IGDB_CLIENT_SECRET are not configured. Add them to your .env file to enable game lookup.",
+            )
+        results = await igdb.search_games(q, limit)
     else:
         results = []
 
     if results:
         lookup_cache.set(cache_key, results)
     return results
+
+
+@router.get("/igdb/{igdb_id}", response_model=LookupCandidate)
+async def get_igdb_details(
+    igdb_id: int,
+    _=Depends(_rate_limited_user),
+):
+    if not settings.igdb_client_id or not settings.igdb_client_secret:
+        raise HTTPException(status_code=503, detail="IGDB credentials not configured")
+
+    cache_key = f"igdb:{igdb_id}"
+    cached = lookup_cache.get(cache_key, ttl=7200)
+    if cached is not None:
+        return cached
+
+    result = await igdb.get_game_details(igdb_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="IGDB game not found")
+
+    lookup_cache.set(cache_key, result)
+    return result
 
 
 @router.get("/tmdb/{tmdb_id}", response_model=LookupCandidate)

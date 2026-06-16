@@ -26,6 +26,8 @@ const AUTO_SUBTYPE_NAME = {
   'music:digital': 'Music',
   'books:digital': 'eBook',
   'books:physical': 'Book',
+  'games:digital': 'Nintendo eShop',
+  'games:physical': 'Nintendo Switch',
 }
 
 // `item` switches the form into edit mode: fields are seeded from the
@@ -64,6 +66,9 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
         page_count: item.page_count || '',
         isbn: item.isbn || '',
         language: item.language || '',
+        // Games
+        developer: item.developer || '',
+        igdb_id: item.igdb_id || '',
         // IDs
         musicbrainz_id: item.musicbrainz_id || '',
         tmdb_id: item.tmdb_id || '',
@@ -104,6 +109,9 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
       page_count: m.page_count || '',
       isbn: m.isbn || '',
       language: m.language || '',
+      // Games
+      developer: m.developer || '',
+      igdb_id: m.igdb_id || '',
       // IDs
       musicbrainz_id: m.musicbrainz_id || '',
       tmdb_id: m.tmdb_id || '',
@@ -188,6 +196,7 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
         episode_count: form.episode_count ? Number(form.episode_count) : null,
         page_count: form.page_count ? Number(form.page_count) : null,
         tmdb_id: form.tmdb_id ? Number(form.tmdb_id) : null,
+        igdb_id: form.igdb_id ? Number(form.igdb_id) : null,
         musicbrainz_id: form.musicbrainz_id || null,
         openlibrary_id: form.openlibrary_id || null,
         location_id: supertype === 'physical' && form.location_id ? Number(form.location_id) : null,
@@ -261,6 +270,10 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
           <Input label="Publisher" value={form.publisher} onChange={(e) => set('publisher', e.target.value)} />
           <Input label="ISBN" value={form.isbn} onChange={(e) => set('isbn', e.target.value)} />
           <Input label="Pages" type="number" value={form.page_count} onChange={(e) => set('page_count', e.target.value)} />
+        </>}
+
+        {category === 'games' && <>
+          <Input label="Developer" value={form.developer} onChange={(e) => set('developer', e.target.value)} className="sm:col-span-2" />
         </>}
 
         <Input label="Genre(s)" value={form.genres} onChange={(e) => set('genres', e.target.value)} placeholder="e.g. Rock, Alternative" />

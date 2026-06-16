@@ -42,6 +42,10 @@ class MediaItemCreate(BaseModel):
     isbn: Optional[str] = Field(None, max_length=20)
     language: Optional[str] = Field(None, max_length=50)
 
+    # Games
+    developer: Optional[str] = Field(None, max_length=300)
+    igdb_id: Optional[int] = Field(None, ge=0)
+
     # External IDs
     musicbrainz_id: Optional[str] = Field(None, max_length=100)
     tmdb_id: Optional[int] = Field(None, ge=0)
@@ -84,6 +88,8 @@ class MediaItemUpdate(BaseModel):
     page_count: Optional[int] = Field(None, ge=0, le=100000)
     isbn: Optional[str] = Field(None, max_length=20)
     language: Optional[str] = Field(None, max_length=50)
+    developer: Optional[str] = Field(None, max_length=300)
+    igdb_id: Optional[int] = Field(None, ge=0)
     musicbrainz_id: Optional[str] = Field(None, max_length=100)
     tmdb_id: Optional[int] = Field(None, ge=0)
     openlibrary_id: Optional[str] = Field(None, max_length=50)
@@ -156,6 +162,8 @@ class MediaItemResponse(BaseModel):
     page_count: Optional[int] = None
     isbn: Optional[str] = None
     language: Optional[str] = None
+    developer: Optional[str] = None
+    igdb_id: Optional[int] = None
     musicbrainz_id: Optional[str] = None
     tmdb_id: Optional[int] = None
     openlibrary_id: Optional[str] = None

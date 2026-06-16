@@ -145,9 +145,9 @@ itself is gated by the `can_manage_lists` permission flag (mirrors
 `MediaItemRepository.auto_link_item(item, subtype)`, run after creating an
 item, links it to other items of the same category that are clearly the same
 title. Primary match is an exact `AUTO_LINK_FIELD` comparison
-(`tmdb_id`/`musicbrainz_id`/`isbn`, by category) — a strong enough signal to
-link regardless of other metadata. If that finds nothing (e.g. a Plex-synced
-item with no `musicbrainz_id`), it falls back to a same-category
+(`tmdb_id`/`musicbrainz_id`/`isbn`/`igdb_id`, by category) — a strong enough
+signal to link regardless of other metadata. If that finds nothing (e.g. a
+Plex-synced item with no `musicbrainz_id`), it falls back to a same-category
 title+year match, filtered through `_editions_compatible()` so an explicit
 `edition` mismatch (e.g. "Remastered" vs "Anniversary Edition") doesn't
 produce a false-positive link.
@@ -248,9 +248,18 @@ produce a false-positive link.
 ### 4.7 Caching & external APIs
 
 - `services/cache.py` provides a simple in-memory TTL cache
-  (`lookup_cache`), used by `services/tmdb.py`,
-  `services/musicbrainz.py` and `services/openlibrary.py` to avoid
+  (`lookup_cache`), used by `services/tmdb.py`, `services/musicbrainz.py`,
+  `services/openlibrary.py`, and `services/igdb.py` to avoid
   re-hitting third-party metadata APIs for repeated lookups.
+- **IGDB** (`services/igdb.py`) uses Twitch OAuth2: `IGDB_CLIENT_ID` +
+  `IGDB_CLIENT_SECRET` → `POST id.twitch.tv/oauth2/token` → bearer token
+  cached in-process (~60-day TTL, refreshed on expiry via `asyncio.Lock`).
+  Queries are `POST api.igdb.com/v4/games` with a Lisp-like body syntax.
+  Barcode lookup uses `external_games.category = 10` (EAN/UPC category in
+  IGDB's schema). When credentials are absent, the endpoint returns 503.
+  Attribution logo at `frontend/src/assets/igdb/logo.svg` (CC BY-SA 4.0
+  from Wikimedia Commons), displayed via `IGDBAttribution.jsx` mirroring
+  `TMDBAttribution.jsx`.
 - TMDB has no barcode lookup of its own. `GET /lookup/barcode/{barcode}` for
   a films_tv (or unspecified-category) barcode that MusicBrainz didn't
   resolve falls back to `services/upc.lookup_films_tv_by_barcode()`: looks

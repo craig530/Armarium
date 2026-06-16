@@ -1,4 +1,4 @@
-import { Disc, Disc3, Music, Clapperboard, Tv2, BookOpen, Image, Tablet, Headphones, Package, Cloud } from 'lucide-react'
+import { Disc, Disc3, Music, Clapperboard, Tv2, BookOpen, Image, Tablet, Headphones, Package, Cloud, Gamepad2 } from 'lucide-react'
 
 // Icon lookup by media subtype name (case-insensitive), for the default
 // seeded subtypes. Custom subtypes fall back to a category-level icon below.
@@ -13,6 +13,13 @@ const NAME_ICONS = {
   'graphic novel': Image,
   ebook: Tablet,
   audiobook: Headphones,
+  // Games
+  'nintendo switch': Gamepad2,
+  xbox: Gamepad2,
+  playstation: Gamepad2,
+  'nintendo eshop': Gamepad2,
+  'microsoft store': Gamepad2,
+  'playstation store': Gamepad2,
 }
 
 // Per-category icon, used both as the fallback for getSubtypeIcon (a custom
@@ -23,6 +30,7 @@ export const CATEGORY_ICONS = {
   music: Music,
   films_tv: Clapperboard,
   books: BookOpen,
+  games: Gamepad2,
 }
 
 export function getSubtypeIcon(subtype) {

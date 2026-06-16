@@ -15,6 +15,7 @@ const SEARCH_PLACEHOLDERS = {
   music: 'Search by album or artist, or enter a barcode…',
   films_tv: 'Search by film or TV title, or enter a barcode…',
   books: 'Search by title or author, or enter an ISBN…',
+  games: 'Search by game title, or scan/enter a barcode…',
 }
 
 const MEDIA_KINDS = [
@@ -179,7 +180,7 @@ export default function ScanOrSearch({ category, onResults, batchMode, query, on
       </Button>
 
       <p className="text-xs text-gray-400 text-center">
-        Books use OpenLibrary · Music uses MusicBrainz · Films & TV use TMDB (requires API key)
+        Books use OpenLibrary · Music uses MusicBrainz · Films &amp; TV use TMDB · Games use IGDB (all require API keys except OpenLibrary/MusicBrainz)
       </p>
     </div>
   )

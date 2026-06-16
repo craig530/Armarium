@@ -4,6 +4,7 @@ export const CATEGORIES = [
   { slug: 'music', value: 'music', label: 'Music' },
   { slug: 'films-tv', value: 'films_tv', label: 'Films & TV' },
   { slug: 'books', value: 'books', label: 'Books' },
+  { slug: 'games', value: 'games', label: 'Games' },
 ]
 
 export const DEFAULT_CATEGORY_SLUG = CATEGORIES[0].slug

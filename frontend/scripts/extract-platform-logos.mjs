@@ -36,6 +36,12 @@ export const PLATFORM_ICON_SOURCES = {
   itunes: 'siItunes',
   sky: 'siSky',
   rakutentv: 'siRakuten',
+  // Games
+  steam: 'siSteam',
+  playstation: 'siPlaystation',
+  epicgames: 'siEpicgames',
+  gogdotcom: 'siGogdotcom',
+  itchdotio: 'siItchdotio',
 }
 
 for (const [key, importName] of Object.entries(PLATFORM_ICON_SOURCES)) {

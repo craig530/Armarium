@@ -18,6 +18,7 @@ import Button from '../components/ui/Button'
 import { PageLoader } from '../components/ui/LoadingSpinner'
 import StarRating from '../components/ui/StarRating'
 import TMDBAttribution from '../components/ui/TMDBAttribution'
+import IGDBAttribution from '../components/ui/IGDBAttribution'
 import BarcodeDisplay from '../components/ui/BarcodeDisplay'
 import { CATEGORIES, categoryLabel, supertypeLabel } from '../lib/categories'
 import { useConfirm } from '../hooks/useConfirm'
@@ -191,6 +192,7 @@ export default function ItemDetail() {
         episode_count: form.episode_count ? Number(form.episode_count) : null,
         page_count: form.page_count ? Number(form.page_count) : null,
         tmdb_id: form.tmdb_id ? Number(form.tmdb_id) : null,
+        igdb_id: form.igdb_id ? Number(form.igdb_id) : null,
         location_id: form.location_id ? Number(form.location_id) : null,
         platform_id: form.platform_id ? Number(form.platform_id) : null,
       }
@@ -453,6 +455,9 @@ export default function ItemDetail() {
             <Input label="ISBN" value={form.isbn || ''} onChange={(e) => set('isbn', e.target.value)} />
             <Input label="Pages" type="number" value={form.page_count || ''} onChange={(e) => set('page_count', e.target.value)} />
           </>}
+          {item.category === 'games' && <>
+            <Input label="Developer" value={form.developer || ''} onChange={(e) => set('developer', e.target.value)} className="col-span-2" />
+          </>}
 
           {item.supertype === 'physical' ? (
             <LocationPicker
@@ -552,6 +557,7 @@ export default function ItemDetail() {
                 ['ISBN', item.isbn],
                 ['Pages', item.page_count],
                 ['Language', item.language],
+                ['Developer', item.developer],
                 ['Barcode', item.barcode],
               ]
                 .filter(([, v]) => v)
@@ -566,9 +572,10 @@ export default function ItemDetail() {
                 ))}
             </dl>
             {item.category === 'films_tv' && <TMDBAttribution className="mt-3" />}
+            {item.category === 'games' && <IGDBAttribution className="mt-3" />}
           </div>
 
-          {(item.category === 'films_tv' || item.category === 'music') && item.barcode && (
+          {(item.category === 'films_tv' || item.category === 'music' || item.category === 'games') && item.barcode && (
             <div className="flex justify-end">
               <BarcodeDisplay value={item.barcode} />
             </div>

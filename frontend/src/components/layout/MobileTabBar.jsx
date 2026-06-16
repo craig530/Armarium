@@ -16,7 +16,7 @@ const TABS = [
 export default function MobileTabBar() {
   return (
     <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-gray-950/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 pb-[env(safe-area-inset-bottom)]">
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         {TABS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}

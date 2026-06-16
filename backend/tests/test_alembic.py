@@ -52,9 +52,11 @@ def test_upgrade_head_creates_schema_and_seeds_subtypes(tmp_sqlite_url):
     finally:
         engine.dispose()
 
-    assert len(subtypes) == 10
+    assert len(subtypes) == 16
     assert ("CD", "MUSIC", "PHYSICAL", 0) in subtypes
     assert ("Audiobook", "BOOKS", "DIGITAL", 1) in subtypes
+    assert ("Nintendo Switch", "GAMES", "PHYSICAL", 0) in subtypes
+    assert ("PlayStation Store", "GAMES", "DIGITAL", 2) in subtypes
 
 
 def test_upgrade_head_is_idempotent(tmp_sqlite_url):
@@ -69,8 +71,8 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
     finally:
         engine.dispose()
 
-    assert count == 10
-    assert version == "0003"
+    assert count == 16
+    assert version == "0004"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
@@ -99,3 +101,16 @@ def test_upgrade_head_adds_lists_tables_and_permission(tmp_sqlite_url):
 
     assert {"item_lists", "media_item_lists"}.issubset(tables)
     assert "can_manage_lists" in user_columns
+
+
+def test_upgrade_head_adds_games_columns(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            columns = {col["name"] for col in inspect(conn).get_columns("media_items")}
+    finally:
+        engine.dispose()
+
+    assert {"developer", "igdb_id"}.issubset(columns)

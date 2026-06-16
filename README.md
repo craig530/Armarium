@@ -41,17 +41,19 @@ instead of illuminated manuscripts.
 
 ## Features
 
-- **One library, every format** — catalogue Music, Films & TV, and Books,
+- **One library, every format** — catalogue Music, Films & TV, Books, and Games,
   whether you own them physically or digitally.
 - **Physical and digital, linked together** — pair a Blu-ray with its digital
   copy (or a CD with a streaming version) so they show up as a single entry
   with an ownership badge. Armarium can detect and link matching titles
   automatically.
 - **Barcode scanning** — use your phone or laptop camera to scan a barcode and
-  pull up matching results instantly.
+  pull up matching results instantly (supported for all media types including
+  game cartridges and discs).
 - **Automatic metadata and cover art** — titles, artwork, release years, genres
   and more are fetched from [TMDB](https://www.themoviedb.org/),
-  [MusicBrainz](https://musicbrainz.org/) and [Open Library](https://openlibrary.org/).
+  [MusicBrainz](https://musicbrainz.org/), [Open Library](https://openlibrary.org/),
+  and [IGDB](https://www.igdb.com/).
 - **Plex library sync** — connect a Plex Media Server and import your Films &
   TV and Music libraries as digital items, with per-library media-type
   mapping, progress tracking, and cleanup of items removed from Plex.
@@ -144,14 +146,16 @@ is already excluded via `.gitignore`.
 | `ADMIN_USERNAME` | No | `admin` | Username for the initial admin account. |
 | `PORT` | No | `8080` | The port on your host machine that the web UI is served on. |
 | `JWT_EXPIRE_MINUTES` | No | `10080` (7 days) | How long a login session stays valid, in minutes, before you need to log in again. |
-| `TMDB_API_KEY` | No | *(none)* | Free API key from [TMDB](https://www.themoviedb.org/settings/api), needed for Films & TV metadata lookup. Without it, Music and Books lookup still work. |
+| `TMDB_API_KEY` | No | *(none)* | Free API key from [TMDB](https://www.themoviedb.org/settings/api), needed for Films & TV metadata lookup. Without it, Music, Books and Games lookup still work (except IGDB). |
+| `IGDB_CLIENT_ID` | No | *(none)* | Twitch app client ID, needed for Games metadata lookup via IGDB. Register at [dev.twitch.tv](https://dev.twitch.tv/console). |
+| `IGDB_CLIENT_SECRET` | No | *(none)* | Twitch app client secret, paired with `IGDB_CLIENT_ID`. |
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///./data/armarium.db` | Database connection string. Defaults to a SQLite file stored in the persistent data volume. See [Advanced: Using PostgreSQL](#advanced-using-postgresql) to use a different database. |
 | `CORS_ORIGINS` | No | *(same-origin only)* | Comma-separated list of extra origins allowed to call the API directly. Not needed for the default setup, where the frontend and backend share an origin via the bundled reverse proxy. |
 | `COOKIE_SECURE` | No | `true` | Whether the browser login session cookie requires HTTPS. Only set to `false` for HTTP-only deployments (e.g. an internal network without TLS) — otherwise the browser won't send the cookie back and login won't work. |
 
 ## Supported Media Types
 
-Armarium organises items into three categories, each covering both physical
+Armarium organises items into four categories, each covering both physical
 and digital formats. These are the defaults created the first time you start
 Armarium — you can rename, reorder, or add your own from **Settings → Media
 Subtypes**.
@@ -160,7 +164,8 @@ Subtypes**.
 |---|---|---|
 | **Music** | CD | Digital Music, Streaming Music |
 | **Films & TV** | DVD, Blu-ray, 4K Blu-ray | Digital Film, Digital TV Series, Streaming Film, Streaming TV |
-| **Books** | Book, Graphic Novel | — |
+| **Books** | Book, Graphic Novel | eBook, Audiobook |
+| **Games** | Nintendo Switch, Xbox, PlayStation | Nintendo eShop, Microsoft Store, PlayStation Store |
 
 ## Metadata Sources
 
@@ -172,8 +177,10 @@ third-party services:
 | Films & TV | [The Movie Database (TMDB)](https://www.themoviedb.org/) | Yes — see [Configuration](#configuration) |
 | Music | [MusicBrainz](https://musicbrainz.org/) | No |
 | Books | [Open Library](https://openlibrary.org/) | No |
+| Games | [IGDB](https://www.igdb.com/) | Yes — Twitch developer credentials (`IGDB_CLIENT_ID` + `IGDB_CLIENT_SECRET`) |
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
+Game data powered by IGDB — not endorsed by IGDB.
 
 ## API Documentation
 
@@ -403,6 +410,8 @@ Armarium relies on these free metadata services:
   the [MetaBrainz Foundation](https://metabrainz.org/).
 - **[Open Library](https://openlibrary.org/)** — book metadata and cover art,
   a project of the [Internet Archive](https://archive.org/).
+- **[IGDB](https://www.igdb.com/)** — game metadata and cover art. Game data
+  powered by IGDB — not endorsed by IGDB.
 
 It's also built on [FastAPI](https://fastapi.tiangolo.com/),
 [SQLAlchemy](https://www.sqlalchemy.org/), [React](https://react.dev/),

@@ -43,6 +43,10 @@ class MediaItem(Base):
     isbn = Column(String(20), index=True)
     language = Column(String(50))
 
+    # Games
+    developer = Column(String(300))
+    igdb_id = Column(Integer, index=True)
+
     # External IDs
     musicbrainz_id = Column(String(100), index=True)
     tmdb_id = Column(Integer, index=True)

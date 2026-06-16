@@ -28,6 +28,14 @@ import deezer from '../assets/icons/platforms/deezer.svg'
 import itunes from '../assets/icons/platforms/itunes.svg'
 import sky from '../assets/icons/platforms/sky.svg'
 import rakutentv from '../assets/icons/platforms/rakutentv.svg'
+import steam from '../assets/icons/platforms/steam.svg'
+import playstation from '../assets/icons/platforms/playstation.svg'
+import xbox from '../assets/icons/platforms/xbox.svg'
+import nintendoeshop from '../assets/icons/platforms/nintendoeshop.svg'
+import microsoftstore from '../assets/icons/platforms/microsoftstore.svg'
+import epicgames from '../assets/icons/platforms/epicgames.svg'
+import gogdotcom from '../assets/icons/platforms/gogdotcom.svg'
+import itchdotio from '../assets/icons/platforms/itchdotio.svg'
 
 export const PLATFORM_LOGOS = {
   plex: { label: 'Plex', logoUrl: plex, aliases: [] },
@@ -59,6 +67,15 @@ export const PLATFORM_LOGOS = {
   sky: { label: 'Sky', logoUrl: sky, aliases: ['sky store', 'sky go'] },
   rakutentv: { label: 'Rakuten TV', logoUrl: rakutentv, aliases: ['rakuten'] },
   curzon: { label: 'Curzon Home Cinema', logoUrl: null, aliases: ['curzon'] },
+  // Games
+  steam: { label: 'Steam', logoUrl: steam, aliases: [] },
+  playstation: { label: 'PlayStation Store', logoUrl: playstation, aliases: ['ps store', 'psn', 'playstation network', 'playstation 4', 'playstation 5', 'ps4', 'ps5'] },
+  xbox: { label: 'Xbox', logoUrl: xbox, aliases: ['xbox game pass', 'xbox store', 'microsoft games', 'xbox series x', 'xbox series s', 'xbox one'] },
+  nintendoeshop: { label: 'Nintendo eShop', logoUrl: nintendoeshop, aliases: ['nintendo eshop', 'eshop', 'nintendo shop'] },
+  microsoftstore: { label: 'Microsoft Store', logoUrl: microsoftstore, aliases: ['microsoft', 'windows store', 'ms store'] },
+  epicgames: { label: 'Epic Games Store', logoUrl: epicgames, aliases: ['epic games', 'epic store', 'epic'] },
+  gogdotcom: { label: 'GOG.com', logoUrl: gogdotcom, aliases: ['gog'] },
+  itchdotio: { label: 'itch.io', logoUrl: itchdotio, aliases: ['itch'] },
 }
 
 /** Find a built-in logo key matching a user-entered platform name (case-insensitive, exact or alias match). */

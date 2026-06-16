@@ -367,14 +367,50 @@ Open Library [Books API](https://openlibrary.org/dev/docs/api/books) and
   by Open Library specifically for this kind of referential, non-commercial
   use.
 
+### IGDB (Internet Game Database)
+
+Used for Games metadata and cover art (`backend/app/services/igdb.py`), via
+the [IGDB API](https://api-docs.igdb.com/) (operated by Twitch Interactive, Inc.).
+
+- **API authentication:** IGDB requires a Twitch developer account and OAuth2
+  credentials (`IGDB_CLIENT_ID` + `IGDB_CLIENT_SECRET`) to generate a bearer
+  token. Credentials are read server-side only (`backend/app/config.py`) and
+  are never sent to the frontend or exposed in API responses. Tokens are
+  cached in-process and refreshed on expiry.
+- **Attribution:** Armarium displays the IGDB logo on Games item pages and the
+  game search picker — see `frontend/src/components/ui/IGDBAttribution.jsx`.
+  The logo is sourced from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:IGDB_logo.svg)
+  and is bundled under `frontend/src/assets/igdb/logo.svg`. The Wikimedia
+  Commons file is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- **IGDB's brand assets are trademarks of Twitch Interactive, Inc. and are
+  not covered by Armarium's MIT licence.** They are included solely for
+  attribution purposes and must not be modified or used in a way that
+  implies endorsement by Twitch or IGDB.
+- **Caching:** search/lookup results are cached in-process for 1–2 hours
+  (`backend/app/services/cache.py`), and game cover images are downloaded once
+  and stored locally (`backend/app/services/cover_art.py`) rather than
+  hot-linked on every page view.
+- **Scope of use:** Armarium is a personal, self-hosted catalogue for a user's
+  own collection. If you operate a hosted/multi-tenant instance, review
+  IGDB's [API terms of service](https://www.igdb.com/api_terms_of_use) separately.
+
+### IGDB logo
+
+The file `frontend/src/assets/igdb/logo.svg` is sourced from the IGDB logo
+uploaded to [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:IGDB_logo.svg).
+The Wikimedia Commons file is published under the
+[Creative Commons Attribution-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-sa/4.0/)
+licence. It is used here for identification and attribution purposes only, in
+accordance with that licence.
+
 ---
 
 ## Disclaimer
 
 Armarium is independent, open-source software. It is **not affiliated with,
 endorsed by, sponsored by, or certified by** TMDB, The Movie Database, MetaBrainz,
-MusicBrainz, the Internet Archive, Open Library, or any streaming service,
-platform, or brand referenced in its documentation, settings, or user
+MusicBrainz, the Internet Archive, Open Library, IGDB, Twitch, or any streaming
+service, platform, or brand referenced in its documentation, settings, or user
 interface. All product names, logos, and trademarks are the property of their
 respective owners and are used in Armarium solely to identify the
 corresponding service.

@@ -22,6 +22,7 @@ AUTO_LINK_FIELD = {
     MediaCategory.FILMS_TV: "tmdb_id",
     MediaCategory.MUSIC: "musicbrainz_id",
     MediaCategory.BOOKS: "isbn",
+    MediaCategory.GAMES: "igdb_id",
 }
 
 
