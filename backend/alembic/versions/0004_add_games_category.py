@@ -42,11 +42,15 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # --- 1. Extend mediacategory enum ---
-    # PostgreSQL: ALTER TYPE ... ADD VALUE is DDL; run it before any DML that
-    # uses the new value.  SQLite stores enums as unconstrained VARCHAR, so
-    # nothing to do there.
+    # PostgreSQL: ALTER TYPE ... ADD VALUE must be committed before the new
+    # value can be used in the same session (asyncpg raises
+    # UnsafeNewEnumValueUsageError otherwise).  autocommit_block() commits
+    # the current Alembic transaction, runs the DDL outside a transaction,
+    # then re-opens a transaction for the rest of the migration.
+    # SQLite stores enums as unconstrained VARCHAR, so nothing to do there.
     if conn.dialect.name == "postgresql":
-        conn.execute(text("ALTER TYPE mediacategory ADD VALUE IF NOT EXISTS 'GAMES'"))
+        with op.get_context().autocommit_block():
+            op.execute(text("ALTER TYPE mediacategory ADD VALUE IF NOT EXISTS 'GAMES'"))
 
     # --- 2. New columns on media_items ---
     with op.batch_alter_table("media_items", schema=None) as batch_op:
