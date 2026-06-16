@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import OwnershipRow from './OwnershipRow'
 import { useReferenceDataStore } from '../../store'
 
@@ -29,13 +30,13 @@ const digitalItem = {
 describe('OwnershipRow', () => {
   it('renders a location chip for a physical item', () => {
     useReferenceDataStore.setState({ lists: [] })
-    render(<OwnershipRow item={physicalItem} />)
+    render(<MemoryRouter><OwnershipRow item={physicalItem} /></MemoryRouter>)
     expect(screen.getByText('Living Room > Shelf')).toBeTruthy()
   })
 
   it('renders a platform chip for a digital item', () => {
     useReferenceDataStore.setState({ lists: [] })
-    render(<OwnershipRow item={digitalItem} />)
+    render(<MemoryRouter><OwnershipRow item={digitalItem} /></MemoryRouter>)
     expect(screen.getByText('Kindle')).toBeTruthy()
   })
 
@@ -44,7 +45,7 @@ describe('OwnershipRow', () => {
       lists: [{ id: 10, name: 'Favourites', category: 'music' }],
     })
     // physicalItem (1 ownership chip) + 1 list chip = 2 total, both visible
-    render(<OwnershipRow item={{ ...physicalItem, list_ids: [10] }} />)
+    render(<MemoryRouter><OwnershipRow item={{ ...physicalItem, list_ids: [10] }} /></MemoryRouter>)
     expect(screen.getByText('Favourites')).toBeTruthy()
   })
 
@@ -56,7 +57,7 @@ describe('OwnershipRow', () => {
       ],
     })
     // 1 ownership chip + 2 list chips = 3 total → 1 overflow
-    render(<OwnershipRow item={{ ...physicalItem, list_ids: [10, 11] }} />)
+    render(<MemoryRouter><OwnershipRow item={{ ...physicalItem, list_ids: [10, 11] }} /></MemoryRouter>)
     expect(screen.getByText('Favourites')).toBeTruthy()
     expect(screen.getByText('+1')).toBeTruthy()
   })
@@ -64,7 +65,7 @@ describe('OwnershipRow', () => {
   it('renders nothing when there are no chips at all', () => {
     useReferenceDataStore.setState({ lists: [] })
     // An item with no physical/digital supertype has no ownership chips
-    const { container } = render(<OwnershipRow item={{ id: 99, supertype: 'list', list_ids: [], linked_items: [] }} />)
+    const { container } = render(<MemoryRouter><OwnershipRow item={{ id: 99, supertype: 'list', list_ids: [], linked_items: [] }} /></MemoryRouter>)
     expect(container.firstChild).toBeNull()
   })
 })

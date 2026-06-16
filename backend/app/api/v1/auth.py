@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from ...config import settings
@@ -13,6 +15,7 @@ from ...services.auth import (
 from ...services.rate_limit import SlidingWindowRateLimiter
 
 router = APIRouter()
+logger = logging.getLogger("armarium.auth")
 
 # In-memory rate limiter for login attempts, keyed by client IP.
 login_limiter = SlidingWindowRateLimiter(max_attempts=10, window_seconds=300)
@@ -31,6 +34,7 @@ async def login(
     user = await repo.get_by_username(credentials.username)
 
     if not user or not user.is_active or not verify_password(credentials.password, user.hashed_password):
+        logger.warning("Failed login attempt for username=%r from ip=%s", credentials.username, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",

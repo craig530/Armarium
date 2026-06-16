@@ -327,6 +327,37 @@ managed by `services/scheduler.py`, which wraps an APScheduler
   The `updated` counter only increments when a metadata field actually changed;
   items that exist with identical data show as processed but not updated.
 
+### 4.9 Logging
+
+**Logger hierarchy** — use `logging.getLogger("armarium")` for general
+service-level messages, and child loggers (`"armarium.<module>"`) for modules
+where log origin matters: `armarium.scheduler`, `armarium.auth`,
+`armarium.plex`. `main.py` and `config.py` also use the root `"armarium"`
+logger.  Never use `logging.getLogger(__name__)` — module paths like
+`app.services.plex` are harder to filter in Docker log streams than the
+explicit names above.
+
+**Level conventions:**
+- `INFO` — significant state changes: scheduler startup/job dispatch, Plex
+  sync started/completed (with item counts).
+- `WARNING` — expected failure conditions: failed login attempts (username +
+  IP, never the password), rate-limit hits, missing optional config.
+- `ERROR` / `logger.exception(...)` — unexpected failures with a full
+  traceback.  Use `exc_info=True` or `logger.exception` so the stack trace
+  is captured.
+- `DEBUG` — not currently used; reserved for future verbose tracing.
+
+**What not to log:**
+- Credentials, tokens, or server URLs (Plex token, TMDB key, etc.) — ever.
+- Routine CRUD operations in repositories or routers (SQL-level tracing can
+  be enabled via SQLAlchemy's `echo` flag if needed).
+- Request/response bodies — uvicorn access logs already capture method, path,
+  and status code.
+
+**Repositories and models** have no logging; all DB interactions are
+delegated through the repository layer and can be traced via SQLAlchemy
+without adding application-level logging.
+
 ## 5. Frontend architecture
 
 ### 5.1 State management

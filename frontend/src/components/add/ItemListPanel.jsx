@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import clsx from 'clsx'
 import CoverImage from '../media/CoverImage'
 import { MediaSubtypeIcon, OwnershipIcon } from '../ui/Badge'
 
@@ -38,7 +39,7 @@ export default function ItemListPanel({ title, items, onItemClick }) {
                 category={item.category}
                 title={item.title}
                 size="sm"
-                className="h-12 w-9 shrink-0"
+                className={clsx('shrink-0', item.category === 'music' ? 'h-9 w-9' : 'h-12 w-9')}
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">

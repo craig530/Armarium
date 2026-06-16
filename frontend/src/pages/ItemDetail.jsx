@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
-import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink, RefreshCw, Tag } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { coverProxyUrl } from '../api/lookup'
 import { useReferenceDataStore, useLibraryStore } from '../store'
@@ -130,7 +130,7 @@ export default function ItemDetail() {
   const navigate = useNavigate()
   const fileRef = useRef()
 
-  const { locations, platforms, mediaSubtypes, ensureLoaded } = useReferenceDataStore()
+  const { locations, platforms, mediaSubtypes, lists, ensureLoaded } = useReferenceDataStore()
   const [item, setItem] = useState(null)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})
@@ -322,9 +322,9 @@ export default function ItemDetail() {
       <div className="flex gap-6 items-start">
         <div className="shrink-0 w-36 rounded-xl overflow-hidden shadow-lg bg-gray-100 dark:bg-gray-800">
           {item.cover_url ? (
-            <img key={item.cover_url} src={coverProxyUrl(item.cover_url)} alt={item.title} className="w-full aspect-2/3 object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+            <img key={item.cover_url} src={coverProxyUrl(item.cover_url)} alt={item.title} className={clsx('w-full object-cover', item.category === 'music' ? 'aspect-square' : 'aspect-2/3')} onError={(e) => { e.target.style.display = 'none' }} />
           ) : (
-            <CoverImage category={item.category} title={item.title} size="full" className="aspect-2/3" />
+            <CoverImage category={item.category} title={item.title} size="full" className={item.category === 'music' ? 'aspect-square' : 'aspect-2/3'} />
           )}
         </div>
 
@@ -356,7 +356,7 @@ export default function ItemDetail() {
               <p className="text-gray-600 dark:text-gray-300">{creator}</p>
             )
           )}
-          <StarRating value={item.user_rating} onChange={handleRatingChange} />
+          <div><StarRating value={item.user_rating} onChange={handleRatingChange} /></div>
           {item.genres && (
             <div className="flex flex-wrap gap-1">
               {item.genres.split(',').map((g) => (
@@ -423,6 +423,34 @@ export default function ItemDetail() {
           )}
         </div>
       </div>
+
+      {/* Lists membership (view mode only) */}
+      {!editing && item.list_ids && item.list_ids.length > 0 && (
+        <div className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Lists</h3>
+          <div className="flex flex-wrap gap-2">
+            {item.list_ids
+              .map((id) => lists.find((l) => l.id === id))
+              .filter(Boolean)
+              .map((l) => {
+                const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
+                return (
+                  <button
+                    key={l.id}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 dark:bg-brand-900/30 text-sm text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-800/50 transition-colors"
+                    onClick={() => {
+                      useLibraryStore.getState().setFilter('list_id', String(l.id))
+                      navigate(slug ? `/library/${slug}` : '/library')
+                    }}
+                  >
+                    <Tag size={12} className="opacity-70" />
+                    {l.name}
+                  </button>
+                )
+              })}
+          </div>
+        </div>
+      )}
 
       {/* Edit form / Detail fields */}
       {editing ? (
@@ -578,6 +606,11 @@ export default function ItemDetail() {
           {(item.category === 'films_tv' || item.category === 'music' || item.category === 'games') && item.barcode && (
             <div className="flex justify-end">
               <BarcodeDisplay value={item.barcode} />
+            </div>
+          )}
+          {item.category === 'books' && item.isbn && (
+            <div className="flex justify-end">
+              <BarcodeDisplay value={item.isbn} />
             </div>
           )}
 

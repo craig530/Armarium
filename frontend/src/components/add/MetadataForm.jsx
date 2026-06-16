@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus } from 'lucide-react'
+import clsx from 'clsx'
 import Input, { Textarea, Select } from '../ui/Input'
 import Button from '../ui/Button'
 import SelectMenu from '../ui/SelectMenu'
@@ -234,7 +235,7 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
           <img
             src={coverProxyUrl(previewSrc)}
             alt={form.title}
-            className="h-40 rounded-xl object-cover shadow-lg"
+            className={clsx('h-40 rounded-xl object-cover shadow-lg', category === 'music' && 'w-40')}
             onError={(e) => { e.target.style.display = 'none' }}
           />
         </div>

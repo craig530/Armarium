@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pathlib import Path
@@ -46,6 +47,7 @@ from ...repositories.scheduled_job import ScheduledJobRepository, get_scheduled_
 from .media import _build_responses
 
 router = APIRouter()
+logger = logging.getLogger("armarium.plex")
 
 # Plex section `type` -> our category.
 _SECTION_CATEGORY = {
@@ -388,6 +390,7 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob, auto_remove_stale: bool =
 
             plex_items = await plex_service.list_section_items(config.base_url, config.token, section_key, section_type)
             job.total = len(plex_items)
+            logger.info("Plex sync started: mapping=%d section=%s items=%d", mapping_id, section_key, job.total)
 
             seen_item_ids: set[int] = set()
 
@@ -498,8 +501,13 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob, auto_remove_stale: bool =
             mapping.last_sync_removed = job.removed
             mapping.last_sync_error = None
             await db.commit()
+            logger.info(
+                "Plex sync completed: mapping=%d created=%d updated=%d removed=%d status=%s",
+                mapping_id, job.created, job.updated, job.removed, job.status,
+            )
             job.status = "completed"
         except Exception as e:
+            logger.error("Plex sync failed: mapping=%d error=%s", mapping_id, e, exc_info=True)
             job.status = "error"
             job.error = str(e)
             if mapping is not None:

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-06-16
+
+### Added
+
+- **Lists clickable in library cards** — tapping a list chip shown below an item
+  in grid and list views now navigates to the filtered library view for that list.
+- **Lists section on item detail** — the item detail screen (view mode) now shows
+  a "Lists" section listing every list the item belongs to; each list is a button
+  that navigates to the filtered library view.
+- **ISBN barcode on book detail** — books now display a barcode image rendered
+  from their ISBN on the detail screen, matching the existing behaviour for
+  music, films & TV, and games.
+
+### Fixed
+
+- **Location long-press on mobile** — long-pressing a location chip in library
+  card/list views now reliably shows the full path popover without navigating to
+  the item detail screen; a synthetic click following the touch-end event is
+  suppressed when the long-press triggered.
+- **Custom location tooltip on desktop** — the browser-default `title=` tooltip
+  on location chips and the overflow `+N` chip has been replaced with a styled
+  dark tooltip that matches the app theme.
+- **Star rating on its own line** — on item detail screens for books and music
+  (where the creator is rendered as a link), the star rating now appears on a
+  separate line below the creator name instead of flowing inline next to it.
+- **Music cover art square** — album cover art now displays as square (1:1
+  aspect ratio) everywhere it appears: item detail hero (view and edit modes),
+  MetadataForm confirm/edit preview, and the recently-added / batch-session list
+  in the add flow.
+
+### Changed
+
+- **Backend logging** — added structured logging to the Plex sync router
+  (INFO on sync start and completion with item counts; ERROR with stack trace on
+  failure) and the auth router (WARNING on failed login attempts with username
+  and client IP). Logging conventions documented in ARCHITECTURE.md §4.9.
+
 ## [1.4.0] - 2026-06-16
 
 ### Added
