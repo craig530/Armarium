@@ -8,7 +8,7 @@ aiosqlite==0.19.0
 # works without a custom rebuild; unused (and harmless) on SQLite.
 asyncpg==0.30.0
 httpx==0.28.1
-python-multipart==0.0.27
+python-multipart==0.0.31
 pillow==12.2.0
 python-dotenv==1.2.2
 pydantic==2.13.4
