@@ -21,6 +21,7 @@ EXPECTED_TABLES = {
     "item_links",
     "item_lists",
     "media_item_lists",
+    "scheduled_jobs",
 }
 
 
@@ -72,7 +73,7 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
         engine.dispose()
 
     assert count == 16
-    assert version == "0004"
+    assert version == "0005"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
@@ -114,3 +115,26 @@ def test_upgrade_head_adds_games_columns(tmp_sqlite_url):
         engine.dispose()
 
     assert {"developer", "igdb_id"}.issubset(columns)
+
+
+def test_upgrade_head_adds_scheduled_jobs_and_schedule_columns(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            tables = set(inspect(conn).get_table_names())
+            user_columns = {col["name"] for col in inspect(conn).get_columns("users")}
+            mapping_columns = {col["name"] for col in inspect(conn).get_columns("plex_library_mappings")}
+    finally:
+        engine.dispose()
+
+    assert "scheduled_jobs" in tables
+    assert "can_manage_schedules" in user_columns
+    assert {
+        "last_sync_status",
+        "last_sync_created",
+        "last_sync_updated",
+        "last_sync_removed",
+        "last_sync_error",
+    }.issubset(mapping_columns)

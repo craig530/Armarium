@@ -4,12 +4,14 @@ import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Do
 import client from '../api/client'
 import { adminApi } from '../api/admin'
 import { plexApi } from '../api/plex'
+import { schedulesApi } from '../api/schedules'
 import { exportCovers } from '../lib/export'
 import { useAuthStore, useReferenceDataStore } from '../store'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import SelectMenu from '../components/ui/SelectMenu'
 import PlatformLogo from '../components/ui/PlatformLogo'
+import ScheduleControl from '../components/admin/ScheduleControl'
 import { useConfirm } from '../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
@@ -21,6 +23,7 @@ const PERMISSION_FLAGS = [
   { key: 'can_manage_platforms', label: 'Manage platforms' },
   { key: 'can_manage_media_types', label: 'Manage mediums' },
   { key: 'can_manage_lists', label: 'Manage lists' },
+  { key: 'can_manage_schedules', label: 'Manage Plex sync schedules' },
 ]
 
 const EMPTY_FORM = {
@@ -33,6 +36,7 @@ const EMPTY_FORM = {
   can_manage_platforms: true,
   can_manage_media_types: false,
   can_manage_lists: true,
+  can_manage_schedules: true,
 }
 
 function PermissionToggles({ value, onChange }) {
@@ -388,9 +392,6 @@ export default function Admin() {
       {/* Plex integration card */}
       <PlexIntegrationPanel />
 
-      {/* Cover images card */}
-      <CoverImagesPanel />
-
       {/* Library maintenance card */}
       <LibraryMaintenancePanel />
 
@@ -405,6 +406,7 @@ function BackupPanel() {
   const [backupSupported, setBackupSupported] = useState(true)
   const [triggering, setTriggering] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
+  const backupSchedule = useAdminSchedule('backup')
 
   const loadBackups = () => {
     client.get('/library/backup/list').then((r) => {
@@ -503,6 +505,17 @@ function BackupPanel() {
           <p className="mt-3 text-xs text-gray-400">
             Backups are stored in the <code className="font-mono">app_data</code> volume. The last 30 are retained automatically.
           </p>
+          <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scheduled backups</p>
+            <ScheduleControl
+              schedule={backupSchedule.schedule}
+              canManage
+              saving={backupSchedule.saving}
+              deleting={backupSchedule.deleting}
+              onSave={backupSchedule.handleSave}
+              onDelete={backupSchedule.handleDelete}
+            />
+          </div>
           <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400 space-y-1">
             <p className="font-medium text-gray-700 dark:text-gray-300">To restore a backup:</p>
             <ol className="list-decimal list-inside space-y-0.5">
@@ -682,17 +695,105 @@ function PlexIntegrationPanel() {
   )
 }
 
-function CoverImagesPanel() {
+function useAdminSchedule(jobType) {
+  const [schedule, setSchedule] = useState(undefined)   // undefined = not loaded yet
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    schedulesApi.get(jobType)
+      .then((s) => setSchedule(s))
+      .catch(() => setSchedule(null))
+  }, [jobType])
+
+  const handleSave = async (data) => {
+    setSaving(true)
+    try {
+      const s = await schedulesApi.upsert(jobType, data)
+      setSchedule(s)
+      toast.success('Schedule saved')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await schedulesApi.delete(jobType)
+      setSchedule(null)
+      toast.success('Schedule removed')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return { schedule: schedule ?? null, saving, deleting, handleSave, handleDelete }
+}
+
+function MaintenanceRow({ label, description, action, schedule, onSave, onDelete, saving, deleting, showExportDir = false }) {
+  return (
+    <div className="py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{label}</p>
+          {description && <p className="text-xs text-gray-400 mt-0.5">{description}</p>}
+          <div className="mt-1.5">
+            <ScheduleControl
+              schedule={schedule}
+              canManage
+              showExportDir={showExportDir}
+              saving={saving}
+              deleting={deleting}
+              onSave={onSave}
+              onDelete={onDelete}
+            />
+          </div>
+        </div>
+        {action}
+      </div>
+    </div>
+  )
+}
+
+function LibraryMaintenancePanel() {
+  const [linking, setLinking] = useState(false)
   const [redownloading, setRedownloading] = useState(false)
   const [purging, setPurging] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
 
+  const autoLink = useAdminSchedule('auto_link')
+  const redownload = useAdminSchedule('redownload_covers')
+  const purge = useAdminSchedule('purge_covers')
+  const exportCoversSchedule = useAdminSchedule('export_covers')
+
+  const handleAutoLink = async () => {
+    if (!await confirm(
+      'This scans your whole library and links items that share the same film/show, ' +
+      'album or book (by TMDB/MusicBrainz ID or ISBN) but aren\'t linked yet — useful ' +
+      'after adding copies on other platforms or locations before linking existed. Continue?',
+      { confirmLabel: 'Scan & Link', variant: 'secondary' }
+    )) return
+    setLinking(true)
+    try {
+      const r = await adminApi.autoLink()
+      toast.success(`Linked ${r.linked} item${r.linked === 1 ? '' : 's'}`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setLinking(false)
+    }
+  }
+
   const handleRedownload = async () => {
     if (!await confirm(
-      'This re-downloads and re-processes every cover image fetched from a URL, ' +
-      'fixing any that were saved with the previous image processing. It runs in ' +
-      'the background and may take a while for large libraries. Continue?',
+      'This re-downloads and re-processes every cover image fetched from a URL. ' +
+      'It runs in the background and may take a while for large libraries. Continue?',
       { confirmLabel: 'Redownload', variant: 'secondary' }
     )) return
     setRedownloading(true)
@@ -736,55 +837,69 @@ function CoverImagesPanel() {
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-      <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Cover Images</h2>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary" loading={redownloading} onClick={handleRedownload}>
-          <RefreshCw size={14} /> Redownload all
-        </Button>
-        <Button size="sm" variant="secondary" loading={purging} onClick={handlePurge}>
-          <Trash2 size={14} /> Purge orphans
-        </Button>
-        <Button size="sm" variant="secondary" loading={exporting} onClick={handleExport}>
-          <Download size={14} /> Export covers
-        </Button>
-      </div>
-      {confirmDialog}
-    </div>
-  )
-}
-
-function LibraryMaintenancePanel() {
-  const [linking, setLinking] = useState(false)
-  const [confirm, confirmDialog] = useConfirm()
-
-  const handleAutoLink = async () => {
-    if (!await confirm(
-      'This scans your whole library and links items that share the same film/show, ' +
-      'album or book (by TMDB/MusicBrainz ID or ISBN) but aren\'t linked yet — useful ' +
-      'after adding copies on other platforms or locations before linking existed. Continue?',
-      { confirmLabel: 'Scan & Link', variant: 'secondary' }
-    )) return
-    setLinking(true)
-    try {
-      const r = await adminApi.autoLink()
-      toast.success(`Linked ${r.linked} item${r.linked === 1 ? '' : 's'}`)
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setLinking(false)
-    }
-  }
-
-  return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Library Maintenance</h2>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Find and link copies of the same item across different platforms or locations
-        that aren&apos;t linked yet.
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+        Run now or set a recurring schedule for each maintenance task.
       </p>
-      <Button size="sm" variant="secondary" loading={linking} onClick={handleAutoLink}>
-        <Link2 size={14} /> Scan &amp; link duplicate copies
-      </Button>
+      <div>
+        <MaintenanceRow
+          label="Scan & link duplicate copies"
+          description="Links items that share a TMDB/MusicBrainz ID or ISBN across platforms."
+          schedule={autoLink.schedule}
+          onSave={autoLink.handleSave}
+          onDelete={autoLink.handleDelete}
+          saving={autoLink.saving}
+          deleting={autoLink.deleting}
+          action={
+            <Button size="sm" variant="secondary" loading={linking} onClick={handleAutoLink}>
+              <Link2 size={14} /> Run now
+            </Button>
+          }
+        />
+        <MaintenanceRow
+          label="Redownload all covers"
+          description="Re-fetches and re-optimises covers from their original URLs."
+          schedule={redownload.schedule}
+          onSave={redownload.handleSave}
+          onDelete={redownload.handleDelete}
+          saving={redownload.saving}
+          deleting={redownload.deleting}
+          action={
+            <Button size="sm" variant="secondary" loading={redownloading} onClick={handleRedownload}>
+              <RefreshCw size={14} /> Run now
+            </Button>
+          }
+        />
+        <MaintenanceRow
+          label="Purge orphan covers"
+          description="Deletes cover image files on disk that no item references."
+          schedule={purge.schedule}
+          onSave={purge.handleSave}
+          onDelete={purge.handleDelete}
+          saving={purge.saving}
+          deleting={purge.deleting}
+          action={
+            <Button size="sm" variant="secondary" loading={purging} onClick={handlePurge}>
+              <Trash2 size={14} /> Run now
+            </Button>
+          }
+        />
+        <MaintenanceRow
+          label="Export covers"
+          description="Saves a zip of all cover images to the server. Scheduled exports save to a date-named folder; once per day maximum."
+          showExportDir
+          schedule={exportCoversSchedule.schedule}
+          onSave={exportCoversSchedule.handleSave}
+          onDelete={exportCoversSchedule.handleDelete}
+          saving={exportCoversSchedule.saving}
+          deleting={exportCoversSchedule.deleting}
+          action={
+            <Button size="sm" variant="secondary" loading={exporting} onClick={handleExport}>
+              <Download size={14} /> Download now
+            </Button>
+          }
+        />
+      </div>
       {confirmDialog}
     </div>
   )

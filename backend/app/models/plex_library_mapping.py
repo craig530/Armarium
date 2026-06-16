@@ -30,5 +30,12 @@ class PlexLibraryMapping(Base):
 
     last_synced_at = Column(DateTime, nullable=True)
 
+    # Persisted result of the most recent completed sync (manual or scheduled)
+    last_sync_status = Column(String(20), nullable=True)   # completed | error | cancelled
+    last_sync_created = Column(Integer, nullable=True)
+    last_sync_updated = Column(Integer, nullable=True)
+    last_sync_removed = Column(Integer, nullable=True)
+    last_sync_error = Column(String(1000), nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

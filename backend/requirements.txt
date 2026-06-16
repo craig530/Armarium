@@ -14,6 +14,7 @@ python-dotenv==1.2.2
 pydantic==2.13.4
 pydantic-settings==2.14.1
 aiofiles==23.2.1
+apscheduler==3.10.4
 
 # Server-side barcode decoding for the camera scanner (the zxing-cpp port —
 # far more robust at decoding real camera frames than the @zxing/library JS

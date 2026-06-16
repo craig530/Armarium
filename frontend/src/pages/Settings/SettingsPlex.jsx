@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import { plexApi } from '../../api/plex'
@@ -8,23 +8,62 @@ import { MediaSubtypeBadge } from '../../components/ui/Badge'
 import CoverImage from '../../components/media/CoverImage'
 import PlatformLogo from '../../components/ui/PlatformLogo'
 import Button from '../../components/ui/Button'
+import ScheduleControl from '../../components/admin/ScheduleControl'
 import { categoryLabel } from '../../lib/categories'
 import { useConfirm } from '../../hooks/useConfirm'
 import { usePlexSyncGuard } from '../../hooks/usePlexSyncGuard'
 import { useAuthStore, useReferenceDataStore } from '../../store'
 
+function SyncStatusBadge({ status }) {
+  if (!status) return null
+  if (status === 'completed') return <CheckCircle size={12} className="text-green-500" />
+  if (status === 'error') return <XCircle size={12} className="text-red-500" />
+  if (status === 'cancelled') return <AlertCircle size={12} className="text-amber-500" />
+  return null
+}
+
+function LastSyncSummary({ mapping }) {
+  if (!mapping.last_synced_at) return <span className="text-xs text-gray-400">Never synced</span>
+
+  const when = new Date(mapping.last_synced_at).toLocaleString()
+  const parts = []
+  if (mapping.last_sync_created != null) parts.push(`${mapping.last_sync_created} added`)
+  if (mapping.last_sync_updated != null) parts.push(`${mapping.last_sync_updated} updated`)
+  if (mapping.last_sync_removed != null && mapping.last_sync_removed > 0) parts.push(`${mapping.last_sync_removed} removed`)
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-gray-400 flex-wrap">
+      <SyncStatusBadge status={mapping.last_sync_status} />
+      <span>{when}</span>
+      {parts.length > 0 && <span className="text-gray-300 dark:text-gray-600">·</span>}
+      {parts.length > 0 && <span>{parts.join(', ')}</span>}
+      {mapping.last_sync_status === 'error' && mapping.last_sync_error && (
+        <span className="text-red-400 truncate max-w-[200px]" title={mapping.last_sync_error}>
+          — {mapping.last_sync_error}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function SettingsPlex() {
   const { user } = useAuthStore()
   const isAdmin = !!user?.is_admin
+  const canManageSchedules = isAdmin || !!user?.can_manage_schedules
   const { mediaSubtypes, ensureLoaded } = useReferenceDataStore()
   const [config, setConfig] = useState(null)
   const [sections, setSections] = useState([])
   const [mappings, setMappings] = useState([])
+  const [schedules, setSchedules] = useState({})   // mapping_id -> ScheduleResponse | null
   const [loading, setLoading] = useState(true)
   const [syncStatus, setSyncStatus] = useState({})
   const [syncResult, setSyncResult] = useState(null)
   const [staleSelection, setStaleSelection] = useState({})
   const [removingStale, setRemovingStale] = useState(false)
+  // Manual sync options per mapping_id
+  const [syncOptions, setSyncOptions] = useState({})  // mapping_id -> { autoRemove: bool }
+  const [scheduleSaving, setScheduleSaving] = useState({})
+  const [scheduleDeleting, setScheduleDeleting] = useState({})
   const [confirm, confirmDialog] = useConfirm()
   const pollIntervals = useRef({})
   const syncGuardDialog = usePlexSyncGuard(syncStatus)
@@ -41,13 +80,18 @@ export default function SettingsPlex() {
         delete pollIntervals.current[mapping.id]
 
         if (status.status === 'completed') {
-          toast.success(`"${mapping.section_title}": ${status.result.created} added, ${status.result.updated} updated`)
+          const added = status.result?.created ?? 0
+          const updated = status.result?.updated ?? 0
+          const removed = status.result?.removed ?? 0
+          const parts = [`${added} added`, `${updated} updated`]
+          if (removed > 0) parts.push(`${removed} removed`)
+          toast.success(`"${mapping.section_title}": ${parts.join(', ')}`)
           setSyncResult({ mapping, ...status.result })
-          setStaleSelection(Object.fromEntries(status.result.stale_items.map((i) => [i.id, true])))
+          setStaleSelection(Object.fromEntries((status.result?.stale_items ?? []).map((i) => [i.id, true])))
           await load()
           useReferenceDataStore.getState().invalidate()
         } else if (status.status === 'cancelled') {
-          toast(`"${mapping.section_title}" sync cancelled — ${status.result.created} added, ${status.result.updated} updated before stopping`)
+          toast(`"${mapping.section_title}" sync cancelled`)
           setSyncResult({ mapping, ...status.result })
           setStaleSelection({})
           await load()
@@ -72,12 +116,23 @@ export default function SettingsPlex() {
         setSections(s)
         setMappings(m)
 
-        const statuses = await Promise.all(m.map((mapping) => plexApi.getSyncStatus(mapping.id)))
+        // Load sync statuses and schedules in parallel
+        const [statuses, scheduleResults] = await Promise.all([
+          Promise.all(m.map((mapping) => plexApi.getSyncStatus(mapping.id))),
+          Promise.all(m.map((mapping) =>
+            plexApi.getMappingSchedule(mapping.id).catch(() => null)
+          )),
+        ])
+
         setSyncStatus((prev) => {
           const next = { ...prev }
           m.forEach((mapping, i) => { next[mapping.id] = statuses[i] })
           return next
         })
+        const scheduleMap = {}
+        m.forEach((mapping, i) => { scheduleMap[mapping.id] = scheduleResults[i] })
+        setSchedules(scheduleMap)
+
         m.forEach((mapping, i) => {
           if (statuses[i].status === 'running') startPolling(mapping)
         })
@@ -89,9 +144,6 @@ export default function SettingsPlex() {
     }
   }
 
-  // load is recreated every render (it closes over state setters), so it
-  // can't be a dependency without re-running on every render — run once on
-  // mount only.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [])
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
@@ -140,8 +192,9 @@ export default function SettingsPlex() {
   }
 
   const handleSync = async (mapping) => {
+    const opts = syncOptions[mapping.id] || {}
     try {
-      const status = await plexApi.syncMapping(mapping.id)
+      const status = await plexApi.syncMapping(mapping.id, { auto_remove_stale: !!opts.autoRemove })
       setSyncStatus((prev) => ({ ...prev, [mapping.id]: status }))
       startPolling(mapping)
     } catch (err) {
@@ -158,6 +211,33 @@ export default function SettingsPlex() {
     }
   }
 
+  const handleSaveSchedule = async (mapping, data) => {
+    setScheduleSaving((p) => ({ ...p, [mapping.id]: true }))
+    try {
+      const sched = await plexApi.upsertMappingSchedule(mapping.id, data)
+      setSchedules((p) => ({ ...p, [mapping.id]: sched }))
+      toast.success('Schedule saved')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setScheduleSaving((p) => ({ ...p, [mapping.id]: false }))
+    }
+  }
+
+  const handleDeleteSchedule = async (mapping) => {
+    if (!await confirm('Remove the sync schedule for this library?', { confirmLabel: 'Remove', variant: 'secondary' })) return
+    setScheduleDeleting((p) => ({ ...p, [mapping.id]: true }))
+    try {
+      await plexApi.deleteMappingSchedule(mapping.id)
+      setSchedules((p) => ({ ...p, [mapping.id]: null }))
+      toast.success('Schedule removed')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setScheduleDeleting((p) => ({ ...p, [mapping.id]: false }))
+    }
+  }
+
   const handleToggleStale = (itemId) => {
     setStaleSelection((prev) => ({ ...prev, [itemId]: !prev[itemId] }))
   }
@@ -169,10 +249,7 @@ export default function SettingsPlex() {
 
   const handleRemoveStale = async () => {
     const ids = syncResult.stale_items.filter((i) => staleSelection[i.id]).map((i) => i.id)
-    if (ids.length === 0) {
-      handleKeepAllStale()
-      return
-    }
+    if (ids.length === 0) { handleKeepAllStale(); return }
     setRemovingStale(true)
     try {
       const result = await plexApi.removeStaleItems(syncResult.mapping.id, ids)
@@ -195,7 +272,7 @@ export default function SettingsPlex() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Plex Sync</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Match Plex libraries to your Films & TV and Music collections and sync them in.
+          Match Plex libraries to your Films &amp; TV and Music collections and sync them in.
         </p>
       </div>
 
@@ -216,9 +293,11 @@ export default function SettingsPlex() {
             {config.platform && (
               <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                 <PlatformLogo platform={config.platform} className="h-5 w-5" />
-                Synced media is filed under <span className="font-medium text-gray-700 dark:text-gray-300">{config.platform.name}</span>
+                Synced media is filed under{' '}
+                <span className="font-medium text-gray-700 dark:text-gray-300">{config.platform.name}</span>
               </div>
             )}
+
             <section>
               <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">Synced libraries</h3>
               {mappings.length === 0 ? (
@@ -231,6 +310,9 @@ export default function SettingsPlex() {
                     )
                     const status = syncStatus[m.id]
                     const isSyncing = status?.status === 'running'
+                    const opts = syncOptions[m.id] || {}
+                    const schedule = schedules[m.id]
+
                     return (
                       <div key={m.id} className="rounded-lg border border-gray-100 dark:border-gray-800 p-3 space-y-2">
                         <div className="flex items-start gap-3">
@@ -245,6 +327,8 @@ export default function SettingsPlex() {
                             <Trash2 size={14} />
                           </button>
                         </div>
+
+                        {/* Sync status / progress */}
                         <div className="flex flex-wrap items-center gap-2">
                           {isSyncing ? (
                             <>
@@ -268,21 +352,39 @@ export default function SettingsPlex() {
                               </Button>
                             </>
                           ) : (
-                            <>
-                              <span className="text-xs text-gray-400 flex-1">
-                                {m.last_synced_at ? `Synced ${new Date(m.last_synced_at).toLocaleString()}` : 'Never synced'}
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={!m.media_subtype}
-                                onClick={() => handleSync(m)}
-                              >
-                                <RefreshCw size={13} /> Sync now
-                              </Button>
-                            </>
+                            <LastSyncSummary mapping={m} />
                           )}
                         </div>
+
+                        {/* Manual sync options + trigger */}
+                        {!isSyncing && (
+                          <div className="flex flex-wrap items-center gap-3">
+                            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={!!opts.autoRemove}
+                                onChange={(e) =>
+                                  setSyncOptions((p) => ({
+                                    ...p,
+                                    [m.id]: { ...p[m.id], autoRemove: e.target.checked },
+                                  }))
+                                }
+                                className="rounded-sm"
+                              />
+                              Auto-remove missing items
+                            </label>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={!m.media_subtype}
+                              onClick={() => handleSync(m)}
+                            >
+                              <RefreshCw size={13} /> Sync now
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Medium selector */}
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs text-gray-400 shrink-0">Medium:</span>
                           {isAdmin ? (
@@ -307,6 +409,19 @@ export default function SettingsPlex() {
                             <span className="text-xs text-amber-500">— sync disabled until set</span>
                           )}
                         </div>
+
+                        {/* Schedule */}
+                        <div className="pt-1 border-t border-gray-100 dark:border-gray-800">
+                          <ScheduleControl
+                            schedule={schedule}
+                            canManage={canManageSchedules}
+                            showAutoRemove
+                            saving={scheduleSaving[m.id]}
+                            deleting={scheduleDeleting[m.id]}
+                            onSave={(data) => handleSaveSchedule(m, data)}
+                            onDelete={() => handleDeleteSchedule(m)}
+                          />
+                        </div>
                       </div>
                     )
                   })}
@@ -314,7 +429,7 @@ export default function SettingsPlex() {
               )}
             </section>
 
-            {syncResult && syncResult.stale_items.length > 0 && (
+            {syncResult && (syncResult.stale_items?.length ?? 0) > 0 && (
               <section className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
@@ -333,12 +448,7 @@ export default function SettingsPlex() {
                           onChange={() => handleToggleStale(item.id)}
                           className="h-4 w-4 rounded-sm border-gray-300 text-brand-600 focus:ring-brand-500"
                         />
-                        <CoverImage
-                          src={item.cover_thumb_url}
-                          category={item.category}
-                          title={item.title}
-                          size="sm"
-                        />
+                        <CoverImage src={item.cover_thumb_url} category={item.category} title={item.title} size="sm" />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.title}</p>
                           <p className="text-xs text-gray-400">{item.year}</p>

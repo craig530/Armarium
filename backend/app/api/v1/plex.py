@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pathlib import Path
 from typing import List, Optional
 
@@ -10,6 +10,7 @@ from ...models.media import MediaItem
 from ...models.platform import Platform
 from ...models.plex_config import PlexConfig
 from ...models.plex_library_mapping import PlexLibraryMapping
+from ...models.scheduled_job import PLEX_JOB_TYPE, ScheduledJob
 from ...schemas.media import PlatformSummary
 from ...schemas.plex import (
     MediaSubtypeSummary,
@@ -21,14 +22,17 @@ from ...schemas.plex import (
     PlexRemoveStaleRequest,
     PlexSectionResponse,
     PlexSyncItem,
+    PlexSyncRequest,
     PlexSyncResult,
     PlexSyncStatus,
     PlexTestRequest,
 )
+from ...schemas.schedule import ScheduleCreate, ScheduleResponse, VALID_INTERVALS
 from ...services import plex as plex_service
 from ...services.auth import get_current_admin, require_permission
 from ...services.cover_art import delete_cover_files, optimise_and_save
 from ...services.plex_sync_jobs import PlexSyncJob, get_job, set_job
+from ...services.scheduler import scheduler_service
 from ...repositories.media_item import MediaItemRepository, get_media_item_repository
 from ...repositories.media_subtype import MediaSubtypeRepository, get_media_subtype_repository
 from ...repositories.platform import PlatformRepository, get_platform_repository
@@ -38,13 +42,12 @@ from ...repositories.plex import (
     get_plex_config_repository,
     get_plex_library_mapping_repository,
 )
+from ...repositories.scheduled_job import ScheduledJobRepository, get_scheduled_job_repository
 from .media import _build_responses
 
 router = APIRouter()
 
-# Plex section `type` -> our category. Movie and show libraries both map to
-# Films & TV; artist (music) libraries map to Music. Plex has no native book
-# library type, so books are out of scope.
+# Plex section `type` -> our category.
 _SECTION_CATEGORY = {
     "movie": MediaCategory.FILMS_TV,
     "show": MediaCategory.FILMS_TV,
@@ -78,7 +81,18 @@ def _to_mapping_response(mapping: PlexLibraryMapping) -> PlexMappingResponse:
         category=mapping.category,
         media_subtype=MediaSubtypeSummary.model_validate(mapping.media_subtype) if mapping.media_subtype else None,
         last_synced_at=mapping.last_synced_at,
+        last_sync_status=mapping.last_sync_status,
+        last_sync_created=mapping.last_sync_created,
+        last_sync_updated=mapping.last_sync_updated,
+        last_sync_removed=mapping.last_sync_removed,
+        last_sync_error=mapping.last_sync_error,
     )
+
+
+def _schedule_response(job: ScheduledJob) -> ScheduleResponse:
+    resp = ScheduleResponse.model_validate(job)
+    resp.next_run_at = scheduler_service.next_run_time(job.id)
+    return resp
 
 
 @router.get("/config", response_model=PlexConfigResponse)
@@ -191,8 +205,14 @@ async def delete_mapping(
     mapping_id: int,
     _=Depends(require_permission("can_add_items")),
     repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    schedule_repo: ScheduledJobRepository = Depends(get_scheduled_job_repository),
 ):
     mapping = await repo.get_or_404(mapping_id)
+    # Remove any associated schedule
+    sched = await schedule_repo.find_plex_schedule(mapping_id)
+    if sched:
+        scheduler_service.remove(sched.id)
+        await schedule_repo.delete(sched)
     await repo.delete(mapping)
     await repo.commit()
 
@@ -221,6 +241,77 @@ async def update_mapping(
     await mapping_repo.refresh(mapping)
     return _to_mapping_response(mapping)
 
+
+# ── Schedule endpoints for Plex mappings ─────────────────────────────────────
+
+def _require_can_manage_schedules(user=Depends(require_permission("can_add_items"))):
+    """Dependency: user must have can_manage_schedules (admins bypass automatically)."""
+    if not user.is_admin and not user.can_manage_schedules:
+        raise HTTPException(status_code=403, detail="You don't have permission to manage schedules")
+    return user
+
+
+@router.get("/mappings/{mapping_id}/schedule", response_model=Optional[ScheduleResponse])
+async def get_mapping_schedule(
+    mapping_id: int,
+    _=Depends(require_permission("can_add_items")),
+    mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    schedule_repo: ScheduledJobRepository = Depends(get_scheduled_job_repository),
+):
+    """Get the schedule for a Plex library mapping (null if none). Visible to all Plex users."""
+    await mapping_repo.get_or_404(mapping_id)
+    sched = await schedule_repo.find_plex_schedule(mapping_id)
+    return _schedule_response(sched) if sched else None
+
+
+@router.post("/mappings/{mapping_id}/schedule", response_model=ScheduleResponse, status_code=201)
+async def upsert_mapping_schedule(
+    mapping_id: int,
+    payload: ScheduleCreate,
+    user=Depends(_require_can_manage_schedules),
+    mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    schedule_repo: ScheduledJobRepository = Depends(get_scheduled_job_repository),
+):
+    """Create or replace the schedule for a Plex library mapping."""
+    if payload.interval_hours not in VALID_INTERVALS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"interval_hours must be one of {VALID_INTERVALS}",
+        )
+    await mapping_repo.get_or_404(mapping_id)
+
+    sched = await schedule_repo.find_plex_schedule(mapping_id)
+    if sched is None:
+        sched = ScheduledJob(job_type=PLEX_JOB_TYPE, target_id=mapping_id)
+        schedule_repo.add(sched)
+
+    sched.interval_hours = payload.interval_hours
+    sched.auto_remove_stale = payload.auto_remove_stale if payload.auto_remove_stale is not None else True
+
+    await schedule_repo.commit()
+    await schedule_repo.refresh(sched)
+    scheduler_service.add_or_replace(sched)
+    return _schedule_response(sched)
+
+
+@router.delete("/mappings/{mapping_id}/schedule", status_code=204)
+async def delete_mapping_schedule(
+    mapping_id: int,
+    user=Depends(_require_can_manage_schedules),
+    mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    schedule_repo: ScheduledJobRepository = Depends(get_scheduled_job_repository),
+):
+    """Remove the schedule for a Plex library mapping."""
+    await mapping_repo.get_or_404(mapping_id)
+    sched = await schedule_repo.find_plex_schedule(mapping_id)
+    if sched is None:
+        raise HTTPException(status_code=404, detail="No schedule configured for this mapping")
+    scheduler_service.remove(sched.id)
+    await schedule_repo.delete(sched)
+    await schedule_repo.commit()
+
+
+# ── Sync helpers ──────────────────────────────────────────────────────────────
 
 def _to_sync_fields(item: dict, section_type: str) -> dict:
     """Map a normalized `services.plex.list_section_items` entry to the
@@ -263,15 +354,23 @@ async def _apply_cover(config: PlexConfig, item: MediaItem, thumb: Optional[str]
         item.cover_image_url = None
 
 
-async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
+async def _run_sync(mapping_id: int, job: PlexSyncJob, auto_remove_stale: bool = False) -> None:
     """Runs a full library sync in the background, updating `job` so
-    `GET /mappings/{id}/sync/status` can report progress. Runs detached from
-    the request that started it, so it opens its own session and re-loads
-    everything it needs."""
+    `GET /mappings/{id}/sync/status` can report progress.
+
+    Delta efficiency: existing items have their metadata updated, but covers
+    are not re-downloaded (they rarely change on Plex; use 'Redownload all
+    covers' in Admin to refresh them).  Cover downloads only happen for
+    newly-created items.
+
+    If auto_remove_stale=True, stale items are removed automatically instead
+    of being presented to the user for manual selection.
+    """
     async with AsyncSessionLocal() as db:
         repo = MediaItemRepository(db)
         config_repo = PlexConfigRepository(db)
         mapping_repo = PlexLibraryMappingRepository(db)
+        mapping = None
         try:
             mapping = await mapping_repo.get(mapping_id)
             config = await config_repo.get_singleton()
@@ -315,9 +414,14 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                 )
 
                 if existing is not None:
+                    # Only write fields that have actually changed (reduces DB writes)
+                    changed = False
                     for field_name, value in fields.items():
-                        setattr(existing, field_name, value)
-                    await _apply_cover(config, existing, raw_item.get("thumb"))
+                        if getattr(existing, field_name) != value:
+                            setattr(existing, field_name, value)
+                            changed = True
+                    # Skip cover re-download for existing items — covers rarely
+                    # change on Plex; admin can use "Redownload all covers" to refresh.
                     candidates = await repo.find_link_candidates(
                         category=mapping.category,
                         platform_id=config.platform_id,
@@ -330,7 +434,8 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                     )
                     await repo.link_unlinked(existing, candidates)
                     seen_item_ids.add(existing.id)
-                    job.updated += 1
+                    if changed:
+                        job.updated += 1
                     job.processed += 1
                     await db.commit()
                     continue
@@ -360,22 +465,50 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob) -> None:
                 await db.commit()
 
             if job.status == "cancelled":
-                # seen_item_ids is incomplete, so stale-item detection would
-                # incorrectly flag items the loop hasn't reached yet.
+                mapping.last_synced_at = datetime.utcnow()
+                mapping.last_sync_status = "cancelled"
+                mapping.last_sync_created = job.created
+                mapping.last_sync_updated = job.updated
+                mapping.last_sync_removed = 0
+                mapping.last_sync_error = None
+                await db.commit()
                 job.stale_items = []
                 return
 
             stale_items = await repo.list_by_platform_and_subtype(
                 config.platform_id, mapping.media_subtype_id, exclude_ids=seen_item_ids
             )
-            job.stale_items = await _build_responses(repo, stale_items) if stale_items else []
+
+            if auto_remove_stale and stale_items:
+                for stale in stale_items:
+                    for link in await repo.links_for_item(stale.id):
+                        await repo.delete_link(link)
+                    delete_cover_files(stale.cover_image_path)
+                    await repo.delete(stale)
+                job.removed = len(stale_items)
+                job.stale_items = []
+                await db.commit()
+            else:
+                job.stale_items = await _build_responses(repo, stale_items) if stale_items else []
 
             mapping.last_synced_at = datetime.utcnow()
+            mapping.last_sync_status = "completed"
+            mapping.last_sync_created = job.created
+            mapping.last_sync_updated = job.updated
+            mapping.last_sync_removed = job.removed
+            mapping.last_sync_error = None
             await db.commit()
             job.status = "completed"
         except Exception as e:
             job.status = "error"
             job.error = str(e)
+            if mapping is not None:
+                try:
+                    mapping.last_sync_status = "error"
+                    mapping.last_sync_error = str(e)[:1000]
+                    await db.commit()
+                except Exception:
+                    pass
 
 
 def _job_status(job: Optional[PlexSyncJob]) -> PlexSyncStatus:
@@ -383,13 +516,19 @@ def _job_status(job: Optional[PlexSyncJob]) -> PlexSyncStatus:
         return PlexSyncStatus(status="idle")
     result = None
     if job.status in ("completed", "cancelled"):
-        result = PlexSyncResult(created=job.created, updated=job.updated, stale_items=job.stale_items)
+        result = PlexSyncResult(
+            created=job.created,
+            updated=job.updated,
+            removed=job.removed,
+            stale_items=job.stale_items,
+        )
     return PlexSyncStatus(
         status=job.status,
         total=job.total,
         processed=job.processed,
         created=job.created,
         updated=job.updated,
+        removed=job.removed,
         error=job.error,
         result=result,
     )
@@ -403,6 +542,7 @@ _background_tasks: set[asyncio.Task] = set()
 @router.post("/mappings/{mapping_id}/sync", response_model=PlexSyncStatus, status_code=202)
 async def sync_mapping(
     mapping_id: int,
+    payload: Optional[PlexSyncRequest] = Body(default=None),
     _=Depends(require_permission("can_add_items")),
     mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
     config_repo: PlexConfigRepository = Depends(get_plex_config_repository),
@@ -419,9 +559,10 @@ async def sync_mapping(
     if existing_job is not None and existing_job.status == "running":
         raise HTTPException(status_code=409, detail="A sync is already running for this library")
 
+    auto_remove = payload.auto_remove_stale if payload else False
     job = PlexSyncJob()
     set_job(mapping_id, job)
-    task = asyncio.create_task(_run_sync(mapping_id, job))
+    task = asyncio.create_task(_run_sync(mapping_id, job, auto_remove_stale=auto_remove))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return _job_status(job)
@@ -480,5 +621,10 @@ async def remove_stale_items(
         await repo.delete(item)
         removed += 1
 
-    await repo.commit()
+    if removed:
+        mapping.last_sync_removed = (mapping.last_sync_removed or 0) + removed
+        await repo.commit()
+    else:
+        await repo.commit()
+
     return {"removed": removed}

@@ -27,6 +27,7 @@ class UserCreate(BaseModel):
     can_manage_platforms: bool = True
     can_manage_media_types: bool = False
     can_manage_lists: bool = True
+    can_manage_schedules: bool = True
 
 
 class UserUpdate(BaseModel):
@@ -40,6 +41,7 @@ class UserUpdate(BaseModel):
     can_manage_platforms: Optional[bool] = None
     can_manage_media_types: Optional[bool] = None
     can_manage_lists: Optional[bool] = None
+    can_manage_schedules: Optional[bool] = None
 
 
 class UserResponse(BaseModel):
@@ -53,6 +55,7 @@ class UserResponse(BaseModel):
     can_manage_platforms: bool
     can_manage_media_types: bool
     can_manage_lists: bool
+    can_manage_schedules: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

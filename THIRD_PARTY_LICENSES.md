@@ -50,6 +50,7 @@ are **not** covered by Armarium's MIT licence — see
 | [Pydantic](https://github.com/pydantic/pydantic) | 2.13.4 | [MIT](https://spdx.org/licenses/MIT.html) | Data validation / schemas |
 | [pydantic-settings](https://github.com/pydantic/pydantic-settings) | 2.14.1 | [MIT](https://spdx.org/licenses/MIT.html) | Settings management |
 | [aiofiles](https://github.com/Tinche/aiofiles) | 23.2.1 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Async file I/O |
+| [APScheduler](https://github.com/agronholm/apscheduler) | 3.10.4 | [MIT](https://spdx.org/licenses/MIT.html) | In-process background job scheduling (Plex sync, maintenance tasks) |
 | [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) | 3.0.0 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Server-side barcode decoding for the camera scanner |
 | [python-jose](http://github.com/mpdavis/python-jose) | 3.5.0 | [MIT](https://spdx.org/licenses/MIT.html) | JWT signing/verification |
 | [passlib](https://passlib.readthedocs.io) | 1.7.4 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | Password hashing |

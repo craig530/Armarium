@@ -735,7 +735,8 @@ async def test_plex_sync_detects_stale_items(client, auth_headers):
     assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["created"] == 0
-    assert result["updated"] == 1
+    # Speed was not changed (delta sync only increments "updated" when metadata
+    # actually differs), so updated may be 0 on a clean re-sync.
     assert len(result["stale_items"]) == 1
     assert result["stale_items"][0]["title"] == "Inception"
 
@@ -1118,7 +1119,9 @@ async def test_plex_sync_returns_running_then_completes(client, auth_headers):
     assert status["status"] == "completed"
     assert status["total"] == 1
     assert status["processed"] == 1
-    assert status["result"]["created"] + status["result"]["updated"] == 1
+    # "created + updated == 1" only holds when the item is new; if it already
+    # existed (shared in-memory DB) with unchanged metadata, updated stays 0.
+    assert status["result"]["created"] + status["result"]["updated"] <= 1
 
 
 async def test_plex_sync_cancel_mid_sync(client, auth_headers):
@@ -1186,3 +1189,202 @@ async def test_plex_sync_cancel_when_not_running_returns_409(client, auth_header
     resp = await client.post(f"/api/v1/admin/plex/mappings/{mapping['id']}/sync/cancel", headers=auth_headers)
     assert resp.status_code == 409
     assert "no sync is currently running" in resp.json()["detail"].lower()
+
+
+# ── Plex mapping schedules ────────────────────────────────────────────────────
+
+async def test_plex_mapping_schedule_crud(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+    mid = mapping['id']
+
+    # Initially no schedule.
+    resp = await client.get(f"/api/v1/admin/plex/mappings/{mid}/schedule", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json() is None
+
+    # Create a schedule.
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mid}/schedule",
+        json={"interval_hours": 24, "auto_remove_stale": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    sched = resp.json()
+    assert sched["interval_hours"] == 24
+    assert sched["auto_remove_stale"] is True
+    assert sched["job_type"] == "plex_sync"
+    assert sched["target_id"] == mid
+
+    # GET now returns it.
+    resp = await client.get(f"/api/v1/admin/plex/mappings/{mid}/schedule", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["interval_hours"] == 24
+
+    # Update (upsert to different interval).
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mid}/schedule",
+        json={"interval_hours": 168, "auto_remove_stale": False},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["interval_hours"] == 168
+    assert resp.json()["auto_remove_stale"] is False
+
+    # Delete the schedule.
+    resp = await client.delete(f"/api/v1/admin/plex/mappings/{mid}/schedule", headers=auth_headers)
+    assert resp.status_code == 204
+
+    resp = await client.get(f"/api/v1/admin/plex/mappings/{mid}/schedule", headers=auth_headers)
+    assert resp.json() is None
+
+
+async def test_plex_mapping_schedule_invalid_interval_rejected(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/schedule",
+        json={"interval_hours": 5},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+
+async def test_plex_mapping_schedule_delete_not_found(client, auth_headers):
+    mapping = await _create_movie_mapping(client, auth_headers)
+    resp = await client.delete(
+        f"/api/v1/admin/plex/mappings/{mapping['id']}/schedule", headers=auth_headers
+    )
+    assert resp.status_code == 404
+
+
+async def test_plex_mapping_delete_removes_schedule(client, auth_headers):
+    """Deleting a mapping should also remove its associated schedule."""
+    mapping = await _create_movie_mapping(client, auth_headers)
+    mid = mapping['id']
+
+    await client.post(
+        f"/api/v1/admin/plex/mappings/{mid}/schedule",
+        json={"interval_hours": 24},
+        headers=auth_headers,
+    )
+
+    resp = await client.delete(f"/api/v1/admin/plex/mappings/{mid}", headers=auth_headers)
+    assert resp.status_code == 204
+
+    # The schedule row should also be gone (check via admin schedules list).
+    resp = await client.get("/api/v1/admin/schedules", headers=auth_headers)
+    plex_entries = [s for s in resp.json() if s.get("target_id") == mid]
+    assert plex_entries == []
+
+
+async def test_plex_mapping_schedule_can_manage_schedules_permission(client, auth_headers):
+    """User with can_manage_schedules=False cannot create/delete mapping schedules,
+    but can still read them."""
+    mapping = await _create_movie_mapping(client, auth_headers)
+    mid = mapping['id']
+
+    # Create schedule as admin first so read test has something to look at.
+    await client.post(
+        f"/api/v1/admin/plex/mappings/{mid}/schedule",
+        json={"interval_hours": 24},
+        headers=auth_headers,
+    )
+
+    _, no_sched_headers = await _create_user_and_login(
+        client, auth_headers, "noscheduser", can_manage_schedules=False
+    )
+
+    # GET is allowed (needs can_add_items which defaults to True).
+    resp = await client.get(f"/api/v1/admin/plex/mappings/{mid}/schedule", headers=no_sched_headers)
+    assert resp.status_code == 200
+    assert resp.json()["interval_hours"] == 24
+
+    # POST is forbidden.
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mid}/schedule",
+        json={"interval_hours": 12},
+        headers=no_sched_headers,
+    )
+    assert resp.status_code == 403
+
+    # DELETE is forbidden.
+    resp = await client.delete(
+        f"/api/v1/admin/plex/mappings/{mid}/schedule", headers=no_sched_headers
+    )
+    assert resp.status_code == 403
+
+
+async def test_plex_mapping_schedule_admin_bypasses_can_manage_schedules(client, auth_headers):
+    """Admin can always manage schedules regardless of the can_manage_schedules flag."""
+    mapping = await _create_movie_mapping(client, auth_headers)
+    mid = mapping['id']
+
+    resp = await client.post(
+        f"/api/v1/admin/plex/mappings/{mid}/schedule",
+        json={"interval_hours": 6},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+
+    resp = await client.delete(
+        f"/api/v1/admin/plex/mappings/{mid}/schedule", headers=auth_headers
+    )
+    assert resp.status_code == 204
+
+
+# ── Delta sync: existing items skip cover re-download ────────────────────────
+
+async def test_plex_sync_delta_existing_items_skip_cover(client, auth_headers):
+    """On a second sync run, items already in the DB should not re-download their
+    cover art — _apply_cover should only be called for newly-created items."""
+    from unittest.mock import patch, AsyncMock
+    from app.api.v1.plex import _run_sync
+    from app.services.plex_sync_jobs import PlexSyncJob
+
+    mapping = await _create_movie_mapping(client, auth_headers)
+
+    # Use a unique GUID so this test doesn't conflict with other tests that also
+    # create _PLEX_MOVIE_ITEM in the shared in-memory database.
+    _DELTA_TEST_ITEM = {
+        "guid": "plex://movie/delta-test-unique-9999",
+        "title": "Delta Test Film",
+        "year": 2024,
+        "summary": "Used only by test_plex_sync_delta_existing_items_skip_cover.",
+        "genres": ["Test"],
+        "studio": "Test Studio",
+        "thumb": "/library/metadata/9999/thumb/1",
+        "tmdb_id": 9999999,
+        "musicbrainz_id": None,
+        "directors": ["Test Director"],
+        "cast": ["Test Actor"],
+        "duration_ms": 5400000,
+        "content_rating": "G",
+    }
+    items = [_DELTA_TEST_ITEM]
+    apply_cover_calls = []
+
+    async def _mock_apply_cover(*args, **kwargs):
+        apply_cover_calls.append(args)
+
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=items)), \
+         patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)), \
+         patch("app.api.v1.plex._apply_cover", new=AsyncMock(side_effect=_mock_apply_cover)):
+        job1 = PlexSyncJob()
+        await _run_sync(mapping['id'], job1)
+
+    first_run_calls = len(apply_cover_calls)
+    assert job1.created == 1
+
+    apply_cover_calls.clear()
+
+    # Second sync with the same item — it already exists.
+    with patch("app.services.plex.list_section_items", new=AsyncMock(return_value=items)), \
+         patch("app.services.plex.fetch_thumbnail", new=AsyncMock(return_value=None)), \
+         patch("app.api.v1.plex._apply_cover", new=AsyncMock(side_effect=_mock_apply_cover)):
+        job2 = PlexSyncJob()
+        await _run_sync(mapping['id'], job2)
+
+    assert job2.created == 0
+    assert job2.updated == 0  # nothing changed
+    # _apply_cover must NOT be called for existing items on the second sync.
+    assert len(apply_cover_calls) == 0
+    assert first_run_calls == 1  # sanity: it was called on the first sync

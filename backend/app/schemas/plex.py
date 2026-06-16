@@ -52,12 +52,22 @@ class PlexMappingResponse(BaseModel):
     category: MediaCategory
     media_subtype: Optional[MediaSubtypeSummary] = None
     last_synced_at: Optional[datetime] = None
+    last_sync_status: Optional[str] = None
+    last_sync_created: Optional[int] = None
+    last_sync_updated: Optional[int] = None
+    last_sync_removed: Optional[int] = None
+    last_sync_error: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
 class PlexMappingUpdate(BaseModel):
     media_subtype_id: int
+
+
+class PlexSyncRequest(BaseModel):
+    """Optional body for POST /mappings/{id}/sync — omitting the body is fine."""
+    auto_remove_stale: bool = False
 
 
 class PlexSyncItem(BaseModel):
@@ -87,6 +97,7 @@ class PlexSyncItem(BaseModel):
 class PlexSyncResult(BaseModel):
     created: int
     updated: int
+    removed: int = 0
     stale_items: List[MediaItemResponse]
 
 
@@ -98,6 +109,7 @@ class PlexSyncStatus(BaseModel):
     processed: int = 0
     created: int = 0
     updated: int = 0
+    removed: int = 0
     error: Optional[str] = None
     result: Optional[PlexSyncResult] = None
 

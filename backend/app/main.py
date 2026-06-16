@@ -14,6 +14,7 @@ from .config import settings
 from .database import engine, Base, AsyncSessionLocal
 from .repositories.user import UserRepository
 from .services.media_subtypes import seed_default_media_subtypes
+from .services.scheduler import scheduler_service
 from .services.search import setup_fts
 from .api.v1.router import router
 from . import models  # noqa: F401 — registers ORM classes before create_all
@@ -82,7 +83,16 @@ async def lifespan(app: FastAPI):
             await seed_default_media_subtypes(db)
 
     await _ensure_admin()
+
+    # Start the APScheduler — skipped for in-memory test DBs so scheduled jobs
+    # don't fire during the test suite.
+    if not settings.database_url.endswith(":memory:"):
+        async with AsyncSessionLocal() as db:
+            await scheduler_service.start(db)
+
     yield
+
+    scheduler_service.shutdown()
 
 
 app = FastAPI(

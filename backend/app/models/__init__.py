@@ -7,6 +7,7 @@ from .media_subtype import MediaSubtype
 from .platform import Platform
 from .plex_config import PlexConfig
 from .plex_library_mapping import PlexLibraryMapping
+from .scheduled_job import ScheduledJob
 from .user import User
 
 # Re-exported so importing this module registers every ORM class on
@@ -24,5 +25,6 @@ __all__ = [
     "Platform",
     "PlexConfig",
     "PlexLibraryMapping",
+    "ScheduledJob",
     "User",
 ]

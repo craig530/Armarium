@@ -10,6 +10,7 @@ from .platforms import router as platforms_router
 from .item_lists import router as item_lists_router
 from .admin import router as admin_router
 from .plex import router as plex_router
+from .schedules import router as schedules_router
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
@@ -23,3 +24,4 @@ router.include_router(platforms_router, prefix="/platforms", tags=["platforms"])
 router.include_router(item_lists_router, prefix="/lists", tags=["lists"])
 router.include_router(admin_router, prefix="/admin", tags=["admin"])
 router.include_router(plex_router, prefix="/admin/plex", tags=["plex"])
+router.include_router(schedules_router, prefix="/admin/schedules", tags=["schedules"])

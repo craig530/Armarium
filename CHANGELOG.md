@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-16
+
+### Added
+
+- **Plex sync scheduling** — each Plex library mapping can now have a recurring
+  sync schedule (every 1 h / 6 h / 12 h / 24 h / weekly), set and managed from
+  the Plex settings page. Scheduled syncs persist across restarts (stored in the
+  new `scheduled_jobs` table) and are driven by APScheduler running within the
+  backend process.
+- **Sync status detail** — the Plex sync result now shows last-run time, status
+  (completed / cancelled / error), and separate counts for items created,
+  updated (metadata changed), and removed. The "updated" count only increments
+  when metadata actually changed, so repeated scans of an unchanged library
+  read as 0 updates rather than "all items updated".
+- **Manual sync: choose whether to auto-remove stale items** — a per-mapping
+  "Auto-remove missing items" checkbox on the Plex settings page (default: off)
+  controls whether a manual sync deletes items no longer in Plex. Previously
+  this could only be triggered separately.
+- **Scheduled sync: auto-remove in setup** — when configuring a scheduled Plex
+  sync, you can opt in to auto-remove items no longer in Plex on each scheduled
+  run (default: on for scheduled syncs).
+- **Efficient delta sync** — on re-syncing an item that already exists, covers
+  are not re-downloaded (the largest cost). Only metadata fields that actually
+  differ are written.
+- **Library Maintenance panel** — the Admin panel now consolidates four
+  maintenance tasks (scan & link duplicate copies, redownload all covers, purge
+  orphan covers, export covers), each with a "Run now" button and its own
+  recurring schedule (replacing the separate Cover Images panel).
+- **Scheduled backups** (SQLite only) — the Database Backups panel now includes
+  a recurring schedule option alongside the existing "Backup now" button.
+- **Export covers schedule** — the export-covers scheduled task accepts a base
+  directory on the server; the export is saved to a date-stamped subfolder.
+  Scheduled exports are limited to once per calendar day.
+- **`can_manage_schedules` permission** — new per-user flag (default: on).
+  Non-admin users with this flag can create, edit, and remove Plex sync
+  schedules. Without it they see schedule info (read-only) but cannot modify
+  schedules. Manual sync is unaffected by this flag. Admin maintenance
+  schedules remain admin-only regardless.
+
 ## [1.3.0] - 2026-06-16
 
 ### Added

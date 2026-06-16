@@ -55,8 +55,9 @@ instead of illuminated manuscripts.
   [MusicBrainz](https://musicbrainz.org/), [Open Library](https://openlibrary.org/),
   and [IGDB](https://www.igdb.com/).
 - **Plex library sync** — connect a Plex Media Server and import your Films &
-  TV and Music libraries as digital items, with per-library media-type
-  mapping, progress tracking, and cleanup of items removed from Plex.
+  TV and Music libraries as digital items, with per-library media-type mapping,
+  progress tracking, scheduled recurring syncs, and cleanup of items removed
+  from Plex.
 - **Track where things live** — organise physical items into a hierarchy of
   locations (shelves, boxes, rooms) with custom icons, and digital items by
   the platform they're on (with platform logos).
@@ -72,8 +73,9 @@ instead of illuminated manuscripts.
 - **Multi-user with admin roles** — secure JWT-based login, with an admin
   panel for managing additional user accounts.
 - **Export and import** — back up or migrate your library as CSV or JSON.
-- **Automatic backups** — scheduled and on-demand backups of your catalogue,
-  with old backups pruned automatically.
+- **Scheduled maintenance** — recurring schedules for database backups, cover
+  image management (redownload, purge orphans, export), and library linking,
+  all configurable from the Admin panel.
 - **Installable as an app (PWA)** — add Armarium to your phone's home screen
   and browse your library offline.
 - **Dark mode** and **keyboard shortcuts** for fast, comfortable browsing.

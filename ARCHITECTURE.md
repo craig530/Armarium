@@ -22,7 +22,7 @@ needs to be updated — keep them in sync.
   completely rather than commenting it out or leaving compatibility shims.
   This was a deliberate decision when retiring the old ad-hoc
   `app/migrations.py` startup-migration functions in favour of Alembic.
-- **Tests are the source of truth for behaviour.** 116 backend tests + a
+- **Tests are the source of truth for behaviour.** 200 backend tests + a
   frontend vitest suite cover the app; any structural change (repository
   refactors, schema changes, etc.) must keep the full suite green.
 
@@ -30,7 +30,7 @@ needs to be updated — keep them in sync.
 
 | Layer | Technology |
 |---|---|
-| Backend | FastAPI (Python 3.11), SQLAlchemy 2.0 (async), Alembic |
+| Backend | FastAPI (Python 3.11), SQLAlchemy 2.0 (async), Alembic, APScheduler 3.10 |
 | Database | SQLite (default, with FTS5 full-text search) or PostgreSQL |
 | Frontend | React 19, Vite 8, Tailwind CSS 4, Zustand 5, react-router-dom 7 |
 | Auth | JWT (python-jose) + bcrypt via passlib |
@@ -115,7 +115,8 @@ Every repository:
 
 Current repositories: `MediaItemRepository`, `MediaSubtypeRepository`,
 `PlatformRepository`, `LocationRepository`, `ItemListRepository`,
-`UserRepository`, `PlexConfigRepository`, `PlexLibraryMappingRepository`.
+`UserRepository`, `PlexConfigRepository`, `PlexLibraryMappingRepository`,
+`ScheduledJobRepository`.
 
 `LocationRepository.descendant_ids(location_id)` returns that location's id
 plus every id nested beneath it (BFS over the parent→children map built from
@@ -212,9 +213,12 @@ produce a false-positive link.
   `is_read_only` overrides every `can_*` flag — mirrored client-side by
   `hasPermission()` in `frontend/src/store/index.js`).
 - Permission flags are boolean columns on `User` (`can_add_items`,
-  `can_manage_locations`, etc.) — add a new flag there, to
-  `schemas/user.py`, and to the relevant router's `require_permission(...)`
-  call when adding a new gated capability.
+  `can_manage_locations`, `can_manage_schedules`, etc.) — add a new flag
+  there, to `schemas/user.py`, and to `api/v1/users.py`'s create/update
+  handlers, and to the relevant router's `require_permission(...)` call when
+  adding a new gated capability. `can_manage_schedules` is special: Plex sync
+  schedule mutations check it inline via `_require_can_manage_schedules`
+  (not `require_permission`) because admins bypass it regardless.
 
 ### 4.5 Error handling
 
@@ -290,6 +294,38 @@ produce a false-positive link.
   on Films & TV item detail pages. `MediaItem.user_rating` (nullable
   `Integer`, CHECK-constrained to 1-5) is the user's personal star rating,
   settable on any item via the `StarRating` component.
+
+### 4.8 Scheduled jobs (APScheduler)
+
+Recurring background tasks (Plex sync, library maintenance, backups) are
+managed by `services/scheduler.py`, which wraps an APScheduler
+`AsyncIOScheduler`:
+
+- **Persistence** — job configs are stored in the `scheduled_jobs` table
+  (`app/models/scheduled_job.py`: `job_type`, `target_id`, `interval_hours`,
+  `auto_remove_stale`, `export_base_dir`, `last_run_at/status/created/updated/removed/error`).
+  APScheduler's built-in SQLAlchemy job store is intentionally NOT used — it
+  serialises via pickle, a security concern. Instead, on startup
+  `scheduler_service.start(db)` reads all rows from `scheduled_jobs` and
+  registers them with APScheduler via `_register(job)`. The DB table and
+  APScheduler are kept in sync by the CRUD endpoints.
+- **Test isolation** — the scheduler is NOT started for in-memory test DBs
+  (checked via `settings.database_url.endswith(":memory:")`). `_register`,
+  `remove`, and `next_run_time` all no-op if `scheduler.running is False`.
+- **Dispatcher** (`_dispatch(scheduled_job_id)`) — single entry point for all
+  jobs: reads config in a fresh session, runs the appropriate handler, and
+  persists the result. `export_covers` is skipped (without updating
+  `last_run_at`) if it already ran today — once-per-day enforcement.
+- **Admin maintenance jobs** (`ADMIN_JOB_TYPES: auto_link, redownload_covers,
+  purge_covers, export_covers, backup`) — managed via `GET/POST/DELETE
+  /api/v1/admin/schedules/{job_type}` (admin only).
+- **Plex sync schedules** — managed via `GET/POST/DELETE
+  /api/v1/admin/plex/mappings/{id}/schedule`. Create/delete requires
+  `can_manage_schedules` or admin; GET requires only `can_add_items`.
+- **Plex delta sync efficiency** — on re-syncing an existing item, covers are
+  not re-downloaded (`_apply_cover` is only called for newly-created items).
+  The `updated` counter only increments when a metadata field actually changed;
+  items that exist with identical data show as processed but not updated.
 
 ## 5. Frontend architecture
 
@@ -431,7 +467,7 @@ every PR. Run locally before committing structural changes:
 **Backend** (from `backend/`, with `.venv` activated):
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt   # requirements-dev.txt: test/lint/SAST tools, not in the production image
-python -m pytest -q          # full test suite (119 tests)
+python -m pytest -q          # full test suite (200 tests)
 ruff check app                # lint
 bandit -r app -ll              # SAST — see "accepted findings" below
 pip-audit                       # dependency CVEs
