@@ -44,11 +44,21 @@ class UserUpdate(BaseModel):
     can_manage_schedules: Optional[bool] = None
 
 
+class UserSummary(BaseModel):
+    """Minimal user representation used by owner pickers and filter dropdowns."""
+    id: int
+    username: str
+    is_system: bool = False
+
+    model_config = {"from_attributes": True}
+
+
 class UserResponse(BaseModel):
     id: int
     username: str
     is_admin: bool
     is_active: bool
+    is_system: bool
     is_read_only: bool
     can_add_items: bool
     can_manage_locations: bool

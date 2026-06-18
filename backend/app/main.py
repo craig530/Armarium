@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .database import engine, Base, AsyncSessionLocal
+from .repositories.app_config import AppConfigRepository
 from .repositories.user import UserRepository
 from .services.media_subtypes import seed_default_media_subtypes
 from .services.scheduler import scheduler_service
@@ -56,6 +57,32 @@ async def _ensure_admin():
                 logger.info("Created admin user: %s", settings.admin_username)
 
 
+async def _ensure_shared_user_and_config():
+    """Seed the shared system user and app_config row if they don't exist.
+
+    For file-based DBs the migration 0007 inserts these; in-memory test DBs
+    skip migrations entirely, so we seed them here the same way.
+    """
+    from .models.user import User
+
+    async with AsyncSessionLocal() as db:
+        user_repo = UserRepository(db)
+        if await user_repo.get_shared_user() is None:
+            shared = User(
+                username="shared",
+                hashed_password="!",
+                is_admin=False,
+                is_active=False,
+                is_system=True,
+            )
+            user_repo.add(shared)
+            await user_repo.commit()
+
+        config_repo = AppConfigRepository(db)
+        await config_repo.get_singleton()  # auto-creates row if absent
+        await config_repo.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.database_url.endswith(":memory:"):
@@ -83,6 +110,7 @@ async def lifespan(app: FastAPI):
             await seed_default_media_subtypes(db)
 
     await _ensure_admin()
+    await _ensure_shared_user_and_config()
 
     # Start the APScheduler — skipped for in-memory test DBs so scheduled jobs
     # don't fire during the test suite.

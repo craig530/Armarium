@@ -11,6 +11,7 @@ async def test_create_user_default_permissions(client, auth_headers):
     assert resp.status_code == 201, resp.text
     user = resp.json()
     assert user["is_admin"] is False
+    assert user["is_system"] is False
     assert user["is_read_only"] is False
     assert user["can_add_items"] is True
     assert user["can_manage_locations"] is True
@@ -21,6 +22,20 @@ async def test_create_user_default_permissions(client, auth_headers):
 
     resp = await client.delete(f"/api/v1/users/{user['id']}", headers=auth_headers)
     assert resp.status_code == 204
+
+
+async def test_user_summary_excludes_system_users(client, auth_headers):
+    resp = await client.get("/api/v1/users/summary", headers=auth_headers)
+    assert resp.status_code == 200
+    usernames = [u["username"] for u in resp.json()]
+    assert "shared" not in usernames
+
+
+async def test_admin_user_list_excludes_system_users(client, auth_headers):
+    resp = await client.get("/api/v1/users", headers=auth_headers)
+    assert resp.status_code == 200
+    usernames = [u["username"] for u in resp.json()]
+    assert "shared" not in usernames
 
 
 async def test_create_user_custom_permissions(client, auth_headers):

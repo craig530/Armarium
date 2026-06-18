@@ -83,6 +83,8 @@ def _to_mapping_response(mapping: PlexLibraryMapping) -> PlexMappingResponse:
         section_type=mapping.section_type,
         category=mapping.category,
         media_subtype=MediaSubtypeSummary.model_validate(mapping.media_subtype) if mapping.media_subtype else None,
+        owner_id=mapping.owner_id,
+        owner_username=mapping.owner.username if mapping.owner else None,
         last_synced_at=mapping.last_synced_at,
         last_sync_status=mapping.last_sync_status,
         last_sync_created=mapping.last_sync_created,
@@ -273,6 +275,8 @@ async def update_mapping(
         )
 
     mapping.media_subtype_id = subtype.id
+    if payload.owner_id is not None:
+        mapping.owner_id = payload.owner_id
     await mapping_repo.commit()
     await mapping_repo.refresh(mapping)
     return _to_mapping_response(mapping)
@@ -490,6 +494,7 @@ async def _run_sync(mapping_id: int, job: PlexSyncJob, auto_remove_stale: bool =
                 item = MediaItem(
                     media_subtype_id=mapping.media_subtype_id,
                     platform_id=config.platform_id,
+                    owner_id=mapping.owner_id,
                     **fields,
                 )
                 db.add(item)

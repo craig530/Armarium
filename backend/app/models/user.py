@@ -11,6 +11,9 @@ class User(Base):
     hashed_password = Column(String(200), nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    # System accounts (e.g. the "shared" pseudo-user) cannot log in and are
+    # hidden from user-management UIs. is_active=False prevents JWT auth.
+    is_system = Column(Boolean, nullable=False, default=False, server_default=false())
 
     # Granular permissions for non-admin users. Admins bypass all of these.
     # `is_read_only` overrides the others — when set, every write action is

@@ -23,8 +23,18 @@ class ItemListRepository(BaseRepository[ItemList]):
         )
         return {row[0]: row[1] for row in rows}
 
-    async def find_by_name(self, category: MediaCategory, name: str, exclude_id: Optional[int] = None) -> Optional[int]:
+    async def find_by_name(
+        self,
+        category: MediaCategory,
+        name: str,
+        owner_id: Optional[int] = None,
+        exclude_id: Optional[int] = None,
+    ) -> Optional[int]:
         stmt = select(ItemList.id).where(ItemList.category == category, ItemList.name == name)
+        if owner_id is not None:
+            stmt = stmt.where(ItemList.owner_id == owner_id)
+        else:
+            stmt = stmt.where(ItemList.owner_id.is_(None))
         if exclude_id is not None:
             stmt = stmt.where(ItemList.id != exclude_id)
         return (await self.db.execute(stmt)).scalar_one_or_none()

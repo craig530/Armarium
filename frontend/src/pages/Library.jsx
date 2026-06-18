@@ -29,7 +29,7 @@ export default function Library() {
   const { category: categorySlug } = useParams()
   const category = categoryFromSlug(categorySlug)
   const { viewMode, setViewMode, filters, setFilter } = useLibraryStore()
-  const { locations, mediaSubtypes, platforms, lists, ensureLoaded } = useReferenceDataStore()
+  const { locations, mediaSubtypes, platforms, lists, users, ensureLoaded } = useReferenceDataStore()
   const unfilteredTotal = useStatsStore((s) => s.stats?.by_category?.[category] ?? null)
 
   const [data, setData] = useState(null)
@@ -61,6 +61,7 @@ export default function Library() {
         ...(filters.year && { year: filters.year }),
         ...(filters.location_id && { location_id: filters.location_id }),
         ...(filters.list_id && { list_id: filters.list_id }),
+        ...(filters.owner_id && { owner_id: filters.owner_id }),
         ...(filters.rating && { min_rating: filters.rating }),
       }
       // Fetch page data and facets in parallel; facets use category-level
@@ -121,7 +122,7 @@ export default function Library() {
     if (filters.media_subtype_id) setFilter('media_subtype_id', '')
     if (filters.list_id) setFilter('list_id', '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category])
+  }, [category])  // owner_id is cross-category — intentionally not cleared here
 
   if (!category) {
     return <Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />
@@ -205,6 +206,7 @@ export default function Library() {
           mediaSubtypes={mediaSubtypes}
           platforms={platforms}
           lists={lists}
+          users={users}
           facetLocationIds={facets?.locationIds ?? null}
           facetPlatformIds={facets?.platformIds ?? null}
           category={category}

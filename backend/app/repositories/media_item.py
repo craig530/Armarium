@@ -64,6 +64,7 @@ class MediaItemRepository(BaseRepository[MediaItem]):
                 selectinload(MediaItem.media_subtype),
                 selectinload(MediaItem.platform),
                 selectinload(MediaItem.lists),
+                selectinload(MediaItem.owner),
             )
             .execution_options(populate_existing=True)
         )
@@ -104,6 +105,7 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         year: Optional[int] = None,
         location_ids: Optional[set[int]] = None,
         list_id: Optional[int] = None,
+        owner_id: Optional[int] = None,
         min_rating: Optional[str] = None,
         sort: str = "created_at",
         order: str = "desc",
@@ -161,6 +163,9 @@ class MediaItemRepository(BaseRepository[MediaItem]):
         if list_id is not None:
             stmt = stmt.join(media_item_lists, media_item_lists.c.media_item_id == MediaItem.id)
             filters.append(media_item_lists.c.item_list_id == list_id)
+
+        if owner_id is not None:
+            filters.append(MediaItem.owner_id == owner_id)
 
         if min_rating == "unrated":
             filters.append(MediaItem.user_rating.is_(None))

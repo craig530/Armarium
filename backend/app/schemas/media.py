@@ -60,6 +60,10 @@ class MediaItemCreate(BaseModel):
     # in the same category as the item's media subtype.
     list_ids: Optional[List[int]] = None
 
+    # User ownership — defaults to the creating user or the shared system user
+    # depending on the app's ownership_mode setting.
+    owner_id: Optional[int] = None
+
 
 class MediaItemUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=500)
@@ -96,6 +100,7 @@ class MediaItemUpdate(BaseModel):
     location_id: Optional[int] = None
     platform_id: Optional[int] = None
     list_ids: Optional[List[int]] = None
+    owner_id: Optional[int] = None
 
 
 class MediaSubtypeSummary(BaseModel):
@@ -186,6 +191,9 @@ class MediaItemResponse(BaseModel):
     linked_items: List[LinkedItemSummary] = []        # computed
     ownership: str = "physical"                       # computed: physical | digital | both
     list_ids: List[int] = []                          # computed, from item.lists
+
+    owner_id: Optional[int] = None
+    owner_username: Optional[str] = None              # computed, from owner relationship
 
     created_at: datetime
     updated_at: datetime

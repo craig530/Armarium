@@ -60,6 +60,8 @@ class PlexMappingResponse(BaseModel):
     section_type: str
     category: MediaCategory
     media_subtype: Optional[MediaSubtypeSummary] = None
+    owner_id: Optional[int] = None
+    owner_username: Optional[str] = None    # computed from owner relationship
     last_synced_at: Optional[datetime] = None
     last_sync_status: Optional[str] = None
     last_sync_created: Optional[int] = None
@@ -72,6 +74,7 @@ class PlexMappingResponse(BaseModel):
 
 class PlexMappingUpdate(BaseModel):
     media_subtype_id: int
+    owner_id: Optional[int] = None
 
 
 class PlexSyncRequest(BaseModel):

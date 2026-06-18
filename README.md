@@ -70,6 +70,10 @@ instead of illuminated manuscripts.
   options that have items in the current view are shown.
 - **Star ratings at a glance** — items with a user rating show a subtle star
   strip on the cover image so you can see your ratings without opening an item.
+- **Ownership** — items, lists, and Plex library mappings carry an owner
+  (configurable in Settings → Ownership). Default "Shared" mode treats
+  everything as belonging to the house; "By Login" mode tracks who created
+  each item, with an owner filter in the library and per-item ownership editing.
 - **Multi-user with admin roles** — secure JWT-based login, with an admin
   panel for managing additional user accounts.
 - **Export and import** — back up or migrate your library as CSV or JSON.

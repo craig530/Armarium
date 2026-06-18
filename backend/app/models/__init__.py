@@ -1,3 +1,4 @@
+from .app_config import AppConfig
 from .enums import LinkMatchType, MediaCategory, Supertype
 from .item_link import ItemLink
 from .item_list import ItemList
@@ -14,6 +15,7 @@ from .user import User
 # Base.metadata (required by Alembic autogenerate and Base.metadata.create_all
 # for in-memory test DBs), even though nothing here references them directly.
 __all__ = [
+    "AppConfig",
     "LinkMatchType",
     "MediaCategory",
     "Supertype",

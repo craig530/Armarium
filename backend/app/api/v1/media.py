@@ -5,8 +5,10 @@ import math
 from ...database import AsyncSessionLocal
 from ...models.media import MediaItem
 from ...models.enums import LinkMatchType, MediaCategory, Supertype
+from ...repositories.app_config import AppConfigRepository, get_app_config_repository
 from ...repositories.location import LocationRepository, get_location_repository
 from ...repositories.media_item import MediaItemRepository, get_media_item_repository
+from ...repositories.user import UserRepository, get_user_repository
 from ...schemas.media import (
     MediaItemCreate, MediaItemUpdate, MediaItemResponse, MediaListResponse, LibraryStats,
     MediaSubtypeSummary, PlatformSummary, LinkedItemSummary, ItemLinkCreate,
@@ -113,8 +115,8 @@ def _item_to_response(
                 "runtime_minutes", "rating", "tmdb_rating", "cast_list", "seasons_owned", "episode_count",
                 "author", "publisher", "page_count", "isbn", "language",
                 "developer", "igdb_id",
-                "musicbrainz_id", "tmdb_id", "openlibrary_id",
-                "media_subtype_id", "location_id", "platform_id",
+                "musicbrainz_id", "tmdb_id", "openlibrary_id", "plex_rating_key",
+                "media_subtype_id", "location_id", "platform_id", "owner_id",
                 "created_at", "updated_at",
             ]
         },
@@ -131,6 +133,7 @@ def _item_to_response(
         linked_items=linked,
         ownership=ownership,
         list_ids=[lst.id for lst in item.lists],
+        owner_username=item.owner.username if item.owner else None,
     )
 
 
@@ -180,6 +183,7 @@ async def list_media(
     year: Optional[int] = None,
     location_id: Optional[int] = None,
     list_id: Optional[int] = None,
+    owner_id: Optional[int] = None,
     min_rating: Optional[str] = Query(None, pattern="^(unrated|3|4|5)$"),
     sort: str = Query("created_at", pattern="^(title|year|created_at)$"),
     order: str = Query("desc", pattern="^(asc|desc)$"),
@@ -191,7 +195,8 @@ async def list_media(
     items, total = await repo.search(
         q=q, category=category, supertype=supertype, media_subtype_id=media_subtype_id,
         platform_id=platform_id, genre=genre, year=year, location_ids=location_ids,
-        list_id=list_id, min_rating=min_rating, sort=sort, order=order, page=page, per_page=per_page,
+        list_id=list_id, owner_id=owner_id, min_rating=min_rating, sort=sort, order=order,
+        page=page, per_page=per_page,
     )
 
     return MediaListResponse(
@@ -232,8 +237,10 @@ async def _fetch_cover_in_background(item_id: int, url: str) -> None:
 async def create_media(
     payload: MediaItemCreate,
     background_tasks: BackgroundTasks,
-    _=Depends(require_permission("can_add_items")),
+    current_user=Depends(require_permission("can_add_items")),
     repo: MediaItemRepository = Depends(get_media_item_repository),
+    user_repo: UserRepository = Depends(get_user_repository),
+    config_repo: AppConfigRepository = Depends(get_app_config_repository),
 ):
     subtype = await repo.resolve_subtype(payload.media_subtype_id)
     await repo.check_location_exists(payload.location_id)
@@ -242,6 +249,19 @@ async def create_media(
 
     data = payload.model_dump()
     list_ids = data.pop("list_ids")
+    provided_owner_id = data.pop("owner_id")
+
+    if provided_owner_id is not None:
+        effective_owner_id = provided_owner_id
+    else:
+        cfg = await config_repo.get_singleton()
+        if cfg.ownership_mode == "by_login":
+            effective_owner_id = current_user.id
+        else:
+            shared = await user_repo.get_shared_user()
+            effective_owner_id = shared.id if shared else None
+
+    data["owner_id"] = effective_owner_id
     item = MediaItem(**data)
 
     # Resolve and attach lists before the item is added to the session — once

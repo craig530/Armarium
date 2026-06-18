@@ -50,7 +50,7 @@ export default function SettingsPlex() {
   const { user } = useAuthStore()
   const isAdmin = !!user?.is_admin
   const canManageSchedules = isAdmin || !!user?.can_manage_schedules
-  const { mediaSubtypes, ensureLoaded } = useReferenceDataStore()
+  const { mediaSubtypes, users, ensureLoaded } = useReferenceDataStore()
   const [config, setConfig] = useState(null)
   const [sections, setSections] = useState([])
   const [mappings, setMappings] = useState([])
@@ -168,6 +168,18 @@ export default function SettingsPlex() {
       const updated = await plexApi.updateMapping(mapping.id, { media_subtype_id: Number(subtypeId) })
       setMappings((prev) => prev.map((m) => (m.id === mapping.id ? updated : m)))
       useReferenceDataStore.getState().invalidate()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    }
+  }
+
+  const handleOwnerChange = async (mapping, ownerId) => {
+    try {
+      const updated = await plexApi.updateMapping(mapping.id, {
+        media_subtype_id: mapping.media_subtype?.id,
+        owner_id: ownerId ? Number(ownerId) : null,
+      })
+      setMappings((prev) => prev.map((m) => (m.id === mapping.id ? updated : m)))
     } catch (err) {
       toast.error(err.response?.data?.detail || err.message)
     }
@@ -409,6 +421,29 @@ export default function SettingsPlex() {
                             <span className="text-xs text-amber-500">— sync disabled until set</span>
                           )}
                         </div>
+
+                        {/* Owner selector */}
+                        {users.length > 0 && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-gray-400 shrink-0">Owner:</span>
+                            {isAdmin ? (
+                              <select
+                                value={m.owner_id ?? ''}
+                                onChange={(e) => handleOwnerChange(m, e.target.value)}
+                                className="text-xs rounded-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                              >
+                                <option value="">Shared</option>
+                                {users.map((u) => (
+                                  <option key={u.id} value={u.id}>{u.username}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-xs text-gray-600 dark:text-gray-300">
+                                {m.owner_username || 'Shared'}
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         {/* Schedule */}
                         <div className="pt-1 border-t border-gray-100 dark:border-gray-800">

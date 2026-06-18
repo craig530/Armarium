@@ -130,7 +130,7 @@ export default function ItemDetail() {
   const navigate = useNavigate()
   const fileRef = useRef()
 
-  const { locations, platforms, mediaSubtypes, lists, plexStatus, ensureLoaded } = useReferenceDataStore()
+  const { locations, platforms, mediaSubtypes, lists, users, plexStatus, ensureLoaded } = useReferenceDataStore()
   const [item, setItem] = useState(null)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})
@@ -195,6 +195,7 @@ export default function ItemDetail() {
         igdb_id: form.igdb_id ? Number(form.igdb_id) : null,
         location_id: form.location_id ? Number(form.location_id) : null,
         platform_id: form.platform_id ? Number(form.platform_id) : null,
+        owner_id: form.owner_id ? Number(form.owner_id) : null,
       }
       const updated = await mediaApi.update(id, payload)
       setItem(updated)
@@ -383,6 +384,21 @@ export default function ItemDetail() {
               </div>
             )
           })()}
+          {item.owner_username && item.owner_username !== 'shared' && (
+            <div>
+              <button
+                className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                title={`Filter library by ${item.owner_username}`}
+                onClick={() => {
+                  const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
+                  useLibraryStore.getState().setFilter('owner_id', String(item.owner_id))
+                  navigate(slug ? `/library/${slug}` : '/library')
+                }}
+              >
+                {item.owner_username}
+              </button>
+            </div>
+          )}
           {item.genres && (
             <div className="flex flex-wrap gap-1">
               {item.genres.split(',').map((g) => (
@@ -489,6 +505,18 @@ export default function ItemDetail() {
           <Input label="Edition" value={form.edition || ''} onChange={(e) => set('edition', e.target.value)} />
 
           <ListsMultiSelect category={item.category} value={form.list_ids || []} onChange={(ids) => set('list_ids', ids)} className="col-span-2" />
+
+          {users.length > 0 && (
+            <SelectMenu
+              label="Owner"
+              groups={[{ options: [
+                { value: '', label: 'Shared' },
+                ...users.map((u) => ({ value: String(u.id), label: u.username })),
+              ] }]}
+              value={form.owner_id ? String(form.owner_id) : ''}
+              onChange={(value) => set('owner_id', value ? Number(value) : null)}
+            />
+          )}
 
           {item.category === 'music' && <>
             <Input label="Artist" value={form.artist || ''} onChange={(e) => set('artist', e.target.value)} />

@@ -20,6 +20,7 @@ export default function FilterPanel({
   mediaSubtypes = [],
   platforms = [],
   lists = [],
+  users = [],
   facetLocationIds = null,
   facetPlatformIds = null,
   category,
@@ -89,8 +90,8 @@ export default function FilterPanel({
 
   const hasActiveFilters = !!(
     filters.q || filters.supertype || filters.media_subtype_id || filters.platform_id ||
-    filters.genre || filters.year || filters.location_id || filters.list_id || filters.rating ||
-    (showCategory && filters.category)
+    filters.genre || filters.year || filters.location_id || filters.list_id || filters.owner_id ||
+    filters.rating || (showCategory && filters.category)
   )
 
   const categoryGroups = [{
@@ -121,6 +122,11 @@ export default function FilterPanel({
     ],
   }]
 
+  const listLabel = (l) =>
+    l.owner_username && l.owner_username !== 'shared'
+      ? `${l.name} (${l.owner_username})`
+      : l.name
+
   const listGroups = effectiveCategory
     ? [{
         options: [
@@ -128,7 +134,7 @@ export default function FilterPanel({
           ...lists
             .filter((l) => l.category === effectiveCategory)
             .sort((a, b) => a.name.localeCompare(b.name))
-            .map((l) => ({ value: String(l.id), label: l.name })),
+            .map((l) => ({ value: String(l.id), label: listLabel(l) })),
         ],
       }]
     : [
@@ -138,9 +144,16 @@ export default function FilterPanel({
           options: lists
             .filter((l) => l.category === c.value)
             .sort((a, b) => a.name.localeCompare(b.name))
-            .map((l) => ({ value: String(l.id), label: l.name })),
+            .map((l) => ({ value: String(l.id), label: listLabel(l) })),
         })).filter((g) => g.options.length > 0),
       ]
+
+  const ownerGroups = [{
+    options: [
+      { value: '', label: 'All owners' },
+      ...users.map((u) => ({ value: String(u.id), label: u.username })),
+    ],
+  }]
 
   const ratingGroups = [{
     options: [
@@ -193,6 +206,10 @@ export default function FilterPanel({
 
       {lists.length > 0 && (
         <SelectMenu groups={listGroups} value={filters.list_id} onChange={(value) => setFilter('list_id', value)} className="w-40" />
+      )}
+
+      {users.length > 0 && (
+        <SelectMenu groups={ownerGroups} value={filters.owner_id || ''} onChange={(value) => setFilter('owner_id', value)} className="w-36" />
       )}
 
       <SelectMenu groups={ratingGroups} value={filters.rating || ''} onChange={(value) => setFilter('rating', value)} className="w-40" />

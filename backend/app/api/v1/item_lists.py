@@ -3,7 +3,9 @@ from typing import List, Optional
 
 from ...models.enums import MediaCategory
 from ...models.item_list import ItemList
+from ...repositories.app_config import AppConfigRepository, get_app_config_repository
 from ...repositories.item_list import ItemListRepository, get_item_list_repository
+from ...repositories.user import UserRepository, get_user_repository
 from ...schemas.item_list import ItemListCreate, ItemListUpdate, ItemListResponse
 from ...services.auth import get_current_user, require_permission
 
@@ -16,6 +18,8 @@ def _to_response(item_list: ItemList, item_count: int = 0) -> ItemListResponse:
         name=item_list.name,
         category=item_list.category,
         item_count=item_count,
+        owner_id=item_list.owner_id,
+        owner_username=item_list.owner.username if item_list.owner else None,
         created_at=item_list.created_at,
         updated_at=item_list.updated_at,
     )
@@ -37,14 +41,26 @@ async def list_lists(
 @router.post("", response_model=ItemListResponse, status_code=201)
 async def create_list(
     payload: ItemListCreate,
-    _=Depends(require_permission("can_manage_lists")),
+    current_user=Depends(require_permission("can_manage_lists")),
     repo: ItemListRepository = Depends(get_item_list_repository),
+    user_repo: UserRepository = Depends(get_user_repository),
+    config_repo: AppConfigRepository = Depends(get_app_config_repository),
 ):
-    existing = await repo.find_by_name(payload.category, payload.name)
-    if existing is not None:
-        raise HTTPException(status_code=409, detail="A list with this name already exists for this category")
+    if payload.owner_id is not None:
+        effective_owner_id = payload.owner_id
+    else:
+        cfg = await config_repo.get_singleton()
+        if cfg.ownership_mode == "by_login":
+            effective_owner_id = current_user.id
+        else:
+            shared = await user_repo.get_shared_user()
+            effective_owner_id = shared.id if shared else None
 
-    item_list = ItemList(name=payload.name, category=payload.category)
+    existing = await repo.find_by_name(payload.category, payload.name, owner_id=effective_owner_id)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="A list with this name already exists for this owner and category")
+
+    item_list = ItemList(name=payload.name, category=payload.category, owner_id=effective_owner_id)
     repo.add(item_list)
     await repo.commit()
     await repo.refresh(item_list)
@@ -62,11 +78,19 @@ async def update_list(
     if not item_list:
         raise HTTPException(status_code=404, detail="List not found")
 
-    if payload.name != item_list.name:
-        existing = await repo.find_by_name(item_list.category, payload.name, exclude_id=list_id)
+    new_name = payload.name
+    new_owner_id = payload.owner_id if payload.owner_id is not None else item_list.owner_id
+
+    if new_name != item_list.name or new_owner_id != item_list.owner_id:
+        existing = await repo.find_by_name(
+            item_list.category, new_name, owner_id=new_owner_id, exclude_id=list_id
+        )
         if existing is not None:
-            raise HTTPException(status_code=409, detail="A list with this name already exists for this category")
-        item_list.name = payload.name
+            raise HTTPException(status_code=409, detail="A list with this name already exists for this owner and category")
+
+    item_list.name = new_name
+    if payload.owner_id is not None:
+        item_list.owner_id = payload.owner_id
 
     await repo.commit()
     await repo.refresh(item_list)

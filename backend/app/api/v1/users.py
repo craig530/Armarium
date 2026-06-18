@@ -3,15 +3,24 @@ from typing import List
 
 from ...models.user import User
 from ...repositories.user import UserRepository, get_user_repository
-from ...schemas.user import UserCreate, UserUpdate, UserResponse
-from ...services.auth import hash_password, get_current_admin
+from ...schemas.user import UserCreate, UserUpdate, UserResponse, UserSummary
+from ...services.auth import hash_password, get_current_admin, get_current_user
 
 router = APIRouter()
 
 
+@router.get("/summary", response_model=List[UserSummary])
+async def list_users_summary(
+    _=Depends(get_current_user),
+    repo: UserRepository = Depends(get_user_repository),
+):
+    """Non-admin endpoint: returns all non-system users for owner pickers."""
+    return await repo.list_non_system()
+
+
 @router.get("", response_model=List[UserResponse])
 async def list_users(_=Depends(get_current_admin), repo: UserRepository = Depends(get_user_repository)):
-    return await repo.list_ordered()
+    return await repo.list_non_system()
 
 
 @router.post("", response_model=UserResponse, status_code=201)

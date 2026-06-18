@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from .app_config import router as app_config_router
 from .media import router as media_router
 from .locations import router as locations_router
 from .lookup import router as lookup_router
@@ -23,5 +24,6 @@ router.include_router(media_subtypes_router, prefix="/media-subtypes", tags=["me
 router.include_router(platforms_router, prefix="/platforms", tags=["platforms"])
 router.include_router(item_lists_router, prefix="/lists", tags=["lists"])
 router.include_router(admin_router, prefix="/admin", tags=["admin"])
+router.include_router(app_config_router, prefix="/admin/config", tags=["config"])
 router.include_router(plex_router, prefix="/admin/plex", tags=["plex"])
 router.include_router(schedules_router, prefix="/admin/schedules", tags=["schedules"])

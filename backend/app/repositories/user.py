@@ -15,8 +15,23 @@ class UserRepository(BaseRepository[User]):
     async def list_ordered(self) -> Sequence[User]:
         return (await self.db.execute(select(User).order_by(User.created_at))).scalars().all()
 
+    async def list_non_system(self) -> Sequence[User]:
+        """All users except hidden system accounts (e.g. the shared pseudo-user)."""
+        return (
+            await self.db.execute(
+                select(User).where(User.is_system.is_(False)).order_by(User.created_at)
+            )
+        ).scalars().all()
+
     async def get_by_username(self, username: str) -> Optional[User]:
         return (await self.db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+
+    async def get_shared_user(self) -> Optional[User]:
+        return (
+            await self.db.execute(
+                select(User).where(User.username == "shared", User.is_system.is_(True))
+            )
+        ).scalar_one_or_none()
 
     async def count_admins(self) -> int:
         return (

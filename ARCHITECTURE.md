@@ -116,7 +116,7 @@ Every repository:
 Current repositories: `MediaItemRepository`, `MediaSubtypeRepository`,
 `PlatformRepository`, `LocationRepository`, `ItemListRepository`,
 `UserRepository`, `PlexConfigRepository`, `PlexLibraryMappingRepository`,
-`ScheduledJobRepository`.
+`ScheduledJobRepository`, `AppConfigRepository`.
 
 `LocationRepository.descendant_ids(location_id)` returns that location's id
 plus every id nested beneath it (BFS over the parent→children map built from
@@ -194,6 +194,20 @@ produce a false-positive link.
     path — it's SQLite-only and intentionally outside `Base.metadata`.
 - `_ensure_admin()` creates the default admin user on first run if no users
   exist, and warns (not errors) if `ADMIN_PASSWORD` is still `"changeme"`.
+- `_ensure_shared_user_and_config()` seeds the hidden `shared` system user
+  (`is_system=True`, `is_active=False`, `hashed_password="!"` — can't log in)
+  and the `app_config` singleton (`id=1`) if they don't exist. For file-based
+  DBs migration `0007` inserts them; in-memory test DBs skip Alembic and rely
+  on this function instead. `AppConfigRepository.get_singleton()` auto-creates
+  the row if absent, so it is safe to call at any time.
+- **Ownership model**: `app_config.ownership_mode` is either `"shared"`
+  (default — new items are owned by the shared system user) or `"by_login"`
+  (new items are owned by the creating user). Owner is stored as a nullable
+  FK `owner_id` → `users.id` (`ondelete="SET NULL"`) on `media_items`,
+  `item_lists`, and `plex_library_mappings`. The `GET /admin/config` /
+  `PUT /admin/config` / `POST /admin/config/migrate-ownership` endpoints
+  (admin-only) manage this setting; switching shared→by_login requires the
+  migration step first (to avoid orphaned shared-owned items).
 
 ### 4.4 Auth & permissions
 

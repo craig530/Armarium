@@ -7,8 +7,8 @@ from .enums import MediaCategory
 
 class PlexLibraryMapping(Base):
     """Links a Plex library section to one of our categories, and tracks when
-    it was last synced. Synced items are filed under the platform configured
-    on `PlexConfig`, shared across all mappings."""
+    it was last synced. Each mapping may have a distinct owner so different
+    Plex libraries can sync to different user accounts."""
 
     __tablename__ = "plex_library_mappings"
 
@@ -27,6 +27,10 @@ class PlexLibraryMapping(Base):
     # silently start filing items under a different type than the admin chose.
     media_subtype_id = Column(Integer, ForeignKey("media_subtypes.id", ondelete="RESTRICT"), nullable=True)
     media_subtype = relationship("MediaSubtype", lazy="selectin")
+
+    # Owner assigned to items synced from this library.
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    owner = relationship("User", foreign_keys=[owner_id], lazy="selectin")
 
     last_synced_at = Column(DateTime, nullable=True)
 

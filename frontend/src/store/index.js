@@ -6,6 +6,8 @@ import { platformsApi } from '../api/platforms'
 import { mediaSubtypesApi } from '../api/mediaSubtypes'
 import { listsApi } from '../api/lists'
 import { plexApi } from '../api/plex'
+import { usersApi } from '../api/users'
+import { appConfigApi } from '../api/appConfig'
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 
@@ -130,6 +132,7 @@ const DEFAULT_FILTERS = {
   year: '',
   location_id: '',
   list_id: '',
+  owner_id: '',
   rating: '',
   sort: 'created_at',
   order: 'desc',
@@ -165,6 +168,8 @@ export const useReferenceDataStore = create((set, get) => ({
   platforms: [],
   mediaSubtypes: [],
   lists: [],
+  users: [],
+  appConfig: null,
   plexStatus: null,
   loaded: false,
   loading: null,
@@ -176,14 +181,20 @@ export const useReferenceDataStore = create((set, get) => ({
       })
       .catch(() => set({ loading: null }))
     set({ loading: promise })
-    // plexStatus is loaded separately so it never blocks the main reference
-    // data or hangs tests that only mock the core four APIs.
+    // These load independently so they never block the main reference data or
+    // hang tests that only mock the core four APIs.
     plexApi.getStatus()
       .then((plexStatus) => set({ plexStatus }))
+      .catch(() => {})
+    usersApi.summary()
+      .then((users) => set({ users }))
+      .catch(() => {})
+    appConfigApi.get()
+      .then((appConfig) => set({ appConfig }))
       .catch(() => {})
     return promise
   },
   invalidate() {
-    set({ loaded: false, plexStatus: null })
+    set({ loaded: false, plexStatus: null, users: [], appConfig: null })
   },
 }))

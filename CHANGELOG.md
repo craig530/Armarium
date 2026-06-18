@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-18
+
+### Added
+
+- **Ownership** — every media item, list, and Plex library mapping now has an
+  owner linked to a user account. The default ownership mode is "Shared"
+  (items belong to a hidden system user), with "By Login" mode available for
+  multi-user setups where each item is owned by the person who created it.
+- **Owner field on item detail** — items show an owner chip in view mode;
+  tapping it navigates to the library filtered by that owner. In edit mode a
+  dropdown lets admins reassign ownership to any user.
+- **Owner filter in Library** — a new Owner filter in the filter panel lets
+  users browse items by owner.
+- **Owner per Plex library mapping** — each Plex library sync can target a
+  different user; new items created by that sync are owned by the configured
+  user.
+- **Library Ownership settings page** — new standalone Settings → Ownership
+  page with radio buttons for Shared / By Login modes. Switching to By Login
+  mode requires a one-step migration that reassigns all existing items, lists,
+  and Plex mappings to a chosen user.
+- **Owner displayed on lists** — in filter dropdowns, lists owned by a
+  non-shared user are shown as "Name (username)" so users can distinguish
+  same-named lists created by different people.
+- **`GET /users/summary`** — new endpoint available to all authenticated users
+  (not admin-only) returning `[{id, username}]`, used to populate owner
+  pickers without exposing admin user data.
+- **`plex_rating_key` in media response** — the field was stored but
+  accidentally omitted from the API response payload; now always returned.
+
+### Changed
+
+- Admin `GET /users` and `GET /users/summary` now exclude the internal
+  `shared` system user from all results.
+- Migration `0007`: adds `is_system` to `users`, inserts the shared system
+  user, creates `app_config` singleton table, adds `owner_id` to
+  `media_items` / `item_lists` / `plex_library_mappings`, and updates the
+  `item_lists` unique constraint from `(category, name)` to
+  `(category, owner_id, name)`.
+
 ## [1.4.2] - 2026-06-18
 
 ### Added

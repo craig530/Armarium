@@ -5,6 +5,7 @@ from ..database import Base
 from .item_list import media_item_lists
 
 
+
 class MediaItem(Base):
     __tablename__ = "media_items"
     __table_args__ = (
@@ -71,6 +72,11 @@ class MediaItem(Base):
 
     # User-curated lists (e.g. "Want to read") within this item's category
     lists = relationship("ItemList", secondary=media_item_lists, lazy="selectin")
+
+    # Owner: the user who "owns" this item (who added it or whose copy it is).
+    # NULL only during the migration window; always set by the application layer.
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    owner = relationship("User", foreign_keys=[owner_id], lazy="selectin")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

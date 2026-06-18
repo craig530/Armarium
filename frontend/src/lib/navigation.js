@@ -1,4 +1,4 @@
-import { MapPin, Tv, Tags, Cast, ListChecks } from 'lucide-react'
+import { MapPin, Tv, Tags, Cast, ListChecks, Users } from 'lucide-react'
 
 // Shared between the desktop Navbar's "Manage" dropdown and the Profile
 // page's mobile equivalent (see Navbar.jsx and Profile.jsx).
@@ -7,5 +7,6 @@ export const MANAGE_LINKS = [
   { to: '/settings/platforms', label: 'Platforms', icon: Tv },
   { to: '/settings/media-subtypes', label: 'Mediums', icon: Tags },
   { to: '/settings/lists', label: 'Lists', icon: ListChecks },
+  { to: '/settings/ownership', label: 'Ownership', icon: Users },
   { to: '/settings/plex', label: 'Plex Sync', icon: Cast },
 ]

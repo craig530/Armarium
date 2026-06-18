@@ -22,6 +22,7 @@ EXPECTED_TABLES = {
     "item_lists",
     "media_item_lists",
     "scheduled_jobs",
+    "app_config",
 }
 
 
@@ -73,7 +74,7 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
         engine.dispose()
 
     assert count == 16
-    assert version == "0006"
+    assert version == "0007"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
@@ -153,3 +154,37 @@ def test_upgrade_head_adds_plex_rating_key_and_machine_identifier(tmp_sqlite_url
 
     assert "plex_rating_key" in media_columns
     assert "machine_identifier" in plex_columns
+
+
+def test_upgrade_head_adds_ownership(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            user_columns = {col["name"] for col in inspect(conn).get_columns("users")}
+            media_columns = {col["name"] for col in inspect(conn).get_columns("media_items")}
+            list_columns = {col["name"] for col in inspect(conn).get_columns("item_lists")}
+            mapping_columns = {col["name"] for col in inspect(conn).get_columns("plex_library_mappings")}
+            tables = set(inspect(conn).get_table_names())
+
+            shared = conn.execute(
+                text("SELECT id, is_system, is_active FROM users WHERE username = 'shared'")
+            ).fetchone()
+            ownership_mode = conn.execute(
+                text("SELECT ownership_mode FROM app_config WHERE id = 1")
+            ).scalar()
+    finally:
+        engine.dispose()
+
+    assert "is_system" in user_columns
+    assert "owner_id" in media_columns
+    assert "owner_id" in list_columns
+    assert "owner_id" in mapping_columns
+    assert "app_config" in tables
+
+    assert shared is not None, "shared system user should be seeded"
+    assert shared[1] == 1, "is_system should be True"
+    assert shared[2] == 0, "is_active should be False"
+
+    assert ownership_mode == "shared"
