@@ -39,7 +39,12 @@ class UserRepository(BaseRepository[User]):
         ).scalar_one()
 
     async def any_exist(self) -> bool:
-        return (await self.db.execute(select(User.id).limit(1))).scalar_one_or_none() is not None
+        """True if any non-system user account exists (excludes the shared pseudo-user)."""
+        return (
+            await self.db.execute(
+                select(User.id).where(User.is_system.is_(False)).limit(1)
+            )
+        ).scalar_one_or_none() is not None
 
 
 async def get_user_repository(db: AsyncSession = Depends(get_db)) -> UserRepository:

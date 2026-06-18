@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-06-18
+
+### Fixed
+
+- **Fresh-install admin account never created** — `UserRepository.any_exist()`
+  previously counted all users including the hidden shared system user inserted
+  by migration 0007. On a clean install, `_ensure_admin()` saw a user already
+  existing and silently skipped creating the admin account, leaving the instance
+  with no way to log in. Fixed by filtering `is_system = False` in `any_exist()`.
+
 ## [1.6.0] - 2026-06-18
 
 ### Added
@@ -485,7 +495,10 @@ Initial public release.
 - Versioned Docker images published to GHCR for each tagged release — see
   [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-[Unreleased]: https://github.com/craig530/Armarium/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/craig530/Armarium/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/craig530/Armarium/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/craig530/Armarium/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/craig530/Armarium/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/craig530/Armarium/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/craig530/Armarium/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/craig530/Armarium/compare/v1.3.0...v1.4.0

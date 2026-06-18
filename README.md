@@ -14,8 +14,7 @@ platforms, and want one place to answer "do I already own this, and where is
 it?"
 
 **Project website:** [armarium.app](https://armarium.app) — feature overview,
-screenshots, and self-hosting information. The source repository will be made
-public shortly.
+screenshots, and self-hosting information.
 
 ## What's in a name?
 
@@ -30,14 +29,16 @@ instead of illuminated manuscripts.
 
 ## Screenshots
 
+See [armarium.app](https://armarium.app) for a full gallery with light/dark/mobile views.
+
 |                                                 |                                                   |
 | ----------------------------------------------- | ------------------------------------------------- |
 | ![Library grid view](docs/screenshots/library.png) | ![Locations manager](docs/screenshots/locations.png) |
-| Library grid view, with search, filters and sorting | Locations manager — model your home as a nested tree of rooms, shelves and boxes |
+| Library grid view — search, filter, and sort across Music, Films & TV, Books, and Games | Locations manager — model your home as a nested tree of rooms, shelves and boxes |
 | ![Platforms manager](docs/screenshots/platforms.png) | ![Mediums manager](docs/screenshots/mediums.png) |
-| Platforms manager — track digital storefronts and streaming services, including synced sources like Plex | Mediums manager — customise the physical/digital media types within each category |
+| Platforms manager — track digital storefronts and streaming services, including Plex | Mediums manager — customise the physical/digital media types within each category |
 | ![Admin users panel](docs/screenshots/admin-users.png) |  |
-| Admin panel — manage multiple users with granular per-user permissions |  |
+| Admin panel — manage users, permissions, Plex sync, maintenance schedules, and category visibility |  |
 
 ## Features
 
@@ -80,6 +81,11 @@ instead of illuminated manuscripts.
 - **Scheduled maintenance** — recurring schedules for database backups, cover
   image management (redownload, purge orphans, export), and library linking,
   all configurable from the Admin panel.
+- **Category visibility** — disable entire categories you don't use (e.g.
+  disable Music, Films & TV, and Books to use Armarium as a pure game
+  catalogue). Disabled categories vanish from all navigation, the home page,
+  the add flow, and filter panels — configurable per-deployment from the
+  Admin panel.
 - **Installable as an app (PWA)** — add Armarium to your phone's home screen
   and browse your library offline.
 - **Dark mode** and **keyboard shortcuts** for fast, comfortable browsing.
@@ -387,7 +393,7 @@ armarium/
 │   │                            Open Library), cover art, search, Plex sync,
 │   │                            rate limiting
 │   ├── alembic/                 migration environment (0001_baseline = v1 schema)
-│   └── tests/                   pytest test suite (119+ tests)
+│   └── tests/                   pytest test suite (226+ tests)
 ├── frontend/                  React 19 + Vite + Tailwind CSS
 │   ├── src/
 │   │   ├── api/                 API client (cookie-based auth, 401 redirect)

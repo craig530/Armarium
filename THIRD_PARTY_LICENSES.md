@@ -44,7 +44,7 @@ are **not** covered by Armarium's MIT licence — see
 | [aiosqlite](https://aiosqlite.omnilib.dev) | 0.19.0 | [MIT](https://spdx.org/licenses/MIT.html) | Async SQLite driver |
 | [asyncpg](https://github.com/MagicStack/asyncpg) | 0.30.0 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Optional PostgreSQL driver (see [Advanced: Using PostgreSQL](README.md#advanced-using-postgresql)) |
 | [httpx](https://github.com/encode/httpx) | 0.28.1 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | HTTP client for TMDB/MusicBrainz/Open Library |
-| [python-multipart](https://github.com/Kludex/python-multipart) | 0.0.27 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Multipart form parsing (file uploads) |
+| [python-multipart](https://github.com/Kludex/python-multipart) | 0.0.31 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Multipart form parsing (file uploads) |
 | [Pillow](https://python-pillow.github.io) | 12.2.0 | [MIT-CMU](https://spdx.org/licenses/MIT-CMU.html) | Cover/icon/logo image processing |
 | [python-dotenv](https://github.com/theskumar/python-dotenv) | 1.2.2 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | Loading `.env` configuration |
 | [Pydantic](https://github.com/pydantic/pydantic) | 2.13.4 | [MIT](https://spdx.org/licenses/MIT.html) | Data validation / schemas |
@@ -82,7 +82,7 @@ are likewise MIT, BSD, Apache-2.0, or PSF-licensed.
 | bcrypt | 4.0.1 | Apache Software License | https://github.com/pyca/bcrypt/ |
 | rsa | 4.9.1 | Apache Software License | https://stuvel.eu/rsa |
 | uvloop | 0.22.1 | Apache Software License; MIT License | (part of uvicorn[standard]) |
-| python-multipart | 0.0.27 | Apache-2.0 | https://github.com/Kludex/python-multipart |
+| python-multipart | 0.0.31 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | zxing-cpp | 3.0.0 | Apache-2.0 | https://github.com/zxing-cpp/zxing-cpp |
 | cryptography | 49.0.0 | Apache-2.0 OR BSD-3-Clause | https://github.com/pyca/cryptography |
 | passlib | 1.7.4 | BSD | https://passlib.readthedocs.io |
