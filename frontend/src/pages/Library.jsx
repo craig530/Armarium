@@ -29,8 +29,9 @@ export default function Library() {
   const { category: categorySlug } = useParams()
   const category = categoryFromSlug(categorySlug)
   const { viewMode, setViewMode, filters, setFilter } = useLibraryStore()
-  const { locations, mediaSubtypes, platforms, lists, users, ensureLoaded } = useReferenceDataStore()
+  const { locations, mediaSubtypes, platforms, lists, users, appConfig, ensureLoaded } = useReferenceDataStore()
   const unfilteredTotal = useStatsStore((s) => s.stats?.by_category?.[category] ?? null)
+  const disabledCategories = appConfig?.disabled_categories ?? []
 
   const [data, setData] = useState(null)
   const [page, setPage] = useState(1)
@@ -126,6 +127,9 @@ export default function Library() {
 
   if (!category) {
     return <Navigate to={`/library/${DEFAULT_CATEGORY_SLUG}`} replace />
+  }
+  if (appConfig !== null && disabledCategories.includes(category)) {
+    return <Navigate to="/" replace />
   }
 
   const handleDeleted = (id) => {

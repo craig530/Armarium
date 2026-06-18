@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-18
+
+### Added
+
+- **Category visibility** — admins can disable top-level media categories
+  (Music, Films & TV, Books, Games) from the Admin panel. Disabled categories
+  are hidden from all navigation (desktop sidebar, mobile tab bar), the home
+  page browse rows, the add flow type picker, and the category filter dropdown.
+  Navigating directly to a disabled library URL redirects to the home page.
+  Allows running Armarium as a focused single-category catalog (e.g. games
+  only) without the other sections appearing anywhere in the UI.
+- **`disabled_categories` field on `GET /api/v1/admin/config`** — now
+  accessible to all authenticated users (not admin-only) so the frontend can
+  apply visibility rules without an extra admin check. Updating disabled
+  categories is still admin-only via `PUT /api/v1/admin/config`.
+
+### Changed
+
+- `GET /api/v1/admin/config` is now accessible to all authenticated users
+  (previously admin-only). The response includes `disabled_categories` needed
+  by the UI.
+
 ## [1.5.0] - 2026-06-18
 
 ### Added

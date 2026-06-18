@@ -34,7 +34,9 @@ const DEFAULT_FILTERS = {
 
 export default function Home() {
   const navigate = useNavigate()
-  const { locations, mediaSubtypes, platforms, lists, ensureLoaded } = useReferenceDataStore()
+  const { locations, mediaSubtypes, platforms, lists, appConfig, ensureLoaded } = useReferenceDataStore()
+  const disabledCategories = appConfig?.disabled_categories ?? []
+  const enabledCategories = CATEGORIES.filter((c) => !disabledCategories.includes(c.value))
 
   // Unfiltered "browse" rows
   const [recent, setRecent] = useState(null)
@@ -64,12 +66,14 @@ export default function Home() {
 
   useEffect(() => {
     if (hasActiveFilters) return
+    const disabled = appConfig?.disabled_categories ?? []
+    const cats = CATEGORIES.filter((c) => !disabled.includes(c.value))
     let cancelled = false
     setBrowseLoading(true)
 
     Promise.all([
       mediaApi.list({ sort: 'created_at', order: 'desc', per_page: ROW_PER_PAGE }),
-      ...CATEGORIES.map((c) =>
+      ...cats.map((c) =>
         mediaApi.list({ category: c.value, sort: 'created_at', order: 'desc', per_page: ROW_PER_PAGE })
       ),
     ])
@@ -77,14 +81,14 @@ export default function Home() {
         if (cancelled) return
         setRecent(recentResult)
         const map = {}
-        CATEGORIES.forEach((c, i) => { map[c.value] = categoryResults[i] })
+        cats.forEach((c, i) => { map[c.value] = categoryResults[i] })
         setByCategory(map)
       })
       .catch((err) => toast.error(err.message))
       .finally(() => { if (!cancelled) setBrowseLoading(false) })
 
     return () => { cancelled = true }
-  }, [hasActiveFilters])
+  }, [hasActiveFilters, appConfig])
 
   const load = useCallback(async (p = 1) => {
     abortRef.current?.abort()
@@ -209,7 +213,7 @@ export default function Home() {
             items={recent ? dedupeLinkedItems(recent.items) : []}
             loading={browseLoading}
           />
-          {CATEGORIES.map((c) => (
+          {enabledCategories.map((c) => (
             <MediaRow
               key={c.value}
               title={c.label}

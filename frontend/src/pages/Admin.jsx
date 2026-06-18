@@ -5,6 +5,7 @@ import client from '../api/client'
 import { adminApi } from '../api/admin'
 import { plexApi } from '../api/plex'
 import { schedulesApi } from '../api/schedules'
+import { appConfigApi } from '../api/appConfig'
 import { exportCovers } from '../lib/export'
 import { useAuthStore, useReferenceDataStore } from '../store'
 import Button from '../components/ui/Button'
@@ -13,6 +14,8 @@ import SelectMenu from '../components/ui/SelectMenu'
 import PlatformLogo from '../components/ui/PlatformLogo'
 import ScheduleControl from '../components/admin/ScheduleControl'
 import { useConfirm } from '../hooks/useConfirm'
+import { CATEGORIES } from '../lib/categories'
+import { CATEGORY_ICONS } from '../lib/mediaIcons'
 import toast from 'react-hot-toast'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,50}$/
@@ -386,6 +389,9 @@ export default function Admin() {
         )}
       </div>
 
+      {/* Category visibility card */}
+      <CategoryVisibilityPanel />
+
       {/* Backup card */}
       <BackupPanel />
 
@@ -397,6 +403,66 @@ export default function Admin() {
 
       {/* Danger zone */}
       <DangerZonePanel />
+    </div>
+  )
+}
+
+function CategoryVisibilityPanel() {
+  const { invalidate } = useReferenceDataStore()
+  const [config, setConfig] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    appConfigApi.get().then(setConfig).catch(() => {})
+  }, [])
+
+  const handleToggle = async (categoryValue) => {
+    if (!config || saving) return
+    const current = config.disabled_categories ?? []
+    const updated = current.includes(categoryValue)
+      ? current.filter((c) => c !== categoryValue)
+      : [...current, categoryValue]
+    setSaving(true)
+    try {
+      const result = await appConfigApi.update({ disabled_categories: updated })
+      setConfig(result)
+      invalidate()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Category Visibility</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Disable categories you don&apos;t use — they&apos;ll be hidden from all navigation and add flows.
+      </p>
+      {!config ? (
+        <p className="text-sm text-gray-400 animate-pulse">Loading…</p>
+      ) : (
+        <div className="space-y-2">
+          {CATEGORIES.map((c) => {
+            const Icon = CATEGORY_ICONS[c.value]
+            const isEnabled = !(config.disabled_categories ?? []).includes(c.value)
+            return (
+              <label key={c.value} className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isEnabled}
+                  onChange={() => handleToggle(c.value)}
+                  disabled={saving}
+                  className="rounded-sm"
+                />
+                <Icon size={16} className="text-gray-500 dark:text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-700 dark:text-gray-300">{c.label}</span>
+              </label>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

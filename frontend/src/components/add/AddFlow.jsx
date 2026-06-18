@@ -93,8 +93,11 @@ export default function AddFlow({ onSaved }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [mediaKind, setMediaKind] = useState('movie')
 
-  const { locations, platforms, lists, ensureLoaded } = useReferenceDataStore()
+  const { locations, platforms, lists, appConfig, ensureLoaded } = useReferenceDataStore()
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
+
+  const disabledCategories = appConfig?.disabled_categories ?? []
+  const enabledCategories = CATEGORIES.filter((c) => !disabledCategories.includes(c.value))
 
   const step = stepStack[stepStack.length - 1]
   const groupIndex = STEP_GROUPS[step]
@@ -326,6 +329,7 @@ export default function AddFlow({ onSaved }) {
           onChangeCategory={handleChangeCategory}
           onChangeSupertype={handleChangeSupertype}
           onSelectList={handleSelectListMode}
+          categories={enabledCategories}
         />
       )}
 

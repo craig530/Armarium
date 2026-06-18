@@ -206,8 +206,17 @@ produce a false-positive link.
   FK `owner_id` → `users.id` (`ondelete="SET NULL"`) on `media_items`,
   `item_lists`, and `plex_library_mappings`. The `GET /admin/config` /
   `PUT /admin/config` / `POST /admin/config/migrate-ownership` endpoints
-  (admin-only) manage this setting; switching shared→by_login requires the
+  manage this setting; `GET` is available to all authenticated users,
+  `PUT`/`POST` are admin-only. Switching shared→by_login requires the
   migration step first (to avoid orphaned shared-owned items).
+- **Category visibility**: `app_config.disabled_categories` is a JSON TEXT
+  column (array of category values, e.g. `["music","books"]`). When a category
+  is listed there, the frontend hides it from navigation, the home page browse
+  rows, the add-flow type picker, and the filter dropdown. The backend does not
+  enforce this — disabled categories remain queryable via the API; enforcement
+  is purely presentational. Valid values: `music`, `films_tv`, `books`,
+  `games`. Managed via `PUT /admin/config` (`admin`-only); read via
+  `GET /admin/config` (all authenticated users).
 
 ### 4.4 Auth & permissions
 

@@ -9,9 +9,20 @@ async def test_app_config_default_is_shared(client, auth_headers):
     assert resp.json()["ownership_mode"] == "shared"
 
 
-async def test_app_config_requires_admin(client, auth_headers):
-    _, headers = await _create_user_and_login(client, auth_headers, "configuser")
+async def test_app_config_get_accessible_to_non_admin(client, auth_headers):
+    _, headers = await _create_user_and_login(client, auth_headers, "configreader")
     resp = await client.get("/api/v1/admin/config", headers=headers)
+    assert resp.status_code == 200
+    assert "ownership_mode" in resp.json()
+
+
+async def test_app_config_update_requires_admin(client, auth_headers):
+    _, headers = await _create_user_and_login(client, auth_headers, "confignoadmin")
+    resp = await client.put(
+        "/api/v1/admin/config",
+        json={"ownership_mode": "shared"},
+        headers=headers,
+    )
     assert resp.status_code == 403
 
 

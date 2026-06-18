@@ -74,7 +74,7 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
         engine.dispose()
 
     assert count == 16
-    assert version == "0007"
+    assert version == "0008"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
@@ -188,3 +188,20 @@ def test_upgrade_head_adds_ownership(tmp_sqlite_url):
     assert shared[2] == 0, "is_active should be False"
 
     assert ownership_mode == "shared"
+
+
+def test_upgrade_head_adds_disabled_categories(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            config_columns = {col["name"] for col in inspect(conn).get_columns("app_config")}
+            disabled = conn.execute(
+                text("SELECT disabled_categories FROM app_config WHERE id = 1")
+            ).scalar()
+    finally:
+        engine.dispose()
+
+    assert "disabled_categories" in config_columns
+    assert disabled == "[]"

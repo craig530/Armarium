@@ -1,3 +1,5 @@
+import json
+
 from fastapi import Depends
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +15,7 @@ class AppConfigRepository(BaseRepository[AppConfig]):
     async def get_singleton(self) -> AppConfig:
         row = (await self.db.execute(select(AppConfig).where(AppConfig.id == 1))).scalar_one_or_none()
         if row is None:
-            row = AppConfig(id=1, ownership_mode="shared")
+            row = AppConfig(id=1, ownership_mode="shared", disabled_categories="[]")
             self.db.add(row)
             await self.db.flush()
         return row
@@ -21,6 +23,14 @@ class AppConfigRepository(BaseRepository[AppConfig]):
     async def set_ownership_mode(self, mode: str) -> AppConfig:
         await self.db.execute(
             update(AppConfig).where(AppConfig.id == 1).values(ownership_mode=mode)
+        )
+        return await self.get_singleton()
+
+    async def set_disabled_categories(self, categories: list) -> AppConfig:
+        await self.db.execute(
+            update(AppConfig).where(AppConfig.id == 1).values(
+                disabled_categories=json.dumps(sorted(categories))
+            )
         )
         return await self.get_singleton()
 

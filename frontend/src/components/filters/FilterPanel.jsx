@@ -1,4 +1,4 @@
-import { useLibraryStore } from '../../store'
+import { useLibraryStore, useReferenceDataStore } from '../../store'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
 import { flattenLocations, reachableLocationIds } from '../../lib/locations'
 import Button from '../ui/Button'
@@ -33,6 +33,10 @@ export default function FilterPanel({
   const filters = filtersProp || libraryStore.filters
   const setFilter = setFilterProp || libraryStore.setFilter
   const resetFilters = resetFiltersProp || libraryStore.resetFilters
+
+  const appConfig = useReferenceDataStore((s) => s.appConfig)
+  const disabledCategories = appConfig?.disabled_categories ?? []
+  const visibleCategoryList = CATEGORIES.filter((c) => !disabledCategories.includes(c.value))
 
   const effectiveCategory = category || filters.category
 
@@ -75,7 +79,7 @@ export default function FilterPanel({
           { label: 'Digital', subtypes: categorySubtypes.filter((s) => s.supertype === 'digital') },
         ]
       })()
-    : CATEGORIES.map((c) => ({
+    : visibleCategoryList.map((c) => ({
         label: c.label,
         subtypes: supertypeFilteredSubtypes
           .filter((s) => s.category === c.value)
@@ -97,7 +101,7 @@ export default function FilterPanel({
   const categoryGroups = [{
     options: [
       { value: '', label: 'All categories' },
-      ...CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
+      ...visibleCategoryList.map((c) => ({ value: c.value, label: c.label })),
     ],
   }]
 
@@ -139,7 +143,7 @@ export default function FilterPanel({
       }]
     : [
         { options: [{ value: '', label: 'All lists' }] },
-        ...CATEGORIES.map((c) => ({
+        ...visibleCategoryList.map((c) => ({
           label: c.label,
           options: lists
             .filter((l) => l.category === c.value)

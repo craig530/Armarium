@@ -6,17 +6,22 @@ from ...models.item_list import ItemList
 from ...models.plex_library_mapping import PlexLibraryMapping
 from ...repositories.app_config import AppConfigRepository, get_app_config_repository
 from ...repositories.user import UserRepository, get_user_repository
-from ...schemas.app_config import AppConfigResponse, AppConfigUpdate, OwnershipMigrateRequest
-from ...services.auth import get_current_admin
+from ...schemas.app_config import (
+    AppConfigResponse, AppConfigUpdate, OwnershipMigrateRequest,
+    _VALID_CATEGORIES,
+)
+from ...services.auth import get_current_user, get_current_admin
 
 router = APIRouter()
 
 
 @router.get("", response_model=AppConfigResponse)
 async def get_config(
-    _=Depends(get_current_admin),
+    _=Depends(get_current_user),
     repo: AppConfigRepository = Depends(get_app_config_repository),
 ):
+    """Return global app configuration. Available to all authenticated users
+    so the UI can hide disabled categories without an admin check."""
     return await repo.get_singleton()
 
 
@@ -28,14 +33,26 @@ async def update_config(
     user_repo: UserRepository = Depends(get_user_repository),
 ):
     cfg = await repo.get_singleton()
-    if payload.ownership_mode == "by_login" and cfg.ownership_mode == "shared":
-        # Require migration first — caller must POST /migrate-ownership before
-        # switching mode so all existing items get assigned to a real user.
-        raise HTTPException(
-            status_code=400,
-            detail="Use POST /admin/config/migrate-ownership to assign existing items to a user before switching to 'by_login' mode.",
-        )
-    return await repo.set_ownership_mode(payload.ownership_mode)
+
+    if payload.ownership_mode is not None:
+        if payload.ownership_mode == "by_login" and cfg.ownership_mode == "shared":
+            raise HTTPException(
+                status_code=400,
+                detail="Use POST /admin/config/migrate-ownership to assign existing items to a user before switching to 'by_login' mode.",
+            )
+        await repo.set_ownership_mode(payload.ownership_mode)
+
+    if payload.disabled_categories is not None:
+        invalid = set(payload.disabled_categories) - _VALID_CATEGORIES
+        if invalid:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown categories: {sorted(invalid)}. Valid values: {sorted(_VALID_CATEGORIES)}",
+            )
+        await repo.set_disabled_categories(payload.disabled_categories)
+
+    await repo.commit()
+    return await repo.get_singleton()
 
 
 @router.post("/migrate-ownership", response_model=AppConfigResponse)
@@ -67,4 +84,6 @@ async def migrate_ownership(
     await db.execute(
         update(PlexLibraryMapping).where(PlexLibraryMapping.owner_id == shared.id).values(owner_id=target.id)
     )
-    return await repo.set_ownership_mode("by_login")
+    result = await repo.set_ownership_mode("by_login")
+    await repo.commit()
+    return result

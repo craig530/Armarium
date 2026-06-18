@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { Sun, Moon, Plus, LayoutGrid, Settings, ShieldCheck, LogOut, User, Download, ChevronDown } from 'lucide-react'
-import { useThemeStore, useAuthStore, hasPermission } from '../../store'
+import { useThemeStore, useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -10,22 +10,21 @@ import { MANAGE_LINKS } from '../../lib/navigation'
 import { exportLibrary } from '../../lib/export'
 import Logo from '../ui/Logo'
 
-const navItems = [
-  { to: '/', label: 'All', icon: LayoutGrid, end: true },
-  ...CATEGORIES.map((c) => ({
-    to: `/library/${c.slug}`,
-    label: c.label,
-    icon: CATEGORY_ICONS[c.value],
-    value: c.value,
-  })),
-]
-
 export default function Navbar() {
   const { dark, toggle } = useThemeStore()
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [manageMenuOpen, setManageMenuOpen] = useState(false)
+  const appConfig = useReferenceDataStore((s) => s.appConfig)
+  const disabledCategories = appConfig?.disabled_categories ?? []
+
+  const navItems = [
+    { to: '/', label: 'All', icon: LayoutGrid, end: true },
+    ...CATEGORIES
+      .filter((c) => !disabledCategories.includes(c.value))
+      .map((c) => ({ to: `/library/${c.slug}`, label: c.label, icon: CATEGORY_ICONS[c.value], value: c.value })),
+  ]
 
   const handleExport = async (format) => {
     try {

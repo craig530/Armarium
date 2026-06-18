@@ -9,7 +9,17 @@ const TILE_BASE = 'flex flex-col items-center gap-2 py-4 rounded-xl text-sm font
 const TILE_ACTIVE = 'bg-brand-600 text-white border-brand-600'
 const TILE_INACTIVE = 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-transparent hover:bg-gray-200 dark:hover:bg-gray-700'
 
-export default function TypeStep({ category, supertype, creatingList, onChangeCategory, onChangeSupertype, onSelectList }) {
+export default function TypeStep({
+  category,
+  supertype,
+  creatingList,
+  onChangeCategory,
+  onChangeSupertype,
+  onSelectList,
+  categories = CATEGORIES,
+}) {
+  const colCount = Math.min(Math.max(categories.length, 1), 4)
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -19,8 +29,11 @@ export default function TypeStep({ category, supertype, creatingList, onChangeCa
 
       <div>
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</p>
-        <div className="grid grid-cols-4 gap-2">
-          {CATEGORIES.map((c) => {
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
+        >
+          {categories.map((c) => {
             const Icon = CATEGORY_ICONS[c.value]
             return (
               <button
