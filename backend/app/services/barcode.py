@@ -63,6 +63,11 @@ def process_barcode(raw_input: str) -> dict:
         _log(raw_input, result)
         return result
 
+    # GTIN-14 / ITF-14 (14 digits, e.g. some Nintendo Switch cartridge boxes):
+    # strip the leading packaging indicator and retry as EAN-13.
+    if length == 14 and raw_cleaned[0] == "0":
+        return process_barcode(raw_cleaned[1:])
+
     # CDs, DVDs and Blu-rays: UPC-A (12 digits) or EAN-13 (13 digits)
     if length == 12:
         upc_a = raw_cleaned

@@ -21,6 +21,7 @@ import TMDBAttribution from '../components/ui/TMDBAttribution'
 import IGDBAttribution from '../components/ui/IGDBAttribution'
 import BarcodeDisplay from '../components/ui/BarcodeDisplay'
 import { CATEGORIES, categoryLabel, supertypeLabel } from '../lib/categories'
+import { dedupeLinkedItems } from '../lib/media'
 import { useConfirm } from '../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
@@ -139,6 +140,7 @@ export default function ItemDetail() {
   const [showLinkSearch, setShowLinkSearch] = useState(false)
   const [refreshingCover, setRefreshingCover] = useState(false)
   const [deletingCover, setDeletingCover] = useState(false)
+  const [coverVersion, setCoverVersion] = useState(0)
   const [confirm, confirmDialog] = useConfirm()
   const [moreByCreator, setMoreByCreator] = useState([])
 
@@ -167,7 +169,7 @@ export default function ItemDetail() {
     if (!creatorField) return
     const excludeIds = new Set([item.id, ...(item.linked_items || []).map((l) => l.id)])
     mediaApi.list({ category: item.category, q: creatorField, per_page: 20 })
-      .then((r) => setMoreByCreator(r.items.filter((i) => !excludeIds.has(i.id))))
+      .then((r) => setMoreByCreator(dedupeLinkedItems(r.items.filter((i) => !excludeIds.has(i.id)))))
       .catch(() => {})
   }, [item])
 
@@ -224,6 +226,7 @@ export default function ItemDetail() {
       const updated = await mediaApi.uploadCover(id, file)
       setItem(updated)
       setForm(updated)
+      setCoverVersion((v) => v + 1)
       toast.success('Cover updated')
     } catch (err) {
       toast.error(err.message)
@@ -236,6 +239,7 @@ export default function ItemDetail() {
       const updated = await mediaApi.refreshCover(id)
       setItem(updated)
       setForm(updated)
+      setCoverVersion((v) => v + 1)
       toast.success('Cover refreshed')
     } catch (err) {
       toast.error(err.message)
@@ -250,6 +254,7 @@ export default function ItemDetail() {
       const updated = await mediaApi.deleteCover(id)
       setItem(updated)
       setForm(updated)
+      setCoverVersion((v) => v + 1)
       toast.success('Cover removed')
     } catch (err) {
       toast.error(err.message)
@@ -323,7 +328,7 @@ export default function ItemDetail() {
       <div className="flex gap-6 items-start">
         <div className="shrink-0 w-36 rounded-xl overflow-hidden shadow-lg bg-gray-100 dark:bg-gray-800">
           {item.cover_url ? (
-            <img key={item.cover_url} src={coverProxyUrl(item.cover_url)} alt={item.title} className={clsx('w-full object-cover', item.category === 'music' ? 'aspect-square' : 'aspect-2/3')} onError={(e) => { e.target.style.display = 'none' }} />
+            <img key={`${item.cover_url}-${coverVersion}`} src={coverProxyUrl(item.cover_url)} alt={item.title} className={clsx('w-full object-cover', item.category === 'music' ? 'aspect-square' : 'aspect-2/3')} onError={(e) => { e.target.style.display = 'none' }} />
           ) : (
             <CoverImage category={item.category} title={item.title} size="full" className={item.category === 'music' ? 'aspect-square' : 'aspect-2/3'} />
           )}
@@ -384,21 +389,6 @@ export default function ItemDetail() {
               </div>
             )
           })()}
-          {item.owner_username && item.owner_username !== 'shared' && (
-            <div>
-              <button
-                className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                title={`Filter library by ${item.owner_username}`}
-                onClick={() => {
-                  const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
-                  useLibraryStore.getState().setFilter('owner_id', String(item.owner_id))
-                  navigate(slug ? `/library/${slug}` : '/library')
-                }}
-              >
-                {item.owner_username}
-              </button>
-            </div>
-          )}
           {item.genres && (
             <div className="flex flex-wrap gap-1">
               {item.genres.split(',').map((g) => (
@@ -448,6 +438,7 @@ export default function ItemDetail() {
                   <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{linked.title}</p>
                   <p className="text-xs text-gray-400 truncate">
                     {supertypeLabel(linked.supertype)} · {linked.media_subtype?.name} · {linked.supertype === 'physical' ? (linked.location_path || 'No location') : (linked.platform?.name || 'No platform')}
+                    {linked.owner_display_name && ` · ${linked.owner_display_name}`}
                   </p>
                 </div>
               </button>
@@ -623,6 +614,13 @@ export default function ItemDetail() {
               {[
                 ['Type', item.media_subtype?.name],
                 ['Year', item.year],
+                item.owner_username && item.owner_username !== 'shared'
+                  ? ['Owner', item.owner_username, () => {
+                      const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
+                      useLibraryStore.getState().setFilter('owner_id', String(item.owner_id))
+                      navigate(slug ? `/library/${slug}` : '/library')
+                    }]
+                  : null,
                 ['Edition', item.edition],
                 ['Artist', item.artist],
                 ['Label', item.label],
@@ -642,14 +640,21 @@ export default function ItemDetail() {
                 ['Developer', item.developer],
                 ['Barcode', item.barcode],
               ]
+                .filter(Boolean)
                 .filter(([, v]) => v)
-                .map(([label, value]) => (
+                .map(([label, value, onClick]) => (
                   <div key={label}>
                     <dt className="text-xs text-gray-400">{label}</dt>
                     <dd className={clsx(
                       'text-sm font-medium text-gray-900 dark:text-white',
                       label === 'Barcode' && 'font-mono tracking-widest'
-                    )}>{value}</dd>
+                    )}>
+                      {onClick ? (
+                        <button className="text-brand-600 dark:text-brand-400 hover:underline" onClick={onClick}>
+                          {value}
+                        </button>
+                      ) : value}
+                    </dd>
                   </div>
                 ))}
             </dl>

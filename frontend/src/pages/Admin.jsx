@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download, Link2 } from 'lucide-react'
+import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download, Link2, Pencil, Users } from 'lucide-react'
 import client from '../api/client'
 import { adminApi } from '../api/admin'
 import { plexApi } from '../api/plex'
 import { schedulesApi } from '../api/schedules'
 import { appConfigApi } from '../api/appConfig'
+import { usersApi } from '../api/users'
 import { exportCovers } from '../lib/export'
-import { useAuthStore, useReferenceDataStore } from '../store'
+import { useAuthStore, useReferenceDataStore, useStatsStore } from '../store'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import SelectMenu from '../components/ui/SelectMenu'
@@ -31,6 +32,7 @@ const PERMISSION_FLAGS = [
 
 const EMPTY_FORM = {
   username: '',
+  display_name: '',
   password: '',
   is_admin: false,
   is_read_only: false,
@@ -76,8 +78,9 @@ function PermissionToggles({ value, onChange }) {
 }
 
 function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
-  const [editing, setEditing] = useState(false)
+  const [editMode, setEditMode] = useState(null) // null | 'password' | 'display_name'
   const [newPassword, setNewPassword] = useState('')
+  const [newDisplayName, setNewDisplayName] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
 
@@ -113,14 +116,29 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
     }
   }
 
-  const handlePasswordReset = async () => {
+  const handlePasswordSave = async () => {
     if (!newPassword.trim()) return
     setSaving(true)
     try {
       await client.put(`/users/${user.id}`, { password: newPassword })
       toast.success('Password updated')
-      setEditing(false)
+      setEditMode(null)
       setNewPassword('')
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDisplayNameSave = async () => {
+    setSaving(true)
+    try {
+      await client.put(`/users/${user.id}`, { display_name: newDisplayName.trim() || null })
+      toast.success('Display name updated')
+      setEditMode(null)
+      setNewDisplayName('')
+      onUpdated()
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -139,12 +157,17 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
     }
   }
 
+  const displayLabel = user.display_name || user.username
+
   return (
     <div className="py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-gray-900 dark:text-white">{user.username}</span>
+            <span className="font-medium text-gray-900 dark:text-white">{displayLabel}</span>
+            {user.display_name && (
+              <span className="text-xs text-gray-400">@{user.username}</span>
+            )}
             {user.is_admin && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
                 Admin
@@ -164,8 +187,8 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
           </p>
         </div>
 
-        {/* Password reset inline */}
-        {editing ? (
+        {/* Inline edit panel for password or display name */}
+        {editMode === 'password' ? (
           <div className="flex items-center gap-2">
             <input
               type="password"
@@ -175,17 +198,42 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
               className="w-36 text-base sm:text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
               autoFocus
             />
-            <button onClick={handlePasswordReset} disabled={saving} className="p-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">
+            <button onClick={handlePasswordSave} disabled={saving} className="p-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">
               <Check size={14} />
             </button>
-            <button onClick={() => { setEditing(false); setNewPassword('') }} className="p-1 rounded-sm text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+            <button onClick={() => { setEditMode(null); setNewPassword('') }} className="p-1 rounded-sm text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+              <X size={14} />
+            </button>
+          </div>
+        ) : editMode === 'display_name' ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newDisplayName}
+              onChange={(e) => setNewDisplayName(e.target.value)}
+              placeholder={user.display_name || 'Display name'}
+              maxLength={100}
+              className="w-36 text-base sm:text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+              autoFocus
+            />
+            <button onClick={handleDisplayNameSave} disabled={saving} className="p-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20">
+              <Check size={14} />
+            </button>
+            <button onClick={() => { setEditMode(null); setNewDisplayName('') }} className="p-1 rounded-sm text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
               <X size={14} />
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setEditing(true)}
+              onClick={() => { setEditMode('display_name'); setNewDisplayName(user.display_name || '') }}
+              title="Edit display name"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={() => setEditMode('password')}
               title="Reset password"
               className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
@@ -270,6 +318,7 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
 
 export default function Admin() {
   const { user: currentUser } = useAuthStore()
+  const { invalidate: invalidateRefData } = useReferenceDataStore()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -299,12 +348,15 @@ export default function Admin() {
 
     setCreating(true)
     try {
-      await client.post('/users', form)
+      await client.post('/users', { ...form, display_name: form.display_name.trim() || undefined })
       toast.success(`User "${form.username}" created`)
       setShowForm(false)
       setForm({ ...EMPTY_FORM })
       setFormErrors({})
       load()
+      // Refresh the reference data store so owner dropdowns on item pages
+      // pick up the new user without requiring a full page reload.
+      invalidateRefData()
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -341,6 +393,12 @@ export default function Admin() {
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
               error={formErrors.username}
               autoFocus
+            />
+            <Input
+              label="Display name (optional)"
+              value={form.display_name}
+              onChange={(e) => setForm((f) => ({ ...f, display_name: e.target.value }))}
+              placeholder="Shown in ownership labels — defaults to username"
             />
             <Input
               label="Password"
@@ -389,8 +447,11 @@ export default function Admin() {
         )}
       </div>
 
-      {/* Category visibility card */}
-      <CategoryVisibilityPanel />
+      {/* Ownership mode card */}
+      <OwnershipPanel />
+
+      {/* Medium visibility card */}
+      <MediumVisibilityPanel />
 
       {/* Backup card */}
       <BackupPanel />
@@ -407,8 +468,165 @@ export default function Admin() {
   )
 }
 
-function CategoryVisibilityPanel() {
-  const { invalidate } = useReferenceDataStore()
+function OwnershipPanel() {
+  const { setAppConfig } = useReferenceDataStore()
+  const [config, setConfig] = useState(null)
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [migrating, setMigrating] = useState(false)
+  const [migrateUserId, setMigrateUserId] = useState('')
+  const [showMigrateForm, setShowMigrateForm] = useState(false)
+
+  useEffect(() => {
+    Promise.all([appConfigApi.get(), usersApi.summary()])
+      .then(([cfg, us]) => {
+        setConfig(cfg)
+        setUsers(us.filter((u) => !u.is_system))
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const handleSetShared = async () => {
+    setSaving(true)
+    try {
+      const updated = await appConfigApi.update({ ownership_mode: 'shared' })
+      setConfig(updated)
+      setAppConfig(updated)
+      toast.success('Ownership mode set to Shared')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleMigrate = async () => {
+    if (!migrateUserId) return toast.error('Select a user to assign existing items to')
+    setMigrating(true)
+    try {
+      const updated = await appConfigApi.migrateOwnership({ target_user_id: Number(migrateUserId) })
+      setConfig(updated)
+      setAppConfig(updated)
+      setShowMigrateForm(false)
+      setMigrateUserId('')
+      toast.success('Ownership migrated and mode set to By User')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.message)
+    } finally {
+      setMigrating(false)
+    }
+  }
+
+  if (loading) return null
+
+  const isShared = config?.ownership_mode === 'shared'
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Users size={16} className="text-gray-400" />
+        <h2 className="font-semibold text-gray-900 dark:text-white">Ownership Mode</h2>
+      </div>
+      <p className="text-sm text-gray-500 dark:text-gray-400 -mt-2">
+        Control how items and lists are assigned to user accounts.
+      </p>
+
+      <div className="space-y-3">
+        <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+          isShared
+            ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+        }`}>
+          <input
+            type="radio"
+            name="ownership_mode"
+            value="shared"
+            checked={isShared}
+            onChange={handleSetShared}
+            className="mt-0.5"
+            disabled={saving || migrating}
+          />
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-white">Shared</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              All items and lists belong to a shared household account by default. Users can still
+              assign individual items or lists to their own login.
+            </p>
+          </div>
+        </label>
+
+        <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+          !isShared
+            ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+        }`}>
+          <input
+            type="radio"
+            name="ownership_mode"
+            value="by_user"
+            checked={!isShared}
+            onChange={() => setShowMigrateForm(true)}
+            className="mt-0.5"
+            disabled={saving || migrating || !isShared}
+          />
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-white">By User</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Each item and list defaults to the account of whoever added it. Great for households
+              where multiple people maintain separate collections.
+            </p>
+          </div>
+        </label>
+      </div>
+
+      {showMigrateForm && isShared && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 space-y-3">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+            Assign existing items to a user
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            All currently shared items, lists, and Plex mappings will be reassigned to the user
+            you choose below. New items will default to whoever adds them.
+          </p>
+          <select
+            className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            value={migrateUserId}
+            onChange={(e) => setMigrateUserId(e.target.value)}
+          >
+            <option value="">Select a user…</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setShowMigrateForm(false); setMigrateUserId('') }}
+              disabled={migrating}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              loading={migrating}
+              disabled={!migrateUserId}
+              onClick={handleMigrate}
+            >
+              Migrate &amp; Switch to By User
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MediumVisibilityPanel() {
+  const { setAppConfig } = useReferenceDataStore()
+  const stats = useStatsStore((s) => s.stats)
   const [config, setConfig] = useState(null)
   const [saving, setSaving] = useState(false)
 
@@ -426,7 +644,10 @@ function CategoryVisibilityPanel() {
     try {
       const result = await appConfigApi.update({ disabled_categories: updated })
       setConfig(result)
-      invalidate()
+      // Directly update the reference store so navbar reflects the change
+      // immediately — calling invalidate() would clear appConfig to null and
+      // cause a flash of all categories until the next ensureLoaded() fires.
+      setAppConfig(result)
     } catch (err) {
       toast.error(err.response?.data?.detail || err.message)
     } finally {
@@ -436,9 +657,9 @@ function CategoryVisibilityPanel() {
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-      <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Category Visibility</h2>
+      <h2 className="font-semibold text-gray-900 dark:text-white mb-1">Medium Visibility</h2>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Disable categories you don&apos;t use — they&apos;ll be hidden from all navigation and add flows.
+        Disable mediums you don&apos;t use — they&apos;ll be hidden from all navigation and add flows.
       </p>
       {!config ? (
         <p className="text-sm text-gray-400 animate-pulse">Loading…</p>
@@ -447,6 +668,7 @@ function CategoryVisibilityPanel() {
           {CATEGORIES.map((c) => {
             const Icon = CATEGORY_ICONS[c.value]
             const isEnabled = !(config.disabled_categories ?? []).includes(c.value)
+            const count = stats?.by_category?.[c.value] ?? null
             return (
               <label key={c.value} className="flex items-center gap-3 cursor-pointer select-none">
                 <input
@@ -458,6 +680,9 @@ function CategoryVisibilityPanel() {
                 />
                 <Icon size={16} className="text-gray-500 dark:text-gray-400 shrink-0" />
                 <span className="text-sm text-gray-700 dark:text-gray-300">{c.label}</span>
+                {count !== null && (
+                  <span className="text-xs text-gray-400 ml-auto">{count.toLocaleString()}</span>
+                )}
               </label>
             )
           })}

@@ -18,36 +18,55 @@ function applyThemeColor(dark) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#15100C' : '#FFFFFF')
 }
 
-export const useThemeStore = create((set) => {
+function applyDark(dark) {
+  document.documentElement.classList.toggle('dark', dark)
+  applyThemeColor(dark)
+}
+
+// Resolve whether dark mode should be active given a preference and the OS setting.
+function resolveIsDark(preference, osDark) {
+  if (preference === 'dark') return true
+  if (preference === 'light') return false
+  return osDark  // 'auto'
+}
+
+export const useThemeStore = create((set, get) => {
   const initialDark = document.documentElement.classList.contains('dark')
   applyThemeColor(initialDark)
 
   return {
     dark: initialDark,
+    // 'auto' | 'light' | 'dark' — persisted to localStorage and (when logged in) to the user profile.
+    preference: (() => { try { return localStorage.getItem('armarium-theme-pref') || 'auto' } catch { return 'auto' } })(),
+
+    // Apply a new preference locally. Call savePreference() to also persist to the backend.
+    setPreference(pref) {
+      const osDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+      const dark = resolveIsDark(pref, osDark)
+      try { localStorage.setItem('armarium-theme-pref', pref) } catch { /* no-op in test env */ }
+      applyDark(dark)
+      set({ preference: pref, dark })
+    },
+
+    // Legacy toggle — cycles through light → dark → auto. Used by the
+    // mobile Profile page toggle button.
     toggle() {
-      set((s) => {
-        const next = !s.dark
-        document.documentElement.classList.toggle('dark', next)
-        localStorage.setItem('armarium-theme', next ? 'dark' : 'light')
-        applyThemeColor(next)
-        return { dark: next }
-      })
+      const { preference, setPreference } = get()
+      const next = preference === 'light' ? 'dark' : preference === 'dark' ? 'auto' : 'light'
+      setPreference(next)
     },
   }
 })
 
-// Follow OS theme changes live while the app is open, but only if the user
-// hasn't manually overridden the theme (no 'armarium-theme' in localStorage).
-// Re-checks localStorage inside the handler in case toggle() set an override
-// mid-session, after this listener was registered. matchMedia is unavailable
-// in the jsdom test environment, hence the guard.
+// Follow OS theme changes live while the app is open, but only if the user's
+// preference is 'auto'. matchMedia is unavailable in the jsdom test environment.
 if (typeof window.matchMedia === 'function') {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    if (localStorage.getItem('armarium-theme')) return
-    const next = e.matches
-    document.documentElement.classList.toggle('dark', next)
-    applyThemeColor(next)
-    useThemeStore.setState({ dark: next })
+    const { preference } = useThemeStore.getState()
+    if (preference !== 'auto') return
+    const dark = e.matches
+    applyDark(dark)
+    useThemeStore.setState({ dark })
   })
 }
 
@@ -100,6 +119,10 @@ export const useAuthStore = create((set) => ({
       const user = resp.data
       localStorage.setItem('armarium-user', JSON.stringify(user))
       set({ user, isAuthenticated: true })
+      // Apply the user's stored theme preference (if any).
+      if (user.theme_preference) {
+        useThemeStore.getState().setPreference(user.theme_preference)
+      }
     } catch {
       // Cookie missing/expired — the response interceptor handles the
       // redirect to /login; clear the cached user so isAuthenticated
@@ -162,6 +185,18 @@ export const useStatsStore = create((set) => ({
 // lists on every page/category switch; call `invalidate()` after any
 // create/update/delete in the Settings managers so the next `ensureLoaded()`
 // picks up the change.
+//
+// appConfig is persisted to localStorage so the initial render knows which
+// categories are disabled without waiting for the API response (prevents the
+// flash of disabled categories on load).
+
+function loadStoredAppConfig() {
+  try {
+    return JSON.parse(localStorage.getItem('armarium-appconfig') || 'null')
+  } catch {
+    return null
+  }
+}
 
 export const useReferenceDataStore = create((set, get) => ({
   locations: [],
@@ -169,7 +204,7 @@ export const useReferenceDataStore = create((set, get) => ({
   mediaSubtypes: [],
   lists: [],
   users: [],
-  appConfig: null,
+  appConfig: loadStoredAppConfig(),
   plexStatus: null,
   loaded: false,
   loading: null,
@@ -190,11 +225,21 @@ export const useReferenceDataStore = create((set, get) => ({
       .then((users) => set({ users }))
       .catch(() => {})
     appConfigApi.get()
-      .then((appConfig) => set({ appConfig }))
+      .then((appConfig) => {
+        try { localStorage.setItem('armarium-appconfig', JSON.stringify(appConfig)) } catch { /* no-op in test env */ }
+        set({ appConfig })
+      })
       .catch(() => {})
     return promise
   },
+  // Directly update appConfig in the store and persist to localStorage.
+  // Use this after admin saves to avoid clearing and re-fetching everything.
+  setAppConfig(appConfig) {
+    try { localStorage.setItem('armarium-appconfig', JSON.stringify(appConfig)) } catch { /* no-op in test env */ }
+    set({ appConfig })
+  },
   invalidate() {
     set({ loaded: false, plexStatus: null, users: [], appConfig: null })
+    try { localStorage.removeItem('armarium-appconfig') } catch { /* no-op in test env */ }
   },
 }))

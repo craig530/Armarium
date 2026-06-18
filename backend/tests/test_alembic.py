@@ -74,7 +74,7 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
         engine.dispose()
 
     assert count == 16
-    assert version == "0008"
+    assert version == "0009"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
@@ -205,3 +205,16 @@ def test_upgrade_head_adds_disabled_categories(tmp_sqlite_url):
 
     assert "disabled_categories" in config_columns
     assert disabled == "[]"
+
+
+def test_upgrade_head_adds_display_name_and_theme(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            user_columns = {col["name"] for col in inspect(conn).get_columns("users")}
+    finally:
+        engine.dispose()
+
+    assert {"display_name", "theme_preference"}.issubset(user_columns)

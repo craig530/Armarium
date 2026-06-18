@@ -135,6 +135,8 @@ class LinkedItemSummary(BaseModel):
     location_icon_key: Optional[str] = None
     location_icon_url: Optional[str] = None
     platform: Optional[PlatformSummary] = None
+    owner_id: Optional[int] = None
+    owner_display_name: Optional[str] = None  # display_name if set, else username
 
 
 class MediaItemResponse(BaseModel):

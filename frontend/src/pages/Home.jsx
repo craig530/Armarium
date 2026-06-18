@@ -154,7 +154,7 @@ export default function Home() {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">All</h1>
 
       {/* Search + filters toggle */}
-      <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-3">
         <SearchInput
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}

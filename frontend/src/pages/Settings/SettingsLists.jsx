@@ -1,9 +1,14 @@
+import { Link } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import ListManager from '../../components/lists/ListManager'
 
 export default function SettingsLists() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
+        <Link to="/profile" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white mb-3">
+          <ArrowLeft size={14} /> Settings
+        </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lists</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Curated collections within each category, e.g. &quot;Want to read&quot;, &quot;Favourites&quot;.

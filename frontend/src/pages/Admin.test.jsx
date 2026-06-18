@@ -78,7 +78,7 @@ describe('Admin', () => {
 
     fireEvent.click(screen.getByText('New user'))
     const form = screen.getByText('Create user').closest('form')
-    fireEvent.change(within(form).getByRole('textbox'), { target: { value: 'a' } })
+    fireEvent.change(within(form).getAllByRole('textbox')[0], { target: { value: 'a' } })
     fireEvent.change(form.querySelector('input[type="password"]'), { target: { value: 'short' } })
     fireEvent.click(within(form).getByText('Create'))
 
@@ -93,7 +93,7 @@ describe('Admin', () => {
 
     fireEvent.click(screen.getByText('New user'))
     const form = screen.getByText('Create user').closest('form')
-    fireEvent.change(within(form).getByRole('textbox'), { target: { value: 'bob' } })
+    fireEvent.change(within(form).getAllByRole('textbox')[0], { target: { value: 'bob' } })
     fireEvent.change(form.querySelector('input[type="password"]'), { target: { value: 'longenoughpassword' } })
 
     fireEvent.click(within(form).getByText('Create'))

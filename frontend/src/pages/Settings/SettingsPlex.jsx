@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, RefreshCw, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, CheckCircle, XCircle, AlertCircle, ArrowLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import { plexApi } from '../../api/plex'
@@ -282,6 +282,9 @@ export default function SettingsPlex() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
+        <Link to="/profile" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white mb-3">
+          <ArrowLeft size={14} /> Settings
+        </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Plex Sync</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Match Plex libraries to your Films &amp; TV and Music collections and sync them in.

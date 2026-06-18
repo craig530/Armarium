@@ -20,6 +20,7 @@ class TokenResponse(BaseModel):
 class UserCreate(BaseModel):
     username: str = Field(..., pattern=USERNAME_PATTERN)
     password: str = Field(..., min_length=8, max_length=128)
+    display_name: Optional[str] = Field(None, max_length=100)
     is_admin: bool = False
     is_read_only: bool = False
     can_add_items: bool = True
@@ -33,6 +34,8 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     username: Optional[str] = Field(None, pattern=USERNAME_PATTERN)
     password: Optional[str] = Field(None, min_length=8, max_length=128)
+    display_name: Optional[str] = Field(None, max_length=100)
+    theme_preference: Optional[str] = Field(None, pattern=r"^(auto|light|dark)$")
     is_admin: Optional[bool] = None
     is_active: Optional[bool] = None
     is_read_only: Optional[bool] = None
@@ -48,6 +51,7 @@ class UserSummary(BaseModel):
     """Minimal user representation used by owner pickers and filter dropdowns."""
     id: int
     username: str
+    display_name: Optional[str] = None
     is_system: bool = False
 
     model_config = {"from_attributes": True}
@@ -56,6 +60,8 @@ class UserSummary(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
+    display_name: Optional[str] = None
+    theme_preference: str = 'auto'
     is_admin: bool
     is_active: bool
     is_system: bool

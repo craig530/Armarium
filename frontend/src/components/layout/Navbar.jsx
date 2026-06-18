@@ -1,12 +1,11 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Sun, Moon, Plus, LayoutGrid, Settings, ShieldCheck, LogOut, User, Download, ChevronDown } from 'lucide-react'
+import { Sun, Moon, Plus, LayoutGrid, Settings, ShieldCheck, LogOut, User, Download } from 'lucide-react'
 import { useThemeStore, useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 import { CATEGORIES } from '../../lib/categories'
 import { CATEGORY_ICONS } from '../../lib/mediaIcons'
-import { MANAGE_LINKS } from '../../lib/navigation'
 import { exportLibrary } from '../../lib/export'
 import Logo from '../ui/Logo'
 
@@ -15,7 +14,6 @@ export default function Navbar() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [manageMenuOpen, setManageMenuOpen] = useState(false)
   const appConfig = useReferenceDataStore((s) => s.appConfig)
   const disabledCategories = appConfig?.disabled_categories ?? []
 
@@ -66,49 +64,6 @@ export default function Navbar() {
           ))}
         </nav>
 
-        {/* Manage menu — hidden on mobile, where it's reached via the Profile tab */}
-        <div className="relative hidden sm:block">
-          <button
-            onClick={() => setManageMenuOpen((o) => !o)}
-            className={clsx(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-              manageMenuOpen
-                ? 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300'
-                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
-            )}
-          >
-            <Settings size={15} />
-            <span className="hidden sm:flex items-center gap-1">
-              Manage <ChevronDown size={14} />
-            </span>
-          </button>
-
-          {manageMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setManageMenuOpen(false)} />
-              <div className="absolute left-0 top-full mt-1 z-20 w-52 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 py-1 overflow-hidden">
-                {MANAGE_LINKS.map(({ to, label, icon: Icon }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    onClick={() => setManageMenuOpen(false)}
-                    className={({ isActive }) =>
-                      clsx(
-                        'flex items-center gap-2 px-3 py-2 text-sm',
-                        isActive
-                          ? 'text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-950'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      )
-                    }
-                  >
-                    <Icon size={14} /> {label}
-                  </NavLink>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
         <div className="ml-auto flex items-center gap-2">
           {/* Keyboard hint */}
           <span className="hidden lg:flex items-center gap-1 text-xs text-gray-400 mr-1">
@@ -144,7 +99,7 @@ export default function Navbar() {
               className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm"
             >
               <User size={15} />
-              <span className="hidden sm:block max-w-[80px] truncate">{user?.username}</span>
+              <span className="hidden sm:block max-w-[80px] truncate">{user?.display_name || user?.username}</span>
               {user?.is_admin && <ShieldCheck size={13} className="text-brand-500 shrink-0" />}
             </button>
 
@@ -153,7 +108,8 @@ export default function Navbar() {
                 <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
                 <div className="absolute right-0 top-full mt-1 z-20 w-48 rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 py-1 overflow-hidden">
                   <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">{user?.username}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{user?.display_name || user?.username}</p>
+                    {user?.display_name && <p className="text-xs text-gray-400">@{user?.username}</p>}
                     {user?.is_admin && <p className="text-xs text-brand-500">Administrator</p>}
                   </div>
 

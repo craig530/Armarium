@@ -26,9 +26,9 @@
       // light-mode flash on devices with a dark OS theme. Mirrors
       // applyThemeColor() in src/store/index.js.
       (function () {
-        var saved = localStorage.getItem('armarium-theme')
+        var pref = localStorage.getItem('armarium-theme-pref') || 'auto'
         var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-        var dark = saved === 'dark' || (!saved && prefersDark)
+        var dark = pref === 'dark' || (pref === 'auto' && prefersDark)
         if (dark) document.documentElement.classList.add('dark')
         var meta = document.querySelector('meta[name="theme-color"]')
         if (meta) meta.setAttribute('content', dark ? '#15100C' : '#FFFFFF')

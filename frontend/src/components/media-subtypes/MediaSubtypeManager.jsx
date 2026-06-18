@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Plus, Pencil, Trash2, Check, X, ChevronUp, ChevronDown, Lock } from 'lucide-react'
 import { mediaSubtypesApi } from '../../api/mediaSubtypes'
 import { CATEGORIES, SUPERTYPES } from '../../lib/categories'
@@ -14,6 +14,11 @@ const EMPTY_FORM = { name: '', category: CATEGORIES[0].value, supertype: SUPERTY
 export default function MediaSubtypeManager() {
   const { user } = useAuthStore()
   const canManage = hasPermission(user, 'can_manage_media_types')
+  const appConfig = useReferenceDataStore((s) => s.appConfig)
+  const enabledCategories = useMemo(() => {
+    const disabled = appConfig?.disabled_categories ?? []
+    return CATEGORIES.filter((c) => !disabled.includes(c.value))
+  }, [appConfig])
   const [subtypes, setSubtypes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -109,7 +114,7 @@ export default function MediaSubtypeManager() {
                 value={form.category}
                 onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
               >
-                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                {enabledCategories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </Select>
               <Select
                 label="Format"
@@ -138,7 +143,7 @@ export default function MediaSubtypeManager() {
         <p className="text-sm text-gray-400 text-center py-8">No mediums yet.</p>
       ) : (
         <div className="space-y-5">
-          {CATEGORIES.map((category) => {
+          {enabledCategories.map((category) => {
             const categorySubtypes = subtypes.filter((s) => s.category === category.value)
             if (categorySubtypes.length === 0) return null
             return (

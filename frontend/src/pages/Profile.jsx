@@ -1,13 +1,22 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { Sun, Moon, ShieldCheck, LogOut, Download, User } from 'lucide-react'
+import { Sun, Moon, Monitor, ShieldCheck, LogOut, Download, User } from 'lucide-react'
 import { useAuthStore, useThemeStore } from '../store'
+import { usersApi } from '../api/users'
 import { MANAGE_LINKS } from '../lib/navigation'
 import { exportLibrary } from '../lib/export'
 import toast from 'react-hot-toast'
 
 export default function Profile() {
-  const { user, logout } = useAuthStore()
-  const { dark, toggle } = useThemeStore()
+  const { user, logout, refreshUser } = useAuthStore()
+  const { preference, setPreference } = useThemeStore()
+
+  const handleTheme = async (pref) => {
+    setPreference(pref)
+    if (user?.id) {
+      try { await usersApi.update(user.id, { theme_preference: pref }) } catch { /* best effort */ }
+      refreshUser()
+    }
+  }
   const navigate = useNavigate()
 
   const handleExport = async (format) => {
@@ -29,7 +38,8 @@ export default function Profile() {
           <User size={22} />
         </div>
         <div className="min-w-0">
-          <p className="font-semibold text-gray-900 dark:text-white truncate">{user?.username}</p>
+          <p className="font-semibold text-gray-900 dark:text-white truncate">{user?.display_name || user?.username}</p>
+          {user?.display_name && <p className="text-xs text-gray-400">@{user?.username}</p>}
           {user?.is_admin && (
             <p className="text-xs text-brand-500 flex items-center gap-1 mt-0.5">
               <ShieldCheck size={12} /> Administrator
@@ -41,16 +51,29 @@ export default function Profile() {
       {/* Appearance */}
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Appearance</h2>
-        <button
-          onClick={toggle}
-          className="w-full flex items-center justify-between gap-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 text-left"
-        >
-          <span className="flex items-center gap-3 text-sm font-medium text-gray-900 dark:text-white">
-            {dark ? <Moon size={18} /> : <Sun size={18} />}
-            {dark ? 'Dark mode' : 'Light mode'}
-          </span>
-          <span className="text-xs text-gray-400">Tap to switch</span>
-        </button>
+        <div className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+          <p className="text-sm font-medium text-gray-900 dark:text-white">Theme</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { pref: 'light', label: 'Light', Icon: Sun },
+              { pref: 'dark', label: 'Dark', Icon: Moon },
+              { pref: 'auto', label: 'Auto', Icon: Monitor },
+            ].map(({ pref, label, Icon }) => (
+              <button
+                key={pref}
+                onClick={() => handleTheme(pref)}
+                className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors ${
+                  preference === pref
+                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                }`}
+              >
+                <Icon size={18} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* Manage */}

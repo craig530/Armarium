@@ -31,6 +31,7 @@ async def create_user(payload: UserCreate, _=Depends(get_current_admin), repo: U
     user = User(
         username=payload.username,
         hashed_password=hash_password(payload.password),
+        display_name=payload.display_name,
         is_admin=payload.is_admin,
         is_read_only=payload.is_read_only,
         can_add_items=payload.can_add_items,
@@ -56,6 +57,10 @@ async def update_user(user_id: int, payload: UserUpdate, current_user: User = De
         user.username = payload.username
     if payload.password is not None:
         user.hashed_password = hash_password(payload.password)
+    if "display_name" in payload.model_fields_set:
+        user.display_name = payload.display_name
+    if payload.theme_preference is not None:
+        user.theme_preference = payload.theme_preference
     if payload.is_admin is not None:
         # Prevent removing own admin status
         if user.id == current_user.id and not payload.is_admin:

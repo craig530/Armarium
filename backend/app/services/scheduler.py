@@ -8,7 +8,7 @@ serialises jobs via pickle) in favour of our own table.
 import logging
 import shutil
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -55,13 +55,21 @@ class SchedulerService:
     def _register(self, job) -> None:
         if not self.scheduler.running:
             return
+        # If the job ran previously, anchor the trigger to last_run_at + interval
+        # so APScheduler fires it immediately if it's overdue (e.g. after a server
+        # restart that pushes the next fire to now+interval, causing a missed run).
+        # misfire_grace_time=None lets overdue runs fire regardless of how late they
+        # are; coalesce=True collapses multiple missed fires into one.
+        start_date = None
+        if job.last_run_at is not None:
+            start_date = job.last_run_at + timedelta(hours=job.interval_hours)
         self.scheduler.add_job(
             _dispatch,
-            trigger=IntervalTrigger(hours=job.interval_hours),
+            trigger=IntervalTrigger(hours=job.interval_hours, start_date=start_date),
             id=f"sj_{job.id}",
             args=[job.id],
             replace_existing=True,
-            misfire_grace_time=300,
+            misfire_grace_time=None,
             coalesce=True,
         )
 

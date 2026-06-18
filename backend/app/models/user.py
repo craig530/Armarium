@@ -28,5 +28,12 @@ class User(Base):
     # without it they can still see schedule info and trigger manual syncs.
     can_manage_schedules = Column(Boolean, nullable=False, default=True, server_default=true())
 
+    # Optional display name shown in ownership labels and pickers. Falls back
+    # to username when NULL.
+    display_name = Column(String(100), nullable=True)
+
+    # Per-user theme preference: 'auto' (follow OS), 'light', or 'dark'.
+    theme_preference = Column(String(10), nullable=False, default='auto', server_default='auto')
+
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

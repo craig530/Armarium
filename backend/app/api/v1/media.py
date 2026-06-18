@@ -47,6 +47,11 @@ async def _link_summaries(
         icon_info = icon_map.get(partner.location_id, {})
         cover_url, cover_thumb_url = cover_urls(partner.cover_image_path, partner.cover_image_url)
 
+        owner = partner.owner
+        owner_display_name = None
+        if owner and not owner.is_system:
+            owner_display_name = owner.display_name or owner.username
+
         return LinkedItemSummary(
             id=partner.id,
             title=partner.title,
@@ -61,6 +66,8 @@ async def _link_summaries(
             location_icon_key=icon_info.get("icon_key"),
             location_icon_url=icon_info.get("icon_url"),
             platform=PlatformSummary(**platform_info) if platform_info else None,
+            owner_id=partner.owner_id,
+            owner_display_name=owner_display_name,
         )
 
     summaries: dict = {}
@@ -133,7 +140,7 @@ def _item_to_response(
         linked_items=linked,
         ownership=ownership,
         list_ids=[lst.id for lst in item.lists],
-        owner_username=item.owner.username if item.owner else None,
+        owner_username=(item.owner.display_name or item.owner.username) if item.owner else None,
     )
 
 

@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Tv, Tag } from 'lucide-react'
 import clsx from 'clsx'
 import { useNavigate } from 'react-router-dom'
@@ -15,22 +16,35 @@ function IconBox({ children }) {
   )
 }
 
-// JS-based hover tooltip — works in Safari and through overflow-hidden containers.
-// Mobile: no hover events, so the tooltip never fires on touch-only devices.
+// Portal-based hover tooltip — renders at document body so it is never clipped
+// by overflow-hidden ancestors. Mobile: no hover events, so never fires.
 function HoverTooltip({ content, children }) {
-  const [visible, setVisible] = useState(false)
+  const [pos, setPos] = useState(null)
+  const triggerRef = useRef(null)
   if (!content) return children
+
+  const handleMouseEnter = () => {
+    if (triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect()
+      setPos({ top: r.top + window.scrollY, left: r.left + r.width / 2 })
+    }
+  }
+
   return (
     <span
-      className="relative"
-      onMouseEnter={() => setVisible(true)}
-      onMouseLeave={() => setVisible(false)}
+      ref={triggerRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setPos(null)}
     >
       {children}
-      {visible && (
-        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 px-2 py-1 rounded text-xs text-white bg-gray-900 dark:bg-gray-700 shadow-lg whitespace-nowrap">
+      {pos && createPortal(
+        <span
+          className="pointer-events-none fixed z-[9999] px-2 py-1 rounded text-xs text-white bg-gray-900 dark:bg-gray-700 shadow-lg whitespace-nowrap"
+          style={{ top: pos.top, left: pos.left, transform: 'translate(-50%, calc(-100% - 6px))' }}
+        >
           {content}
-        </span>
+        </span>,
+        document.body
       )}
     </span>
   )
@@ -41,6 +55,9 @@ function LocationChip({ record, onClick }) {
   const timerRef = useRef(null)
   // Track whether the 500 ms long-press timer actually fired before touchend.
   const activatedRef = useRef(false)
+  // Suppress the synthetic click that fires after a long-press touchend.
+  // React's touch handlers are passive so e.preventDefault() alone is unreliable.
+  const suppressClickRef = useRef(false)
   // Starting touch position for the movement threshold check.
   const startPos = useRef({ x: 0, y: 0 })
 
@@ -73,10 +90,9 @@ function LocationChip({ record, onClick }) {
     clearTimeout(timerRef.current)
     activatedRef.current = false
     if (wasActivated) {
-      // Prevent the synthetic click that browsers fire after touchend from
-      // navigating the parent card button.
       e.stopPropagation()
       e.preventDefault()
+      suppressClickRef.current = true
       setTimeout(() => setShowPath(false), 1800)
     }
   }
@@ -88,7 +104,13 @@ function LocationChip({ record, onClick }) {
           'relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]',
           onClick && 'cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700'
         )}
-        onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : (e) => e.stopPropagation()}
+        onClick={onClick
+          ? (e) => {
+              if (suppressClickRef.current) { suppressClickRef.current = false; e.stopPropagation(); return }
+              e.stopPropagation()
+              onClick()
+            }
+          : (e) => e.stopPropagation()}
         onTouchStart={startPress}
         onTouchEnd={endPress}
         onTouchMove={cancelPress}
