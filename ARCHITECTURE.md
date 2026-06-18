@@ -627,4 +627,5 @@ or two:
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deploying tagged releases via prebuilt Docker images | The release process, `docker-compose.prod.yml`, or supported deployment targets change |
 | [CHANGELOG.md](CHANGELOG.md) | Per-version release notes (Keep a Changelog format) | Any user-facing change — add an entry under `[Unreleased]` |
 | [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) | Dependency licences and third-party attribution | A dependency (backend `requirements*.txt` or frontend `package.json`) is added, removed, or its licence changes |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting process, supported versions, security design notes | The reporting contact, security model, or in-scope surface changes |
 | `.env.example` | Template for runtime configuration | A new environment variable is added to `app/config.py` |

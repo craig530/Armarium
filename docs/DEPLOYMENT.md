@@ -6,9 +6,7 @@ build toolchain, or development environment required. It's the fastest path
 to a production instance, and lets you pin or roll back to a specific
 version.
 
-`craig530/Armarium` is currently a **private** repository, so both pulling
-the images and downloading the deployment files require a GitHub personal
-access token — see step 2.
+The images are public on GHCR — no authentication required to pull them.
 
 If you'd rather build the images yourself from source (e.g. to make local
 changes), use the root [README.md](../README.md) Quick Start with
@@ -54,51 +52,27 @@ sudo usermod -aG docker "$USER"
 (Other distributions / macOS / Windows: any host with Docker Desktop or
 Docker Engine + the Compose plugin works the same way from step 2 onward.)
 
-## 2. Authenticate to GitHub
+## 2. Get the deployment files
 
-Because the repo is private, you need a GitHub
-[personal access token](https://github.com/settings/tokens) with:
-
-- A classic token with the `repo` scope, or a fine-grained token with
-  **Contents: Read-only** access to `craig530/Armarium` — to download the
-  deployment files below.
-- The `read:packages` scope — to pull the `ghcr.io/craig530/armarium-*`
-  images.
-
-```bash
-export GH_TOKEN=<your-token>
-```
-
-Use it to authenticate Docker to GHCR:
-
-```bash
-echo "$GH_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin
-```
-
-> Never paste the token directly into a command line that gets saved to
-> shell history in a shared location, or into a file that gets committed.
-> `export GH_TOKEN=...` keeps it out of `docker login`'s argument list.
-
-## 3. Get the deployment files
-
-Download `docker-compose.prod.yml` and `.env.example`, pinned to the release
-you're deploying (`v1.0.0` here — substitute the tag of the version you're
-installing):
+`docker-compose.prod.yml` and `env.example` are attached to every
+[GitHub Release](https://github.com/craig530/Armarium/releases). Download
+them for the version you're installing (substitute the tag):
 
 ```bash
 mkdir armarium && cd armarium
-for f in docker-compose.prod.yml .env.example; do
-  curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
-    -H "Accept: application/vnd.github.raw+json" \
-    "https://api.github.com/repos/craig530/Armarium/contents/$f?ref=v1.0.0" -o "$f"
-done
-mv .env.example .env
+TAG=v1.6.1   # replace with the version you want
+BASE="https://github.com/craig530/Armarium/releases/download/$TAG"
+curl -fsSL "$BASE/docker-compose.prod.yml" -o docker-compose.prod.yml
+curl -fsSL "$BASE/env.example"             -o .env
 ```
 
-(Both files are also attached to the
-[release](https://github.com/craig530/Armarium/releases) itself —
-`docker-compose.prod.yml` and `env.example` — viewable/downloadable from the
-GitHub UI if you're logged in with access to the repo.)
+Or clone the repository and copy the files directly:
+
+```bash
+git clone --depth 1 --branch v1.6.1 https://github.com/craig530/Armarium.git
+cp Armarium/docker-compose.prod.yml .
+cp Armarium/.env.example .env
+```
 
 ## 4. Configure `.env`
 
