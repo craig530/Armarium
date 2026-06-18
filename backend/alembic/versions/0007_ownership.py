@@ -33,7 +33,7 @@ def upgrade() -> None:
             " can_add_items, can_manage_locations, can_manage_platforms, "
             " can_manage_media_types, can_manage_lists, can_manage_schedules, "
             " is_system) "
-            "VALUES ('shared', '!', 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)"
+            "VALUES ('shared', '!', false, false, false, false, false, false, false, false, false, true)"
         )
     )
 
@@ -56,7 +56,7 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "UPDATE media_items SET owner_id = "
-            "(SELECT id FROM users WHERE username = 'shared' AND is_system = 1)"
+            "(SELECT id FROM users WHERE username = 'shared' AND is_system = true)"
         )
     )
 
@@ -72,7 +72,7 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "UPDATE item_lists SET owner_id = "
-            "(SELECT id FROM users WHERE username = 'shared' AND is_system = 1)"
+            "(SELECT id FROM users WHERE username = 'shared' AND is_system = true)"
         )
     )
 
@@ -84,7 +84,7 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "UPDATE plex_library_mappings SET owner_id = "
-            "(SELECT id FROM users WHERE username = 'shared' AND is_system = 1)"
+            "(SELECT id FROM users WHERE username = 'shared' AND is_system = true)"
         )
     )
 
@@ -106,7 +106,7 @@ def downgrade() -> None:
 
     op.drop_table("app_config")
 
-    op.execute(sa.text("DELETE FROM users WHERE username = 'shared' AND is_system = 1"))
+    op.execute(sa.text("DELETE FROM users WHERE username = 'shared' AND is_system = true"))
 
     with op.batch_alter_table("users") as batch_op:
         batch_op.drop_column("is_system")
