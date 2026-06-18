@@ -1,6 +1,7 @@
 import client from './client'
 
 export const plexApi = {
+  getStatus: () => client.get('/admin/plex/status').then((r) => r.data),
   getConfig: () => client.get('/admin/plex/config').then((r) => r.data),
   updateConfig: (data) => client.put('/admin/plex/config', data).then((r) => r.data),
   deleteConfig: () => client.delete('/admin/plex/config'),

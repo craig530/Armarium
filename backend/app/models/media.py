@@ -51,6 +51,7 @@ class MediaItem(Base):
     musicbrainz_id = Column(String(100), index=True)
     tmdb_id = Column(Integer, index=True)
     openlibrary_id = Column(String(50), index=True)
+    plex_rating_key = Column(String(50), nullable=True, index=True)
 
     # Location
     location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True, index=True)

@@ -181,13 +181,29 @@ async def lookup_by_barcode(barcode: str) -> List[LookupCandidate]:
     etc.), not physical barcodes, so there is no direct barcode lookup in the
     IGDB API. Instead we use the same UPCitemdb-then-search approach that the
     films/TV flow uses for TMDB.
+
+    UPCitemdb stores barcodes as EAN-13 (13 digits). Physical game boxes in
+    North America carry UPC-A (12 digits), which is EAN-13 with a leading "0".
+    We try the raw barcode first, then the EAN-13 expansion, so both scan
+    formats work against UPCitemdb's catalog.
     """
     if not settings.igdb_client_id or not settings.igdb_client_secret:
         return []
 
     from . import upc  # local import to avoid circular at module load
-    raw_title = await upc.lookup_title(barcode)
+
+    candidates_to_try = [barcode]
+    if len(barcode) == 12 and barcode.isdigit():
+        candidates_to_try.append("0" + barcode)
+
+    raw_title = None
+    for attempt in candidates_to_try:
+        raw_title = await upc.lookup_title(attempt)
+        if raw_title:
+            break
+
     if not raw_title:
+        logger.debug("Game barcode %s: no UPCitemdb title found", barcode)
         return []
 
     title = _clean_game_title(raw_title)

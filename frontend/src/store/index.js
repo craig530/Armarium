@@ -5,6 +5,7 @@ import { locationsApi } from '../api/locations'
 import { platformsApi } from '../api/platforms'
 import { mediaSubtypesApi } from '../api/mediaSubtypes'
 import { listsApi } from '../api/lists'
+import { plexApi } from '../api/plex'
 
 // ── Theme ────────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,7 @@ export const useReferenceDataStore = create((set, get) => ({
   platforms: [],
   mediaSubtypes: [],
   lists: [],
+  plexStatus: null,
   loaded: false,
   loading: null,
   ensureLoaded() {
@@ -174,9 +176,14 @@ export const useReferenceDataStore = create((set, get) => ({
       })
       .catch(() => set({ loading: null }))
     set({ loading: promise })
+    // plexStatus is loaded separately so it never blocks the main reference
+    // data or hangs tests that only mock the core four APIs.
+    plexApi.getStatus()
+      .then((plexStatus) => set({ plexStatus }))
+      .catch(() => {})
     return promise
   },
   invalidate() {
-    set({ loaded: false })
+    set({ loaded: false, plexStatus: null })
   },
 }))

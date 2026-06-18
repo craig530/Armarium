@@ -27,5 +27,9 @@ class PlexConfig(Base):
     platform_id = Column(Integer, ForeignKey("platforms.id", ondelete="RESTRICT"), nullable=False)
     platform = relationship("Platform", lazy="selectin")
 
+    # Plex server machine identifier — used to construct deep-link URLs.
+    # Fetched from /identity at config-save time; None for configs saved before v1.4.2.
+    machine_identifier = Column(String(100), nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

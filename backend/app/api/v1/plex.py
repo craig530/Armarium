@@ -22,6 +22,7 @@ from ...schemas.plex import (
     PlexMappingUpdate,
     PlexRemoveStaleRequest,
     PlexSectionResponse,
+    PlexStatusResponse,
     PlexSyncItem,
     PlexSyncRequest,
     PlexSyncResult,
@@ -30,7 +31,7 @@ from ...schemas.plex import (
 )
 from ...schemas.schedule import ScheduleCreate, ScheduleResponse, VALID_INTERVALS
 from ...services import plex as plex_service
-from ...services.auth import get_current_admin, require_permission
+from ...services.auth import get_current_admin, get_current_user, require_permission
 from ...services.cover_art import delete_cover_files, optimise_and_save
 from ...services.plex_sync_jobs import PlexSyncJob, get_job, set_job
 from ...services.scheduler import scheduler_service
@@ -107,6 +108,7 @@ async def get_config(_=Depends(get_current_admin), repo: PlexConfigRepository = 
         enabled=config.enabled,
         base_url=config.base_url,
         platform=_platform_summary(config.platform),
+        machine_identifier=config.machine_identifier,
     )
 
 
@@ -124,13 +126,45 @@ async def update_config(
     config = await config_repo.upsert(
         base_url=payload.base_url, token=payload.token, enabled=payload.enabled, platform_id=platform.id
     )
+
+    # Fetch the machine identifier so the frontend can construct deep-link URLs.
+    # Best-effort: a failed identity call does not abort the config save.
+    try:
+        token_to_use = payload.token or config.token
+        identity = await plex_service.test_connection(payload.base_url, token_to_use)
+        if identity.get("machine_identifier"):
+            config.machine_identifier = identity["machine_identifier"]
+    except Exception:
+        pass  # machine_identifier stays as whatever was previously stored
+
     await config_repo.commit()
-    return PlexConfigResponse(configured=True, enabled=config.enabled, base_url=config.base_url, platform=_platform_summary(platform))
+    return PlexConfigResponse(
+        configured=True,
+        enabled=config.enabled,
+        base_url=config.base_url,
+        platform=_platform_summary(platform),
+        machine_identifier=config.machine_identifier,
+    )
 
 
 @router.delete("/config", status_code=204)
 async def delete_config(_=Depends(get_current_admin), repo: PlexConfigRepository = Depends(get_plex_config_repository)):
     await repo.delete_singleton()
+
+
+@router.get("/status", response_model=PlexStatusResponse)
+async def get_status(_=Depends(get_current_user), repo: PlexConfigRepository = Depends(get_plex_config_repository)):
+    """Non-admin endpoint: returns enough config for the frontend to decide
+    whether to show the 'Open in Plex' deep-link button on item detail views."""
+    config = await repo.get_singleton()
+    if config is None:
+        return PlexStatusResponse(configured=False, enabled=False)
+    return PlexStatusResponse(
+        configured=True,
+        enabled=config.enabled,
+        platform_id=config.platform_id,
+        machine_identifier=config.machine_identifier,
+    )
 
 
 @router.post("/test")
@@ -325,6 +359,7 @@ def _to_sync_fields(item: dict, section_type: str) -> dict:
         "description": item.get("summary"),
         "tmdb_id": item.get("tmdb_id"),
         "musicbrainz_id": item.get("musicbrainz_id"),
+        "plex_rating_key": item.get("rating_key"),
     }
     if section_type == "artist":
         fields["artist"] = item.get("artist_name")

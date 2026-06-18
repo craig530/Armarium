@@ -73,7 +73,7 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
         engine.dispose()
 
     assert count == 16
-    assert version == "0005"
+    assert version == "0006"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
@@ -138,3 +138,18 @@ def test_upgrade_head_adds_scheduled_jobs_and_schedule_columns(tmp_sqlite_url):
         "last_sync_removed",
         "last_sync_error",
     }.issubset(mapping_columns)
+
+
+def test_upgrade_head_adds_plex_rating_key_and_machine_identifier(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            media_columns = {col["name"] for col in inspect(conn).get_columns("media_items")}
+            plex_columns = {col["name"] for col in inspect(conn).get_columns("plex_config")}
+    finally:
+        engine.dispose()
+
+    assert "plex_rating_key" in media_columns
+    assert "machine_identifier" in plex_columns

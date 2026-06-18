@@ -15,45 +15,66 @@ function IconBox({ children }) {
   )
 }
 
-// Styled hover tooltip for desktop — hidden on touch-only devices.
+// JS-based hover tooltip — works in Safari and through overflow-hidden containers.
+// Mobile: no hover events, so the tooltip never fires on touch-only devices.
 function HoverTooltip({ content, children }) {
+  const [visible, setVisible] = useState(false)
   if (!content) return children
   return (
-    <span className="relative group/tooltip">
+    <span
+      className="relative"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
       {children}
-      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 hidden group-hover/tooltip:block px-2 py-1 rounded text-xs text-white bg-gray-900 dark:bg-gray-700 shadow-lg whitespace-nowrap">
-        {content}
-      </span>
+      {visible && (
+        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 px-2 py-1 rounded text-xs text-white bg-gray-900 dark:bg-gray-700 shadow-lg whitespace-nowrap">
+          {content}
+        </span>
+      )}
     </span>
   )
 }
 
-function LocationChip({ record }) {
+function LocationChip({ record, onClick }) {
   const [showPath, setShowPath] = useState(false)
   const timerRef = useRef(null)
-  // Track whether long-press actually fired so endPress can suppress card navigation.
+  // Track whether the 500 ms long-press timer actually fired before touchend.
   const activatedRef = useRef(false)
+  // Starting touch position for the movement threshold check.
+  const startPos = useRef({ x: 0, y: 0 })
+
   const path = record.location_path || null
   const name = record.location_name || record.location_path || 'No location'
   const hasHierarchy = path && name !== path
 
-  const startPress = () => {
+  const startPress = (e) => {
     if (!hasHierarchy) return
+    startPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
     timerRef.current = setTimeout(() => {
       activatedRef.current = true
       setShowPath(true)
     }, 500)
   }
-  const cancelPress = () => {
+
+  const cancelPress = (e) => {
+    // Ignore sub-pixel tremor — only cancel if finger moved more than 10 px.
+    if (e.touches && e.touches.length > 0) {
+      const dx = e.touches[0].clientX - startPos.current.x
+      const dy = e.touches[0].clientY - startPos.current.y
+      if (Math.sqrt(dx * dx + dy * dy) <= 10) return
+    }
     clearTimeout(timerRef.current)
     activatedRef.current = false
   }
+
   const endPress = (e) => {
     const wasActivated = activatedRef.current
     clearTimeout(timerRef.current)
     activatedRef.current = false
     if (wasActivated) {
-      // Prevent the synthetic click that follows touchend from navigating the parent card.
+      // Prevent the synthetic click that browsers fire after touchend from
+      // navigating the parent card button.
       e.stopPropagation()
       e.preventDefault()
       setTimeout(() => setShowPath(false), 1800)
@@ -63,8 +84,11 @@ function LocationChip({ record }) {
   return (
     <HoverTooltip content={hasHierarchy ? path : null}>
       <span
-        className="relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]"
-        onClick={(e) => e.stopPropagation()}
+        className={clsx(
+          'relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]',
+          onClick && 'cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700'
+        )}
+        onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : (e) => e.stopPropagation()}
         onTouchStart={startPress}
         onTouchEnd={endPress}
         onTouchMove={cancelPress}
@@ -86,10 +110,16 @@ function LocationChip({ record }) {
   )
 }
 
-function PlatformChip({ record }) {
+function PlatformChip({ record, onClick }) {
   const url = platformLogoUrl(record.platform)
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]">
+    <span
+      className={clsx(
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 min-w-0 max-w-[12rem]',
+        onClick && 'cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700'
+      )}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : (e) => e.stopPropagation()}
+    >
       <IconBox>
         {url ? <img src={url} alt="" className="h-full w-full object-contain" /> : <Tv size={12} className="text-gray-400" />}
       </IconBox>
@@ -125,16 +155,35 @@ export default function OwnershipRow({ item, className }) {
     (m) => m.supertype === 'physical' || m.supertype === 'digital'
   )
 
+  const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
+  const libPath = slug ? `/library/${slug}` : '/library'
+
   const ownershipChips = members.map((m) =>
     m.supertype === 'physical'
       ? {
           key: `loc-${m.id}`,
-          node: <LocationChip record={m} />,
+          node: (
+            <LocationChip
+              record={m}
+              onClick={m.location_id ? () => {
+                useLibraryStore.getState().setFilter('location_id', String(m.location_id))
+                navigate(libPath)
+              } : undefined}
+            />
+          ),
           label: m.location_path || m.location_name || 'No location',
         }
       : {
           key: `plat-${m.id}`,
-          node: <PlatformChip record={m} />,
+          node: (
+            <PlatformChip
+              record={m}
+              onClick={m.platform?.id ? () => {
+                useLibraryStore.getState().setFilter('platform_id', String(m.platform.id))
+                navigate(libPath)
+              } : undefined}
+            />
+          ),
           label: m.platform?.name || 'No platform',
         }
   )
@@ -148,9 +197,8 @@ export default function OwnershipRow({ item, className }) {
         <ListChip
           name={l.name}
           onClick={() => {
-            const slug = CATEGORIES.find((c) => c.value === item.category)?.slug
             useLibraryStore.getState().setFilter('list_id', String(l.id))
-            navigate(slug ? `/library/${slug}` : '/library')
+            navigate(libPath)
           }}
         />
       ),
@@ -164,7 +212,9 @@ export default function OwnershipRow({ item, className }) {
   const overflow = allChips.slice(MAX_VISIBLE_CHIPS)
 
   return (
-    <div className={clsx('flex items-center gap-1.5 flex-wrap overflow-hidden', className)}>
+    // overflow-hidden intentionally removed — the HoverTooltip uses absolute
+    // positioning above the row and must not be clipped.
+    <div className={clsx('flex items-center gap-1.5 flex-wrap', className)}>
       {visible.map((c) => (
         <span key={c.key} className="min-w-0">{c.node}</span>
       ))}

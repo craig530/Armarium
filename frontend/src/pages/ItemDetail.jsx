@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
-import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink, RefreshCw, Tag } from 'lucide-react'
+import { ArrowLeft, Pencil, Trash2, Upload, Check, X, Link2, Unlink, RefreshCw, Tag, ExternalLink } from 'lucide-react'
 import { mediaApi } from '../api/media'
 import { coverProxyUrl } from '../api/lookup'
 import { useReferenceDataStore, useLibraryStore } from '../store'
@@ -130,7 +130,7 @@ export default function ItemDetail() {
   const navigate = useNavigate()
   const fileRef = useRef()
 
-  const { locations, platforms, mediaSubtypes, lists, ensureLoaded } = useReferenceDataStore()
+  const { locations, platforms, mediaSubtypes, lists, plexStatus, ensureLoaded } = useReferenceDataStore()
   const [item, setItem] = useState(null)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({})
@@ -357,6 +357,32 @@ export default function ItemDetail() {
             )
           )}
           <div><StarRating value={item.user_rating} onChange={handleRatingChange} /></div>
+          {plexStatus?.enabled && item.platform_id === plexStatus.platform_id && (() => {
+            const plexUrl = item.plex_rating_key && plexStatus.machine_identifier
+              ? `https://app.plex.tv/desktop/#!/server/${plexStatus.machine_identifier}/details?key=/library/metadata/${item.plex_rating_key}`
+              : null
+            return (
+              <div>
+                {plexUrl ? (
+                  <a
+                    href={plexUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-800/50 transition-colors"
+                  >
+                    <ExternalLink size={11} /> Open in Plex
+                  </a>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                    title="Sync this item from Plex to enable deep-linking"
+                  >
+                    <ExternalLink size={11} /> Open in Plex
+                  </span>
+                )}
+              </div>
+            )
+          })()}
           {item.genres && (
             <div className="flex flex-wrap gap-1">
               {item.genres.split(',').map((g) => (

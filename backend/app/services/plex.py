@@ -31,7 +31,12 @@ async def test_connection(base_url: str, token: str) -> dict:
         data = resp.json()
 
     container = data.get("MediaContainer", {})
-    return {"ok": True, "name": container.get("friendlyName"), "version": container.get("version")}
+    return {
+        "ok": True,
+        "name": container.get("friendlyName"),
+        "version": container.get("version"),
+        "machine_identifier": container.get("machineIdentifier"),
+    }
 
 
 async def list_sections(base_url: str, token: str) -> list[dict]:
@@ -73,6 +78,7 @@ def _parse_guids(entry: dict) -> tuple[Optional[int], Optional[str]]:
 def _normalize_item(entry: dict, section_type: str) -> dict:
     tmdb_id, musicbrainz_id = _parse_guids(entry)
 
+    rating_key = entry.get("ratingKey")
     normalized = {
         "guid": entry.get("guid"),
         "title": entry.get("title"),
@@ -83,6 +89,7 @@ def _normalize_item(entry: dict, section_type: str) -> dict:
         "thumb": entry.get("thumb"),
         "tmdb_id": tmdb_id,
         "musicbrainz_id": musicbrainz_id,
+        "rating_key": str(rating_key) if rating_key is not None else None,
     }
 
     if section_type == "movie":

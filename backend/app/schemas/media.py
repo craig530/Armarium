@@ -167,6 +167,7 @@ class MediaItemResponse(BaseModel):
     musicbrainz_id: Optional[str] = None
     tmdb_id: Optional[int] = None
     openlibrary_id: Optional[str] = None
+    plex_rating_key: Optional[str] = None
 
     media_subtype_id: int
     media_subtype: Optional[MediaSubtypeSummary] = None    # computed

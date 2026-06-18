@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-06-18
+
+### Added
+
+- **"Open in Plex" button** — item detail screens for music, films, and TV items
+  that belong to the configured Plex platform now show an "Open in Plex" link.
+  The button is enabled when the item has a Plex rating key (set automatically
+  on the next sync after upgrading) and disabled (with tooltip) when the item
+  was created manually or hasn't yet been synced. The button is hidden entirely
+  when Plex sync is not configured. The Plex server's machine identifier is
+  fetched and stored when saving the Plex configuration so deep-link URLs can
+  be constructed client-side.
+- **Location chip navigation** — single-tapping a location chip in library card
+  and list views now navigates to the filtered library for that location (same
+  behaviour as list chips added in v1.4.1).
+- **Platform chip navigation** — single-tapping a platform chip navigates to the
+  filtered library view for that platform.
+
+### Fixed
+
+- **Location long-press (all library views)** — the 10 px movement threshold
+  added to the touchmove cancel handler means natural finger tremor no longer
+  cancels the long-press before the 500 ms timer fires. Applies to all
+  library views (All, Music, Films & TV, Books, Games).
+- **Tooltip clipped on all browsers** — removed `overflow-hidden` from the
+  OwnershipRow container, which was clipping the absolutely-positioned tooltip
+  panel on every browser, not just Safari.
+- **Tooltip on Safari desktop** — replaced the CSS `group-hover` approach
+  (unreliable on non-interactive spans in Safari) with JS `onMouseEnter` /
+  `onMouseLeave` state, making the full-path tooltip work in all browsers.
+- **Game barcode lookup** — added an EAN-13 fallback: if a 12-digit UPC-A
+  barcode yields no result from UPCitemdb, the lookup is retried with the
+  EAN-13 equivalent (prepend "0"). North American game barcodes are UPC-A but
+  UPCitemdb indexes them as EAN-13.
+
+### Changed
+
+- Migration `0006`: adds `plex_rating_key` (String 50, indexed) to
+  `media_items` and `machine_identifier` (String 100) to `plex_config`.
+
 ## [1.4.1] - 2026-06-16
 
 ### Added
@@ -384,7 +424,11 @@ Initial public release.
 - Versioned Docker images published to GHCR for each tagged release — see
   [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-[Unreleased]: https://github.com/craig530/Armarium/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/craig530/Armarium/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/craig530/Armarium/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/craig530/Armarium/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/craig530/Armarium/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/craig530/Armarium/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/craig530/Armarium/compare/v1.2.0...v1.2.2
 [1.2.0]: https://github.com/craig530/Armarium/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/craig530/Armarium/releases/tag/v1.1.2

@@ -11,7 +11,16 @@ class PlexConfigResponse(BaseModel):
     enabled: bool
     base_url: Optional[str] = None
     platform: Optional[PlatformSummary] = None
+    machine_identifier: Optional[str] = None
     # Never includes the token.
+
+
+class PlexStatusResponse(BaseModel):
+    """Non-admin endpoint: enough info to decide whether to show the Plex deep-link button."""
+    configured: bool
+    enabled: bool
+    platform_id: Optional[int] = None
+    machine_identifier: Optional[str] = None
 
 
 class PlexConfigUpdate(BaseModel):
@@ -91,6 +100,7 @@ class PlexSyncItem(BaseModel):
     track_count: Optional[int] = None
     tmdb_id: Optional[int] = None
     musicbrainz_id: Optional[str] = None
+    plex_rating_key: Optional[str] = None
     cover_thumb: Optional[str] = None
 
 
