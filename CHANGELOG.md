@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GTIN-14 / ITF-14 barcode support** — some Nintendo Switch cartridge boxes
   use a 14-digit barcode (a packaging-indicator digit plus an EAN-13); these
   are now recognised by stripping the leading digit and retrying as EAN-13.
+- **System Info panel** — the Admin page now shows the running build
+  version, online status, database backend, the port you're connected on,
+  and which metadata APIs (TMDB, IGDB, UPCDatabase.org) have credentials
+  configured.
 
 ### Changed
 
