@@ -7,6 +7,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("armarium")
 
+# Bumped by hand alongside frontend/package.json's "version" at each release
+# — there's no build-time step that derives one from the other.
+APP_VERSION = "1.7.0"
+
 
 class Settings(BaseSettings):
     # Database

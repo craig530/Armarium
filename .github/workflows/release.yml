@@ -1,9 +1,13 @@
 name: Release
 
-# Ad-hoc release process: tag a commit on main with vX.Y.Z and push the tag
-# (e.g. `git tag v1.0.0 && git push origin v1.0.0`). This builds and
-# publishes the backend/frontend images to GHCR and creates a GitHub Release
-# with the matching CHANGELOG.md section as its body.
+# Ad-hoc release process: bump the version in backend/app/config.py
+# (APP_VERSION) and frontend/package.json + package-lock.json (the two root
+# "version" fields) to match, commit, then tag that commit on main with
+# vX.Y.Z and push the tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`).
+# Nothing in the build derives one of those from the other, so they drift if
+# this step is skipped. Tagging builds and publishes the backend/frontend
+# images to GHCR and creates a GitHub Release with the matching
+# CHANGELOG.md section as its body.
 
 on:
   push:

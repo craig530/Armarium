@@ -10,7 +10,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import settings
+from .config import settings, APP_VERSION
 from .database import engine, Base, AsyncSessionLocal
 from .repositories.app_config import AppConfigRepository
 from .repositories.user import UserRepository
@@ -126,7 +126,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Armarium API",
     description="Self-hosted media catalogue — Music, Films & TV and Books, physical or digital",
-    version="1.0.1",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -195,4 +195,4 @@ app.mount("/platform-logos", StaticFiles(directory=str(platform_logos_dir)), nam
 @app.get("/health", tags=["system"])
 async def health():
     from .services.cache import lookup_cache
-    return {"status": "ok", "version": "1.0.1", "cache_entries": lookup_cache.size()}
+    return {"status": "ok", "version": APP_VERSION, "cache_entries": lookup_cache.size()}
