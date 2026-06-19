@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **UPCDatabase.org barcode fallback** — when resolving a scanned Films & TV
+  or Games barcode to a product title, if UPCitemdb has no match for the
+  code, Armarium now optionally falls back to UPCDatabase.org. Enabled by
+  setting `UPCDATABASE_API_KEY` in `.env`; with no key set, behaviour is
+  unchanged.
+
 ## [1.6.1] - 2026-06-18
 
 ### Fixed

@@ -4,6 +4,7 @@ import re
 from typing import List, Optional
 
 from . import tmdb
+from ..config import settings
 from ..schemas.media import LookupCandidate
 
 logger = logging.getLogger("armarium")
@@ -13,17 +14,27 @@ logger = logging.getLogger("armarium")
 # api.themoviedb.org): no `_is_safe_url` needed.
 UPCITEMDB_URL = "https://api.upcitemdb.com/prod/trial/lookup"
 
-# Strips bracketed/parenthesised format or region tags UPCitemdb titles tend
-# to carry, e.g. "Steins;Gate: The Complete Series [Blu-ray]" or
+# Optional second fallback, only queried when UPCDATABASE_API_KEY is set and
+# UPCitemdb had no match — its crowd-sourced catalogue doesn't fully overlap
+# with UPCitemdb's, so it occasionally has codes UPCitemdb doesn't (and vice
+# versa). Fixed/hardcoded host — same SSRF posture as the other providers.
+# Their docs advertise an `Authorization: Bearer` header, but that's wrong —
+# verified against the live API that the key only works as an `apikey` query
+# parameter.
+UPCDATABASE_URL = "https://api.upcdatabase.org/product"
+
+# Strips bracketed/parenthesised format or region tags UPCitemdb/UPCDatabase
+# titles tend to carry, e.g. "Steins;Gate: The Complete Series [Blu-ray]" or
 # "The Lion King (2019) [Blu-ray] [Region Free]".
 _BRACKETS_RE = re.compile(r"\[[^\]]*\]|\([^)]*\)")
 
 
 def _clean_title(raw_title: str) -> str:
-    """Turn a UPCitemdb product title into something worth searching TMDB
-    for: drop bracketed format/region tags, then drop everything from the
-    first comma onward (UPCitemdb often appends cast/edition/UPC text after
-    a comma), and trim leftover separators."""
+    """Turn a UPCitemdb/UPCDatabase product title into something worth
+    searching TMDB for: drop bracketed format/region tags, then drop
+    everything from the first comma onward (UPCitemdb often appends
+    cast/edition/UPC text after a comma; UPCDatabase appends brand/platform/
+    barcode the same way), and trim leftover separators."""
     title = _BRACKETS_RE.sub("", raw_title)
     title = title.split(",")[0]
     return title.strip(" -:")
@@ -59,6 +70,15 @@ async def lookup_title(barcode: str) -> Optional[str]:
 
 
 async def _lookup_title(barcode: str) -> Optional[str]:
+    title = await _lookup_title_upcitemdb(barcode)
+    if title:
+        return title
+    if settings.upcdatabase_api_key:
+        title = await _lookup_title_upcdatabase(barcode)
+    return title
+
+
+async def _lookup_title_upcitemdb(barcode: str) -> Optional[str]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             resp = await client.get(UPCITEMDB_URL, params={"upc": barcode})
@@ -73,3 +93,22 @@ async def _lookup_title(barcode: str) -> Optional[str]:
         return None
 
     return _clean_title(items[0].get("title", "")) or None
+
+
+async def _lookup_title_upcdatabase(barcode: str) -> Optional[str]:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.get(
+                f"{UPCDATABASE_URL}/{barcode}",
+                params={"apikey": settings.upcdatabase_api_key},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.warning("UPCDatabase lookup failed for barcode=%s: %s", barcode, e)
+            return None
+
+    if not data.get("success"):
+        return None
+
+    return _clean_title(data.get("title", "")) or None

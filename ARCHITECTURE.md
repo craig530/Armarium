@@ -282,19 +282,29 @@ produce a false-positive link.
   `IGDB_CLIENT_SECRET` → `POST id.twitch.tv/oauth2/token` → bearer token
   cached in-process (~60-day TTL, refreshed on expiry via `asyncio.Lock`).
   Queries are `POST api.igdb.com/v4/games` with a Lisp-like body syntax.
-  Barcode lookup uses `external_games.category = 10` (EAN/UPC category in
-  IGDB's schema). When credentials are absent, the endpoint returns 503.
+  IGDB's `external_games` table stores platform-storefront IDs (Steam,
+  eShop, etc.), not physical barcodes — there is no barcode field in its
+  schema, so barcode lookup goes through `services/upc.lookup_title()` (see
+  below) to resolve a title, strips trailing platform-suffix text
+  (`igdb._clean_game_title()`, e.g. "- Nintendo Switch 2"), and searches IGDB
+  by that title. When credentials are absent, the endpoint returns 503.
   Attribution logo at `frontend/src/assets/igdb/logo.svg` (CC BY-SA 4.0
   from Wikimedia Commons), displayed via `IGDBAttribution.jsx` mirroring
   `TMDBAttribution.jsx`.
-- TMDB has no barcode lookup of its own. `GET /lookup/barcode/{barcode}` for
-  a films_tv (or unspecified-category) barcode that MusicBrainz didn't
-  resolve falls back to `services/upc.lookup_films_tv_by_barcode()`: looks
-  the barcode up on UPCitemdb's free trial endpoint
-  (`api.upcitemdb.com/prod/trial/lookup`, fixed host, no API key — same SSRF
-  posture as the other providers), strips bracketed format/region tags from
-  the returned product title (`_clean_title()`), and searches TMDB by the
-  cleaned title via `tmdb.search_titles()`.
+- Neither TMDB nor IGDB has a barcode lookup of its own. `GET
+  /lookup/barcode/{barcode}` for a films_tv/games (or unspecified-category)
+  barcode that MusicBrainz didn't resolve falls back to
+  `services/upc.lookup_films_tv_by_barcode()` (films/TV) or
+  `services/igdb.lookup_by_barcode()` (games), both of which go through the
+  shared `services/upc._lookup_title()`: looks the barcode up on UPCitemdb's
+  free trial endpoint (`api.upcitemdb.com/prod/trial/lookup`, fixed host, no
+  API key — same SSRF posture as the other providers); if that has no match,
+  and `UPCDATABASE_API_KEY` is configured, falls back to UPCDatabase.org
+  (`api.upcdatabase.org/product/{barcode}`, fixed host, key passed as an
+  `apikey` query parameter — their docs advertise a `Bearer` auth header,
+  but that format is rejected by the live API). Either provider's title is
+  cleaned (`_clean_title()`: strips bracketed format/region tags, truncates
+  at the first comma) before TMDB/IGDB is searched by it.
 - `hashlib.md5(..., usedforsecurity=False)` is used for non-cryptographic
   purposes only (cache keys, content-addressed filenames) — never for
   passwords or tokens. New non-crypto hash usage should follow the same

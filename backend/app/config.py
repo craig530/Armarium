@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     tmdb_api_key: Optional[str] = None
     igdb_client_id: Optional[str] = None
     igdb_client_secret: Optional[str] = None
+    # Optional second fallback for barcode-to-title resolution (films/TV and
+    # games flows), only queried when UPCitemdb has no match for the code.
+    upcdatabase_api_key: Optional[str] = None
 
     # CORS — comma-separated origins, or * for all. Empty = same-origin only.
     cors_origins: str = "*"

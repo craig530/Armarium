@@ -573,6 +573,88 @@ async def test_upc_lookup_films_tv_by_barcode_returns_empty_on_upcitemdb_error()
     assert candidates == []
 
 
+# ── UPCDatabase.org fallback (service layer) ────────────────────────────────
+
+async def test_upc_lookup_title_falls_back_to_upcdatabase_when_upcitemdb_has_no_match(monkeypatch):
+    from app.config import settings
+    from app.services import upc
+
+    monkeypatch.setattr(settings, "upcdatabase_api_key", "test-key")
+
+    def handler(request):
+        url = str(request.url)
+        if "upcitemdb.com" in url:
+            return httpx.Response(200, json={"code": "OK", "items": []})
+        if "upcdatabase.org" in url:
+            assert request.url.params["apikey"] == "test-key"
+            return httpx.Response(200, json={
+                "success": True,
+                "title": "Indiana Jones and the Great Circle, Bethesda, Nintendo Switch 2, 196388816279",
+            })
+        raise AssertionError(f"unexpected request to {url}")
+
+    with _patched_client("app.services.upc", handler):
+        title = await upc.lookup_title("196388816279")
+
+    assert title == "Indiana Jones and the Great Circle"
+
+
+async def test_upc_lookup_title_skips_upcdatabase_when_key_not_configured(monkeypatch):
+    from app.config import settings
+    from app.services import upc
+
+    monkeypatch.setattr(settings, "upcdatabase_api_key", None)
+
+    def handler(request):
+        url = str(request.url)
+        if "upcitemdb.com" in url:
+            return httpx.Response(200, json={"code": "OK", "items": []})
+        raise AssertionError(f"unexpected request to {url}")  # UPCDatabase must not be queried
+
+    with _patched_client("app.services.upc", handler):
+        title = await upc.lookup_title("196388816279")
+
+    assert title is None
+
+
+async def test_upc_lookup_title_does_not_query_upcdatabase_when_upcitemdb_succeeds(monkeypatch):
+    from app.config import settings
+    from app.services import upc
+
+    monkeypatch.setattr(settings, "upcdatabase_api_key", "test-key")
+
+    def handler(request):
+        url = str(request.url)
+        if "upcitemdb.com" in url:
+            return httpx.Response(200, json={"code": "OK", "items": [{"title": "Hollow Knight"}]})
+        raise AssertionError(f"unexpected request to {url}")  # short-circuits before reaching UPCDatabase
+
+    with _patched_client("app.services.upc", handler):
+        title = await upc.lookup_title("045496590475")
+
+    assert title == "Hollow Knight"
+
+
+async def test_upc_lookup_title_returns_none_when_upcdatabase_also_has_no_match(monkeypatch):
+    from app.config import settings
+    from app.services import upc
+
+    monkeypatch.setattr(settings, "upcdatabase_api_key", "test-key")
+
+    def handler(request):
+        url = str(request.url)
+        if "upcitemdb.com" in url:
+            return httpx.Response(200, json={"code": "OK", "items": []})
+        if "upcdatabase.org" in url:
+            return httpx.Response(200, json={"success": False, "error": {"code": 404, "message": "Not Found."}})
+        raise AssertionError(f"unexpected request to {url}")
+
+    with _patched_client("app.services.upc", handler):
+        title = await upc.lookup_title("196388816279")
+
+    assert title is None
+
+
 async def test_openlibrary_isbn_does_not_query_google_books_when_cover_present():
     from app.services import openlibrary
 

@@ -164,6 +164,7 @@ is already excluded via `.gitignore`.
 | `TMDB_API_KEY` | No | *(none)* | Free API key from [TMDB](https://www.themoviedb.org/settings/api), needed for Films & TV metadata lookup. Without it, Music, Books and Games lookup still work (except IGDB). |
 | `IGDB_CLIENT_ID` | No | *(none)* | Twitch app client ID, needed for Games metadata lookup via IGDB. Register at [dev.twitch.tv](https://dev.twitch.tv/console). |
 | `IGDB_CLIENT_SECRET` | No | *(none)* | Twitch app client secret, paired with `IGDB_CLIENT_ID`. |
+| `UPCDATABASE_API_KEY` | No | *(none)* | Free API key from [UPCDatabase.org](https://upcdatabase.org/api), used as a second fallback for resolving a scanned barcode to a product title (Films & TV and Games) when [UPCitemdb](https://www.upcitemdb.com/) has no match for the code. |
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///./data/armarium.db` | Database connection string. Defaults to a SQLite file stored in the persistent data volume. See [Advanced: Using PostgreSQL](#advanced-using-postgresql) to use a different database. |
 | `CORS_ORIGINS` | No | *(same-origin only)* | Comma-separated list of extra origins allowed to call the API directly. Not needed for the default setup, where the frontend and backend share an origin via the bundled reverse proxy. |
 | `COOKIE_SECURE` | No | `true` | Whether the browser login session cookie requires HTTPS. Only set to `false` for HTTP-only deployments (e.g. an internal network without TLS) — otherwise the browser won't send the cookie back and login won't work. |
@@ -193,6 +194,13 @@ third-party services:
 | Music | [MusicBrainz](https://musicbrainz.org/) | No |
 | Books | [Open Library](https://openlibrary.org/) | No |
 | Games | [IGDB](https://www.igdb.com/) | Yes — Twitch developer credentials (`IGDB_CLIENT_ID` + `IGDB_CLIENT_SECRET`) |
+
+Neither TMDB nor IGDB support looking up a product by barcode directly, so
+scanning a Films & TV or Games barcode first resolves a product title via
+[UPCitemdb](https://www.upcitemdb.com/) (free, no key needed), then searches
+TMDB/IGDB by that title. If UPCitemdb has no record of the scanned code (most
+common for very recently released titles), it falls back to
+[UPCDatabase.org](https://upcdatabase.org/) when `UPCDATABASE_API_KEY` is set.
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
 Game data powered by IGDB — not endorsed by IGDB.
