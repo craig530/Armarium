@@ -33,12 +33,14 @@ See [armarium.app](https://armarium.app) for a full gallery with light/dark/mobi
 
 |                                                 |                                                   |
 | ----------------------------------------------- | ------------------------------------------------- |
-| ![Library grid view](docs/screenshots/library.png) | ![Locations manager](docs/screenshots/locations.png) |
-| Library grid view — search, filter, and sort across Music, Films & TV, Books, and Games | Locations manager — model your home as a nested tree of rooms, shelves and boxes |
-| ![Platforms manager](docs/screenshots/platforms.png) | ![Mediums manager](docs/screenshots/mediums.png) |
-| Platforms manager — track digital storefronts and streaming services, including Plex | Mediums manager — customise the physical/digital media types within each category |
-| ![Admin users panel](docs/screenshots/admin-users.png) |  |
-| Admin panel — manage users, permissions, Plex sync, maintenance schedules, and category visibility |  |
+| ![Home, light mode](docs/screenshots/home-light.webp) | ![Home, dark mode](docs/screenshots/home-dark.webp) |
+| Home — recently added and per-category rows across your whole library | Dark mode, applied consistently across the app |
+| ![Home on mobile](docs/screenshots/home-mobile.webp) | ![Games library](docs/screenshots/library-games.webp) |
+| Mobile / PWA — install it like a native app on your phone | Games library — physical and digital copies side by side |
+| ![Item detail page](docs/screenshots/item-detail.webp) | ![Add item flow](docs/screenshots/add-flow.webp) |
+| Item detail — metadata, ownership, and your own rating | Add flow — scan a barcode or search by title |
+| ![Locations manager](docs/screenshots/locations.webp) | ![Admin panel](docs/screenshots/admin.webp) |
+| Locations manager — model your home as a nested tree of rooms, shelves and boxes | Admin panel — manage users, permissions, Plex sync, maintenance schedules, and ownership mode |
 
 ## Features
 
@@ -72,20 +74,24 @@ See [armarium.app](https://armarium.app) for a full gallery with light/dark/mobi
 - **Star ratings at a glance** — items with a user rating show a subtle star
   strip on the cover image so you can see your ratings without opening an item.
 - **Ownership** — items, lists, and Plex library mappings carry an owner
-  (configurable in Settings → Ownership). Default "Shared" mode treats
-  everything as belonging to the house; "By Login" mode tracks who created
-  each item, with an owner filter in the library and per-item ownership editing.
+  (configurable from the Admin panel). Default "Shared" mode treats everything
+  as belonging to the house; "By User" mode tracks who created each item, with
+  an owner filter in the library, an owner row on item detail pages, and a
+  one-time migration tool to assign existing shared items to a user when
+  switching modes.
 - **Multi-user with admin roles** — secure JWT-based login, with an admin
-  panel for managing additional user accounts.
+  panel for managing additional user accounts. Each user can set a display
+  name (shown in the navbar and on owned items, falling back to `@username`)
+  and a Light/Dark/Auto theme preference that syncs across devices.
 - **Export and import** — back up or migrate your library as CSV or JSON.
 - **Scheduled maintenance** — recurring schedules for database backups, cover
   image management (redownload, purge orphans, export), and library linking,
   all configurable from the Admin panel.
-- **Category visibility** — disable entire categories you don't use (e.g.
+- **Medium visibility** — disable entire categories you don't use (e.g.
   disable Music, Films & TV, and Books to use Armarium as a pure game
-  catalogue). Disabled categories vanish from all navigation, the home page,
-  the add flow, and filter panels — configurable per-deployment from the
-  Admin panel.
+  catalogue), with item counts shown per category. Disabled categories vanish
+  from all navigation, the home page, the add flow, and filter panels —
+  configurable per-deployment from the Admin panel.
 - **Installable as an app (PWA)** — add Armarium to your phone's home screen
   and browse your library offline.
 - **Dark mode** and **keyboard shortcuts** for fast, comfortable browsing.
@@ -401,7 +407,7 @@ armarium/
 │   │                            Open Library), cover art, search, Plex sync,
 │   │                            rate limiting
 │   ├── alembic/                 migration environment (0001_baseline = v1 schema)
-│   └── tests/                   pytest test suite (226+ tests)
+│   └── tests/                   pytest test suite (234+ tests)
 ├── frontend/                  React 19 + Vite + Tailwind CSS
 │   ├── src/
 │   │   ├── api/                 API client (cookie-based auth, 401 redirect)

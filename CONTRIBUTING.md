@@ -49,7 +49,7 @@ Have an idea for something Armarium should do?
 
    ```bash
    pip install -r requirements.txt -r requirements-dev.txt
-   python -m pytest -q   # 119+ tests
+   python -m pytest -q   # 234+ tests
    ruff check app
    bandit -r app -ll
    pip-audit

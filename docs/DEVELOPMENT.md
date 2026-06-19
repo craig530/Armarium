@@ -99,7 +99,7 @@ These mirror CI (`.github/workflows/ci.yml`) and
 committing backend changes:
 
 ```bash
-python -m pytest -q   # 119+ tests
+python -m pytest -q   # 234+ tests
 ruff check app          # lint
 bandit -r app -ll        # SAST — see ARCHITECTURE.md §7 "accepted findings" before adding new # nosec
 pip-audit                 # dependency CVEs

@@ -395,6 +395,26 @@ the [IGDB API](https://api-docs.igdb.com/) (operated by Twitch Interactive, Inc.
   own collection. If you operate a hosted/multi-tenant instance, review
   IGDB's [API terms of service](https://www.igdb.com/api_terms_of_use) separately.
 
+### UPCitemdb & UPCDatabase.org
+
+Neither TMDB nor IGDB support looking up a title by barcode, so the Films &
+TV and Games barcode-scan flows (`backend/app/services/upc.py`) first resolve
+a product title from a barcode via these two services, then search
+TMDB/IGDB by that title:
+
+- **[UPCitemdb](https://www.upcitemdb.com/)** — queried first, via its free
+  trial endpoint (`api.upcitemdb.com/prod/trial/lookup`). No API key or
+  attribution requirement; used purely as an internal lookup step — no
+  UPCitemdb branding, data, or links are shown to the user.
+- **[UPCDatabase.org](https://upcdatabase.org/)** — optional second fallback,
+  only queried if UPCitemdb has no match and `UPCDATABASE_API_KEY` is set in
+  `.env`. Same internal-lookup-only usage as UPCitemdb; no attribution
+  requirement found in its terms.
+- Neither service's product titles or descriptions are stored or displayed
+  verbatim — they're cleaned (`upc._clean_title()`) and used only as a search
+  query against TMDB/IGDB, whose own results (and licensing/attribution
+  obligations, documented above) are what's actually shown to the user.
+
 ### IGDB logo
 
 The file `frontend/src/assets/igdb/logo.svg` is sourced from the IGDB logo
@@ -410,8 +430,9 @@ accordance with that licence.
 
 Armarium is independent, open-source software. It is **not affiliated with,
 endorsed by, sponsored by, or certified by** TMDB, The Movie Database, MetaBrainz,
-MusicBrainz, the Internet Archive, Open Library, IGDB, Twitch, or any streaming
-service, platform, or brand referenced in its documentation, settings, or user
-interface. All product names, logos, and trademarks are the property of their
-respective owners and are used in Armarium solely to identify the
+MusicBrainz, the Internet Archive, Open Library, IGDB, Twitch, UPCitemdb,
+UPCDatabase.org, or any streaming service, platform, retail, console,
+publisher brand, or other brand referenced in its documentation, settings, or
+user interface. All product names, logos, and trademarks are the property of
+their respective owners and are used in Armarium solely to identify the
 corresponding service.

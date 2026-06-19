@@ -7,34 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-19
+
 ### Added
 
+- **Display names** — users can set a display name (Settings → Profile),
+  shown in the navbar and on owned items, falling back to `@username` when
+  unset.
+- **Theme preference** — Light/Dark/Auto, chosen from a 3-button grid in
+  Settings → Profile, persisted to your account and synced across devices on
+  login (previously theme was a local-only browser preference).
+- **Admin Ownership panel** — switch between "Shared" and "By User" ownership
+  modes from the Admin panel, including a one-time migration tool to assign
+  existing shared items, lists, and Plex mappings to a chosen user before
+  switching.
+- **Owner visibility on items** — item detail pages show an owner row
+  (clickable to filter the library by that owner); linked copies owned by a
+  different user show that owner's name alongside them.
 - **UPCDatabase.org barcode fallback** — when resolving a scanned Films & TV
   or Games barcode to a product title, if UPCitemdb has no match for the
   code, Armarium now optionally falls back to UPCDatabase.org. Enabled by
   setting `UPCDATABASE_API_KEY` in `.env`; with no key set, behaviour is
   unchanged.
+- **GTIN-14 / ITF-14 barcode support** — some Nintendo Switch cartridge boxes
+  use a 14-digit barcode (a packaging-indicator digit plus an EAN-13); these
+  are now recognised by stripping the leading digit and retrying as EAN-13.
 
 ### Changed
 
-- **Trademark disclaimer** — the README and in-app footer now explicitly
-  state that Armarium is an independent open-source project not affiliated
-  with, endorsed by, sponsored by, or otherwise associated with any retail,
-  console or publisher brand (in addition to the metadata providers already
+- **Medium Visibility** (renamed from "Category Visibility") — the Admin
+  panel toggle for disabling entire categories now shows the current item
+  count per category.
+- **Navbar cleanup** — removed the "Manage" dropdown in favour of direct
+  links; shows your display name (with `@username` fallback) instead of just
+  the username.
+- **Trademark disclaimer** — the README, in-app footer, and
+  THIRD_PARTY_LICENSES.md now explicitly state that Armarium is an
+  independent open-source project not affiliated with, endorsed by,
+  sponsored by, or otherwise associated with any retail, console or
+  publisher brand (in addition to the metadata/lookup providers already
   named), since the app catalogues and displays third-party product/brand
   names and logos for games, films, music and books.
 
 ### Fixed
 
-- **Scheduled jobs that never ran could starve forever** — a job that had
-  never completed a run (e.g. a freshly created Plex sync schedule)
-  anchored its first fire to "registration time + interval" rather than to
-  a fixed timestamp. Since registration happens fresh on every backend
-  restart, a host that redeploys more often than the configured interval
-  (e.g. a nightly `docker compose pull && up`) could keep resetting the
-  countdown before the job ever got a chance to fire. Now anchors to
-  `created_at` when there's no `last_run_at` yet, so an overdue first run
-  fires on the next scheduler tick instead of waiting indefinitely.
+- **Scheduled jobs could be delayed, or never run at all, across restarts** —
+  APScheduler re-registers every job fresh on each backend restart. A job
+  that had run before anchored its next fire to `last_run_at + interval`,
+  but a job that had *never* run anchored to "registration time + interval"
+  instead — and since registration happens on every restart, a host that
+  redeploys more often than the job's interval could reset that countdown
+  indefinitely, so the job never got a chance to fire (this happened in
+  production: four schedules created days earlier had never executed once).
+  Now consistently anchors to `last_run_at`, or `created_at` if the job has
+  never run, so an overdue first run fires on the next scheduler tick
+  instead of waiting indefinitely.
+- **Location/platform chip tooltips clipped by container overflow** — the
+  hierarchical-path tooltip on location chips is now rendered via a portal
+  so it's never clipped by an `overflow-hidden` ancestor.
+- **Location chip tooltip misbehaving on mobile/PWA** — touch browsers
+  emulate a synthetic `mouseenter`→`click` sequence after every tap, which
+  could show a duplicate tooltip alongside the long-press one, leave a
+  tooltip stuck open (no real `mouseleave` follows on a touch device), or
+  flash briefly on a plain tap meant to filter the library. The hover
+  tooltip now only activates on devices with real pointer-hover support;
+  mobile continues to use the long-press tooltip exclusively.
+- **Disabled-category flash on load** — `appConfig` is now persisted to
+  `localStorage`, so the navbar and home page no longer briefly show a
+  disabled category before the first API response arrives.
+- **Games metadata silently broken on `docker-compose.prod.yml` deployments**
+  — that compose file never passed `IGDB_CLIENT_ID`/`IGDB_CLIENT_SECRET`
+  through to the backend container's environment, even when set correctly in
+  `.env`. Anyone deploying via the documented prebuilt-image flow (rather
+  than building from source with `docker-compose.yml`, which already had
+  this) got no Games search/barcode lookup, with no indication why. Also
+  added the new `UPCDATABASE_API_KEY` passthrough to both compose files.
+- **Item cover image not refreshing after upload/delete** — the item detail
+  hero image now remounts on every cover change instead of potentially
+  showing a cached/stale image.
+- **Duplicate "More by this artist/author" entries** — deduplicated.
+
+### Security
+
+- Upgraded `undici` (transitive, via `jsdom`) to patch a high-severity CVE
+  flagged by `npm audit` — TLS certificate validation bypass and cross-user
+  cache information disclosure (GHSA-vmh5-mc38-953g, GHSA-pr7r-676h-xcf6).
 
 ## [1.6.1] - 2026-06-18
 

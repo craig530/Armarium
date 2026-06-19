@@ -531,7 +531,7 @@ every PR. Run locally before committing structural changes:
 **Backend** (from `backend/`, with `.venv` activated):
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt   # requirements-dev.txt: test/lint/SAST tools, not in the production image
-python -m pytest -q          # full test suite (200 tests)
+python -m pytest -q          # full test suite (234 tests)
 ruff check app                # lint
 bandit -r app -ll              # SAST — see "accepted findings" below
 pip-audit                       # dependency CVEs
