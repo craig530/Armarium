@@ -1,6 +1,11 @@
 # ── Secrets / config ──────────────────────────────────────────────────────────
 .env
 
+# Claude Code local settings can capture real credentials in allowlisted
+# command history (e.g. test admin passwords) — never commit this; only the
+# shared, secret-free .claude/settings.json should ever be tracked.
+.claude/settings.local.json
+
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
