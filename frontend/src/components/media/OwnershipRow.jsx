@@ -16,14 +16,25 @@ function IconBox({ children }) {
   )
 }
 
+// True only for devices with a real pointer that can hover (mice/trackpads).
+// Touch-only devices report `(hover: none)` even though their browsers still
+// emulate a synthetic mouseenter->click sequence after every tap — without
+// this check that emulated mouseenter would open the tooltip below on mobile,
+// and since there's no real mouseleave to follow on a touch device, it would
+// never close on its own. matchMedia is unavailable in the jsdom test
+// environment (see store/index.js for the same guard).
+const supportsHover = window.matchMedia?.('(hover: hover)').matches ?? false
+
 // Portal-based hover tooltip — renders at document body so it is never clipped
-// by overflow-hidden ancestors. Mobile: no hover events, so never fires.
+// by overflow-hidden ancestors. Mobile uses LocationChip's own long-press
+// tooltip instead (see `showPath` below) — this one is desktop-only.
 function HoverTooltip({ content, children }) {
   const [pos, setPos] = useState(null)
   const triggerRef = useRef(null)
   if (!content) return children
 
   const handleMouseEnter = () => {
+    if (!supportsHover) return
     if (triggerRef.current) {
       const r = triggerRef.current.getBoundingClientRect()
       setPos({ top: r.top + window.scrollY, left: r.left + r.width / 2 })
