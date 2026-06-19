@@ -36,6 +36,11 @@ function mockGet() {
     if (url === '/admin/plex/config') {
       return Promise.resolve({ data: { configured: false, enabled: false, base_url: null, platform: null } })
     }
+    if (url === '/admin/system-info') {
+      return Promise.resolve({
+        data: { version: '1.7.0', database: 'SQLite', cors_origins: '*', apis: { tmdb: false, igdb: false, upcdatabase: false } },
+      })
+    }
     return Promise.resolve({ data: [] })
   })
 }

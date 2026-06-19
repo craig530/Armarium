@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 
-from ...config import settings
+from ...config import settings, APP_VERSION
 from ...database import AsyncSessionLocal
 from ...services.media_subtypes import seed_default_media_subtypes
 from ...services.auth import get_current_admin
@@ -14,6 +14,22 @@ from ...repositories.media_subtype import MediaSubtypeRepository, get_media_subt
 from ...repositories.platform import PlatformRepository, get_platform_repository
 
 router = APIRouter()
+
+
+@router.get("/system-info")
+async def system_info(_=Depends(get_current_admin)):
+    """Build/runtime info for the Admin panel's system info box."""
+    database = "PostgreSQL" if settings.database_url.startswith("postgresql") else "SQLite"
+    return {
+        "version": APP_VERSION,
+        "database": database,
+        "cors_origins": settings.cors_origins,
+        "apis": {
+            "tmdb": bool(settings.tmdb_api_key),
+            "igdb": bool(settings.igdb_client_id and settings.igdb_client_secret),
+            "upcdatabase": bool(settings.upcdatabase_api_key),
+        },
+    }
 
 
 def _reset_dir(path: str) -> None:

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download, Link2, Pencil, Users } from 'lucide-react'
+import clsx from 'clsx'
+import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, AlertTriangle, Download, Link2, Pencil, Users, Info } from 'lucide-react'
 import client from '../api/client'
 import { adminApi } from '../api/admin'
 import { plexApi } from '../api/plex'
@@ -375,6 +376,9 @@ export default function Admin() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage users and system settings</p>
       </div>
 
+      {/* System info card */}
+      <SystemInfoPanel />
+
       {/* Users card */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center justify-between mb-4">
@@ -464,6 +468,82 @@ export default function Admin() {
 
       {/* Danger zone */}
       <DangerZonePanel />
+    </div>
+  )
+}
+
+const API_LABELS = [
+  { key: 'tmdb', label: 'TMDB' },
+  { key: 'igdb', label: 'IGDB' },
+  { key: 'upcdatabase', label: 'UPCDatabase.org' },
+]
+
+function SystemInfoPanel() {
+  const [info, setInfo] = useState(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    adminApi.systemInfo().then(setInfo).catch(() => setFailed(true))
+  }, [])
+
+  // The backend container doesn't know its own externally-mapped port (that's
+  // a docker-compose/host-level detail) — the browser's own URL is the only
+  // reliable source for "what port am I actually talking to this on".
+  const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Info size={16} className="text-gray-400" />
+        <h2 className="font-semibold text-gray-900 dark:text-white">System Info</h2>
+      </div>
+
+      {failed ? (
+        <p className="text-sm text-red-500">Could not load system info.</p>
+      ) : !info ? (
+        <p className="text-sm text-gray-400 animate-pulse">Loading…</p>
+      ) : (
+        <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+          <div>
+            <dt className="text-xs text-gray-400 uppercase tracking-wide">Version</dt>
+            <dd className="text-gray-900 dark:text-white font-medium">v{info.version}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-400 uppercase tracking-wide">Status</dt>
+            <dd className="flex items-center gap-1.5 text-gray-900 dark:text-white font-medium">
+              <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+              Online
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-400 uppercase tracking-wide">Database</dt>
+            <dd className="text-gray-900 dark:text-white font-medium">{info.database}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-400 uppercase tracking-wide">Port</dt>
+            <dd className="text-gray-900 dark:text-white font-medium">{port}</dd>
+          </div>
+          <div className="col-span-2 sm:col-span-4">
+            <dt className="text-xs text-gray-400 uppercase tracking-wide mb-1.5">Metadata APIs</dt>
+            <dd className="flex flex-wrap gap-2">
+              {API_LABELS.map(({ key, label }) => (
+                <span
+                  key={key}
+                  className={clsx(
+                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs',
+                    info.apis[key]
+                      ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+                  )}
+                >
+                  {info.apis[key] ? <Check size={11} /> : <X size={11} />}
+                  {label}
+                </span>
+              ))}
+            </dd>
+          </div>
+        </dl>
+      )}
     </div>
   )
 }

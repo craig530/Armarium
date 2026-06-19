@@ -1,5 +1,29 @@
 """Tests for app.api.v1.admin — library-wide maintenance operations."""
+from app.config import APP_VERSION
+
 from .conftest import _create_user_and_login, _subtype_id
+
+
+async def test_admin_system_info_returns_version_and_api_status(client, auth_headers, monkeypatch):
+    from app.api.v1 import admin as admin_module
+
+    monkeypatch.setattr(admin_module.settings, "tmdb_api_key", "test-key")
+    monkeypatch.setattr(admin_module.settings, "igdb_client_id", None)
+    monkeypatch.setattr(admin_module.settings, "igdb_client_secret", None)
+    monkeypatch.setattr(admin_module.settings, "upcdatabase_api_key", "test-key")
+
+    resp = await client.get("/api/v1/admin/system-info", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["version"] == APP_VERSION
+    assert body["database"] == "SQLite"
+    assert body["apis"] == {"tmdb": True, "igdb": False, "upcdatabase": True}
+
+
+async def test_admin_system_info_requires_admin(client, auth_headers):
+    _, headers = await _create_user_and_login(client, auth_headers, "sysinfouser")
+    resp = await client.get("/api/v1/admin/system-info", headers=headers)
+    assert resp.status_code == 403
 
 
 async def test_admin_auto_link_scans_and_links_unlinked_duplicates(client, auth_headers):
