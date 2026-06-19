@@ -55,14 +55,20 @@ class SchedulerService:
     def _register(self, job) -> None:
         if not self.scheduler.running:
             return
-        # If the job ran previously, anchor the trigger to last_run_at + interval
-        # so APScheduler fires it immediately if it's overdue (e.g. after a server
-        # restart that pushes the next fire to now+interval, causing a missed run).
-        # misfire_grace_time=None lets overdue runs fire regardless of how late they
-        # are; coalesce=True collapses multiple missed fires into one.
-        start_date = None
-        if job.last_run_at is not None:
-            start_date = job.last_run_at + timedelta(hours=job.interval_hours)
+        # Anchor the trigger to last_run_at + interval — or, if the job has
+        # never run yet, created_at + interval — so APScheduler fires it
+        # immediately if it's overdue (e.g. after a server restart that would
+        # otherwise push the next fire to now+interval, causing a missed
+        # run). The created_at fallback matters: without it, a job that's
+        # never run defaults to "registration time" + interval every time
+        # _register() runs, and since that happens fresh on every server
+        # restart, a job that never gets a chance to fire before the next
+        # restart has its countdown reset indefinitely and can starve
+        # forever. misfire_grace_time=None lets overdue runs fire regardless
+        # of how late they are; coalesce=True collapses multiple missed
+        # fires into one.
+        anchor = job.last_run_at or job.created_at
+        start_date = anchor + timedelta(hours=job.interval_hours)
         self.scheduler.add_job(
             _dispatch,
             trigger=IntervalTrigger(hours=job.interval_hours, start_date=start_date),

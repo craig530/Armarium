@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   setting `UPCDATABASE_API_KEY` in `.env`; with no key set, behaviour is
   unchanged.
 
+### Fixed
+
+- **Scheduled jobs that never ran could starve forever** — a job that had
+  never completed a run (e.g. a freshly created Plex sync schedule)
+  anchored its first fire to "registration time + interval" rather than to
+  a fixed timestamp. Since registration happens fresh on every backend
+  restart, a host that redeploys more often than the configured interval
+  (e.g. a nightly `docker compose pull && up`) could keep resetting the
+  countdown before the job ever got a chance to fire. Now anchors to
+  `created_at` when there's no `last_run_at` yet, so an overdue first run
+  fires on the next scheduler tick instead of waiting indefinitely.
+
 ## [1.6.1] - 2026-06-18
 
 ### Fixed
