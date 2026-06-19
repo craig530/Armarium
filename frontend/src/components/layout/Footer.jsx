@@ -12,9 +12,10 @@ export default function Footer() {
         .
       </p>
       <p>
-        Armarium is not affiliated with, endorsed by, or sponsored by TMDB, MusicBrainz/MetaBrainz, Open Library,
-        the Internet Archive, or any streaming, music or video platform referenced in this app. All product names,
-        logos and brands are property of their respective owners.
+        Armarium is an independent, open-source project and is not affiliated with, endorsed by, sponsored by, or
+        otherwise associated with TMDB, MusicBrainz/MetaBrainz, Open Library, the Internet Archive, IGDB, any
+        streaming, music or video platform referenced in this app, or any retail, console or publisher brand whose
+        products it catalogues. All product names, logos and brands are property of their respective owners.
       </p>
     </footer>
   )

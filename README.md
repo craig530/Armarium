@@ -447,11 +447,13 @@ See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for the full list of
 dependencies, their licences, and attribution details for the services and
 brand assets above.
 
-> Armarium is an independent project and is **not affiliated with, endorsed
-> by, or sponsored by** TMDB, MusicBrainz/MetaBrainz, the Internet
-> Archive/Open Library, or any streaming, music or video platform it can
-> connect to (Plex, Netflix, Spotify, etc.). All product names, logos and
-> trademarks are the property of their respective owners.
+> Armarium is an independent, open-source project and is **not affiliated
+> with, endorsed by, sponsored by, or otherwise associated with** TMDB,
+> MusicBrainz/MetaBrainz, the Internet Archive/Open Library, IGDB, any
+> streaming, music or video platform it can connect to (Plex, Netflix,
+> Spotify, etc.), or any retail, console or publisher brand (Nintendo, Sony,
+> Microsoft, etc.) whose products it catalogues. All product names, logos
+> and trademarks are the property of their respective owners.
 
 ## Contributing
 

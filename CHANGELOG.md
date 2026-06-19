@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   setting `UPCDATABASE_API_KEY` in `.env`; with no key set, behaviour is
   unchanged.
 
+### Changed
+
+- **Trademark disclaimer** — the README and in-app footer now explicitly
+  state that Armarium is an independent open-source project not affiliated
+  with, endorsed by, sponsored by, or otherwise associated with any retail,
+  console or publisher brand (in addition to the metadata providers already
+  named), since the app catalogues and displays third-party product/brand
+  names and logos for games, films, music and books.
+
 ### Fixed
 
 - **Scheduled jobs that never ran could starve forever** — a job that had
