@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-06-22
+
+### Fixed
+
+- **Setting up Plex sync again after removing it failed** — `PlexConfig`'s
+  singleton row relied on the `id` column's autoincrement default to land
+  on 1 (enforced by a check constraint), but on PostgreSQL the underlying
+  sequence keeps advancing even after the row is deleted, so reconfiguring
+  Plex after a previous removal permanently hit the check constraint and
+  500'd on save (test connection still succeeded, since it doesn't touch
+  the database). The row's `id` is now always set explicitly to 1.
+
 ## [1.8.1] - 2026-06-22
 
 ### Fixed

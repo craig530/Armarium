@@ -9,7 +9,7 @@ logger = logging.getLogger("armarium")
 
 # Bumped by hand alongside frontend/package.json's "version" at each release
 # — there's no build-time step that derives one from the other.
-APP_VERSION = "1.8.1"
+APP_VERSION = "1.8.2"
 
 
 class Settings(BaseSettings):
