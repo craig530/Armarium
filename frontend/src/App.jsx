@@ -13,6 +13,7 @@ const AddItem = lazy(() => import('./pages/AddItem'))
 const ItemDetail = lazy(() => import('./pages/ItemDetail'))
 const Profile = lazy(() => import('./pages/Profile'))
 const Admin = lazy(() => import('./pages/Admin'))
+const AdminUsers = lazy(() => import('./pages/AdminUsers'))
 const SettingsLayout = lazy(() => import('./pages/Settings/SettingsLayout'))
 const SettingsLocations = lazy(() => import('./pages/Settings/SettingsLocations'))
 const SettingsPlatforms = lazy(() => import('./pages/Settings/SettingsPlatforms'))
@@ -61,6 +62,14 @@ const router = createBrowserRouter(
           element={
             <ProtectedRoute requireAdmin>
               <Admin />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/users"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminUsers />
             </ProtectedRoute>
           }
         />

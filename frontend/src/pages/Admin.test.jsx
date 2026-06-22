@@ -32,13 +32,17 @@ const mockUsers = [
 function mockGet() {
   client.get.mockImplementation((url) => {
     if (url === '/users') return Promise.resolve({ data: mockUsers })
+    if (url === '/users/summary') return Promise.resolve({ data: mockUsers })
     if (url === '/library/backup/list') return Promise.resolve({ data: { backups: [], backup_supported: true } })
     if (url === '/admin/plex/config') {
       return Promise.resolve({ data: { configured: false, enabled: false, base_url: null, platform: null } })
     }
     if (url === '/admin/system-info') {
       return Promise.resolve({
-        data: { version: '1.7.0', database: 'SQLite', cors_origins: '*', apis: { tmdb: false, igdb: false, upcdatabase: false } },
+        data: {
+          version: '1.7.0', database: 'SQLite', cors_origins: '*', configured_port: '8080',
+          apis: { tmdb: false, igdb: false, upcdatabase: false },
+        },
       })
     }
     return Promise.resolve({ data: [] })
@@ -68,66 +72,12 @@ afterEach(() => {
 })
 
 describe('Admin', () => {
-  it('renders the user list with role badges and a marker for the current user', async () => {
+  it('shows a Users summary card linking to the dedicated users page', async () => {
     renderAdmin()
 
-    expect(await screen.findByText('alice')).toBeTruthy()
-    const adminRow = screen.getByText('admin').closest('div')
-    expect(within(adminRow).getByText('Admin')).toBeTruthy()
-    expect(within(adminRow).getByText('(you)')).toBeTruthy()
-  })
-
-  it('shows validation errors for an invalid username and short password', async () => {
-    renderAdmin()
-    await screen.findByText('alice')
-
-    fireEvent.click(screen.getByText('New user'))
-    const form = screen.getByText('Create user').closest('form')
-    fireEvent.change(within(form).getAllByRole('textbox')[0], { target: { value: 'a' } })
-    fireEvent.change(form.querySelector('input[type="password"]'), { target: { value: 'short' } })
-    fireEvent.click(within(form).getByText('Create'))
-
-    expect(await screen.findByText('Use 3-50 characters: letters, numbers, underscores or hyphens only')).toBeTruthy()
-    expect(screen.getByText('Password must be at least 8 characters')).toBeTruthy()
-    expect(client.post).not.toHaveBeenCalled()
-  })
-
-  it('creates a user and reloads the list', async () => {
-    renderAdmin()
-    await screen.findByText('alice')
-
-    fireEvent.click(screen.getByText('New user'))
-    const form = screen.getByText('Create user').closest('form')
-    fireEvent.change(within(form).getAllByRole('textbox')[0], { target: { value: 'bob' } })
-    fireEvent.change(form.querySelector('input[type="password"]'), { target: { value: 'longenoughpassword' } })
-
-    fireEvent.click(within(form).getByText('Create'))
-
-    await waitFor(() => {
-      expect(client.post).toHaveBeenCalledWith('/users', expect.objectContaining({ username: 'bob', password: 'longenoughpassword' }))
-    })
-    await waitFor(() => {
-      expect(screen.queryByText('Create user')).toBeNull()
-    })
-  })
-
-  it("toggles a non-admin user's admin role", async () => {
-    renderAdmin()
-    await screen.findByText('alice')
-
-    fireEvent.click(screen.getByTitle('Grant admin'))
-
-    await waitFor(() => {
-      expect(client.put).toHaveBeenCalledWith('/users/2', { is_admin: true })
-    })
-  })
-
-  it('disables admin-toggle and delete for the current (self) admin user', async () => {
-    renderAdmin()
-    await screen.findByText('alice')
-
-    expect(screen.getByTitle('Cannot change your own admin role').disabled).toBe(true)
-    expect(screen.getByTitle('Cannot delete your own account').disabled).toBe(true)
+    const link = await screen.findByRole('link', { name: /users/i })
+    expect(link.getAttribute('href')).toBe('/admin/users')
+    expect(within(link).getByText('2 users')).toBeTruthy()
   })
 
   it('shows the empty backups state and triggers a backup', async () => {
