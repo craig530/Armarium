@@ -24,6 +24,7 @@ async def system_info(_=Depends(get_current_admin)):
         "version": APP_VERSION,
         "database": database,
         "cors_origins": settings.cors_origins,
+        "configured_port": settings.port,
         "apis": {
             "tmdb": bool(settings.tmdb_api_key),
             "igdb": bool(settings.igdb_client_id and settings.igdb_client_secret),

@@ -9,7 +9,7 @@ logger = logging.getLogger("armarium")
 
 # Bumped by hand alongside frontend/package.json's "version" at each release
 # — there's no build-time step that derives one from the other.
-APP_VERSION = "1.7.1"
+APP_VERSION = "1.8.0"
 
 
 class Settings(BaseSettings):
@@ -45,6 +45,14 @@ class Settings(BaseSettings):
 
     # CORS — comma-separated origins, or * for all. Empty = same-origin only.
     cors_origins: str = "*"
+
+    # Host port the web UI is served on (docker-compose's `PORT` mapping —
+    # see .env.example). Purely informational here: the container itself
+    # always listens on a fixed internal port regardless of this value; it's
+    # surfaced via /admin/system-info so admins can see the configured host
+    # port even when accessing the app through a reverse proxy on a
+    # different external port.
+    port: str = "8080"
 
     model_config = SettingsConfigDict(env_file=".env")
 

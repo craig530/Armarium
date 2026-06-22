@@ -11,12 +11,14 @@ async def test_admin_system_info_returns_version_and_api_status(client, auth_hea
     monkeypatch.setattr(admin_module.settings, "igdb_client_id", None)
     monkeypatch.setattr(admin_module.settings, "igdb_client_secret", None)
     monkeypatch.setattr(admin_module.settings, "upcdatabase_api_key", "test-key")
+    monkeypatch.setattr(admin_module.settings, "port", "9090")
 
     resp = await client.get("/api/v1/admin/system-info", headers=auth_headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["version"] == APP_VERSION
     assert body["database"] == "SQLite"
+    assert body["configured_port"] == "9090"
     assert body["apis"] == {"tmdb": True, "igdb": False, "upcdatabase": True}
 
 
