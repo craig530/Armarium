@@ -16,7 +16,12 @@ class PlexConfig(Base):
         CheckConstraint("id = 1", name="ck_plex_config_singleton"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    # Explicit default=1 (not just the `id = 1` check below) because relying
+    # on the column's autoincrement sequence breaks on Postgres: deleting the
+    # row and reconfiguring later inserts id=2, 3, ... forever (Postgres
+    # sequences don't roll back or reuse values), permanently violating the
+    # singleton check from then on.
+    id = Column(Integer, primary_key=True, index=True, default=1)
     base_url = Column(String(500), nullable=False)
     token = Column(String(500), nullable=False)
     enabled = Column(Boolean, nullable=False, default=False)

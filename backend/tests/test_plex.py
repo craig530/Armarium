@@ -91,6 +91,34 @@ async def test_plex_config_create_update_delete(client, auth_headers):
     assert resp.json()["configured"] is False
 
 
+async def test_plex_config_recreate_after_delete_keeps_singleton_id(client, auth_headers):
+    """PlexConfig.id is pinned to 1 by a CHECK constraint, but relying on the
+    column's autoincrement default to land on 1 breaks on Postgres: deleting
+    the row and reconfiguring later consumes the next sequence value (2, 3,
+    ...) forever, since Postgres sequences never roll back or reuse values
+    -- every "set up Plex again" after a delete would 500 on the CHECK
+    permanently. The model sets default=1 explicitly so a fresh row always
+    lands on id=1 regardless of the sequence's state.
+
+    SQLite reuses rowid 1 for an empty table regardless of history, so this
+    can't reproduce the original Postgres-only failure here -- it guards the
+    explicit default instead.
+    """
+    from app.database import AsyncSessionLocal
+    from app.models.plex_config import PlexConfig
+    from sqlalchemy import select
+
+    await _configure_plex(client, auth_headers)
+    resp = await client.delete("/api/v1/admin/plex/config", headers=auth_headers)
+    assert resp.status_code == 204
+
+    await _configure_plex(client, auth_headers)
+
+    async with AsyncSessionLocal() as db:
+        config = (await db.execute(select(PlexConfig))).scalar_one()
+        assert config.id == 1
+
+
 async def test_plex_test_connection(client, auth_headers):
     with patch("app.services.plex.test_connection", new=AsyncMock(return_value={"ok": True, "name": "My Plex", "version": "1.2.3"})):
         resp = await client.post(
