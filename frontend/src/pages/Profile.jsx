@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Sun, Moon, Monitor, ShieldCheck, LogOut, Download, User } from 'lucide-react'
 import { useAuthStore, useThemeStore } from '../store'
@@ -6,9 +7,25 @@ import { MANAGE_LINKS } from '../lib/navigation'
 import { exportLibrary } from '../lib/export'
 import toast from 'react-hot-toast'
 
+// Matches Button.jsx's spinner so the export rows show the same loading
+// affordance as the rest of the app, without pulling in Button's pill
+// styling (these rows are full-width list items, not buttons).
+function Spinner({ className }) {
+  return (
+    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  )
+}
+
 export default function Profile() {
   const { user, logout, refreshUser } = useAuthStore()
   const { preference, setPreference } = useThemeStore()
+  // Null, or the format currently exporting — large libraries can take a
+  // while to generate, so both buttons disable and show a spinner rather
+  // than giving no feedback while the request is in flight.
+  const [exportingFormat, setExportingFormat] = useState(null)
 
   const handleTheme = async (pref) => {
     setPreference(pref)
@@ -20,11 +37,14 @@ export default function Profile() {
   const navigate = useNavigate()
 
   const handleExport = async (format) => {
+    setExportingFormat(format)
     try {
       const ext = await exportLibrary(format)
       toast.success(`Library exported as ${ext.toUpperCase()}`)
     } catch (err) {
       toast.error(err.message)
+    } finally {
+      setExportingFormat(null)
     }
   }
 
@@ -111,15 +131,19 @@ export default function Profile() {
         <div className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 overflow-hidden">
           <button
             onClick={() => handleExport('csv')}
-            className="w-full flex items-center gap-3 p-4 text-sm font-medium text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-left"
+            disabled={exportingFormat !== null}
+            className="w-full flex items-center gap-3 p-4 text-sm font-medium text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-left disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Download size={16} className="text-gray-400" /> Export library as CSV
+            {exportingFormat === 'csv' ? <Spinner className="h-4 w-4 text-gray-400" /> : <Download size={16} className="text-gray-400" />}
+            {exportingFormat === 'csv' ? 'Exporting…' : 'Export library as CSV'}
           </button>
           <button
             onClick={() => handleExport('json')}
-            className="w-full flex items-center gap-3 p-4 text-sm font-medium text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-left"
+            disabled={exportingFormat !== null}
+            className="w-full flex items-center gap-3 p-4 text-sm font-medium text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 text-left disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Download size={16} className="text-gray-400" /> Export library as JSON
+            {exportingFormat === 'json' ? <Spinner className="h-4 w-4 text-gray-400" /> : <Download size={16} className="text-gray-400" />}
+            {exportingFormat === 'json' ? 'Exporting…' : 'Export library as JSON'}
           </button>
         </div>
       </section>

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Sun, Moon, Plus, LayoutGrid, Settings, ShieldCheck, LogOut, User, Download } from 'lucide-react'
+import { Sun, Moon, SunMoon, Plus, LayoutGrid, Settings, ShieldCheck, LogOut, User, Download } from 'lucide-react'
 import { useThemeStore, useAuthStore, hasPermission, useReferenceDataStore } from '../../store'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -10,10 +10,14 @@ import { exportLibrary } from '../../lib/export'
 import Logo from '../ui/Logo'
 
 export default function Navbar() {
-  const { dark, toggle } = useThemeStore()
+  const { dark, preference, toggle } = useThemeStore()
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  // Null, or the format currently exporting — large libraries can take a
+  // while to generate, so the menu stays open with a spinner rather than
+  // giving no feedback while the request is in flight.
+  const [exportingFormat, setExportingFormat] = useState(null)
   const appConfig = useReferenceDataStore((s) => s.appConfig)
   const disabledCategories = appConfig?.disabled_categories ?? []
 
@@ -25,13 +29,16 @@ export default function Navbar() {
   ]
 
   const handleExport = async (format) => {
+    setExportingFormat(format)
     try {
       const ext = await exportLibrary(format)
       toast.success(`Library exported as ${ext.toUpperCase()}`)
     } catch (err) {
       toast.error(err.message)
+    } finally {
+      setExportingFormat(null)
+      setUserMenuOpen(false)
     }
-    setUserMenuOpen(false)
   }
 
   return (
@@ -72,13 +79,16 @@ export default function Navbar() {
             <kbd className="px-1.5 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-800 font-mono">n</kbd> add
           </span>
 
-          {/* Dark mode toggle */}
+          {/* Theme toggle — icon reflects the current state (not what clicking
+              would switch to): auto shows a combined sun/moon glyph, otherwise
+              whichever of light/dark is actually active. */}
           <button
             onClick={toggle}
             className="h-11 w-11 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            aria-label="Toggle theme"
+            aria-label={`Theme: ${preference === 'auto' ? 'Auto' : dark ? 'Dark' : 'Light'}`}
+            title={`Theme: ${preference === 'auto' ? 'Auto' : dark ? 'Dark' : 'Light'}`}
           >
-            {dark ? <Sun size={18} /> : <Moon size={18} />}
+            {preference === 'auto' ? <SunMoon size={18} /> : dark ? <Moon size={18} /> : <Sun size={18} />}
           </button>
 
           {/* Add item — hidden on mobile, where the FAB covers it */}
@@ -133,15 +143,29 @@ export default function Navbar() {
 
                   <button
                     onClick={() => handleExport('csv')}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-left"
+                    disabled={exportingFormat !== null}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-left disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Download size={14} /> Export CSV
+                    {exportingFormat === 'csv' ? (
+                      <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                    ) : <Download size={14} />}
+                    {exportingFormat === 'csv' ? 'Exporting…' : 'Export CSV'}
                   </button>
                   <button
                     onClick={() => handleExport('json')}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-left"
+                    disabled={exportingFormat !== null}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-left disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Download size={14} /> Export JSON
+                    {exportingFormat === 'json' ? (
+                      <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                    ) : <Download size={14} />}
+                    {exportingFormat === 'json' ? 'Exporting…' : 'Export JSON'}
                   </button>
 
                   <div className="border-t border-gray-100 dark:border-gray-700 mt-1 pt-1">

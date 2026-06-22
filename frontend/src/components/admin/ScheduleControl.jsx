@@ -27,6 +27,16 @@ function formatNextRun(dt) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+function formatLastRun(dt) {
+  if (!dt) return null
+  const d = new Date(dt)
+  const diffMs = new Date() - d
+  if (diffMs < 60000) return 'just now'
+  if (diffMs < 3600000) return `${Math.round(diffMs / 60000)} min ago`
+  if (diffMs < 86400000) return `${Math.round(diffMs / 3600000)}h ago`
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 /**
  * Reusable schedule management inline widget.
  *
@@ -108,6 +118,8 @@ export default function ScheduleControl({
 
   // Schedule exists
   const nextRun = formatNextRun(schedule.next_run_at)
+  const lastRun = formatLastRun(schedule.last_run_at)
+  const lastRunFailed = schedule.last_run_status === 'error'
 
   if (editing) {
     return (
@@ -128,12 +140,22 @@ export default function ScheduleControl({
   }
 
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-      <Clock size={12} className="shrink-0" />
-      <span>{intervalLabel(schedule.interval_hours)}</span>
-      {nextRun && <span className="text-gray-400">· next {nextRun}</span>}
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+      <span className="flex items-center gap-1.5 shrink-0">
+        <Clock size={12} className="shrink-0" />
+        {intervalLabel(schedule.interval_hours)}
+      </span>
+      {lastRun && (
+        <span
+          className={lastRunFailed ? 'text-red-500' : 'text-gray-400'}
+          title={lastRunFailed ? schedule.last_run_error || 'Last run failed' : undefined}
+        >
+          last ran {lastRun}{lastRunFailed ? ' (failed)' : ''}
+        </span>
+      )}
+      {nextRun && <span className="text-gray-400">next {nextRun}</span>}
       {canManage && (
-        <>
+        <span className="flex items-center gap-2 shrink-0">
           <button
             onClick={openEdit}
             className="text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
@@ -149,7 +171,7 @@ export default function ScheduleControl({
           >
             <Trash2 size={11} />
           </button>
-        </>
+        </span>
       )}
     </div>
   )
