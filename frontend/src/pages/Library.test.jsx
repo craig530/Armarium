@@ -160,7 +160,7 @@ describe('Library', () => {
 
     vi.useFakeTimers()
     try {
-      const input = screen.getByPlaceholderText('Search titles, authors, directors… (press /)')
+      const input = screen.getByPlaceholderText('Search titles, artists… (press /)')
       fireEvent.change(input, { target: { value: 'Abbey' } })
 
       mediaApi.list.mockClear()

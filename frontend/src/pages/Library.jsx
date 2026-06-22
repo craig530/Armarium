@@ -18,6 +18,13 @@ import toast from 'react-hot-toast'
 
 const SKELETON_COUNT = 12
 
+const SEARCH_PLACEHOLDERS = {
+  music: 'Search titles, artists… (press /)',
+  films_tv: 'Search titles, directors… (press /)',
+  books: 'Search titles, authors… (press /)',
+  games: 'Search titles, developers… (press /)',
+}
+
 const EMPTY_COPY = {
   music: 'Start cataloguing your CDs, vinyl and digital or streaming music. Scan a barcode or search by title to get started.',
   films_tv: 'Start cataloguing your DVDs, Blu-rays, and digital or streaming films & TV. Scan a barcode or search by title to get started.',
@@ -164,7 +171,7 @@ export default function Library() {
         <SearchInput
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search titles, authors, directors… (press /)"
+          placeholder={SEARCH_PLACEHOLDERS[category] || 'Search titles, authors, directors… (press /)'}
           className="flex-1"
         />
 
