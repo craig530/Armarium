@@ -11,3 +11,7 @@ anyio==4.13.0
 ruff==0.15.17
 bandit==1.9.4
 pip-audit==2.10.1
+# Transitive dep of pip-audit (via CacheControl), pinned past
+# GHSA-6v7p-g79w-8964 — pip-audit's own constraint (<2.0.0) would otherwise
+# resolve to the vulnerable 1.2.0.
+msgpack==1.2.1
