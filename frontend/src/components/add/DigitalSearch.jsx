@@ -32,7 +32,7 @@ export default function DigitalSearch({ category, onResults, query, onQueryChang
     try {
       const results = await lookupApi.search(q, category, 10, category === 'films_tv' ? mediaKind : null)
       if (!results.length) {
-        toast('No results found — try a different search term.', { icon: '🔍' })
+        toast('No results found, try a different search term.', { icon: '🔍' })
       }
       onResults(results)
     } catch (err) {

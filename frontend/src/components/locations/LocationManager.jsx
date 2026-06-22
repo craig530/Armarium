@@ -165,7 +165,7 @@ export default function LocationManager() {
             locations={locations}
             value={form.parent_id}
             onChange={(value) => setForm((f) => ({ ...f, parent_id: value }))}
-            placeholder="— No parent (top level) —"
+            placeholder="No parent (top level)"
             excludeId={editId}
           />
           <IconPicker

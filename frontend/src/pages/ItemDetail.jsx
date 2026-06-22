@@ -593,7 +593,7 @@ export default function ItemDetail() {
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
             </div>
             <p className="mt-1 text-xs text-gray-400">
-              {isCustomCover ? 'Custom cover uploaded — remove it to fall back to the URL above.' : 'Uploading a photo replaces this URL.'}
+              {isCustomCover ? 'Custom cover uploaded. Remove it to fall back to the URL above.' : 'Uploading a photo replaces this URL.'}
             </p>
           </div>
           <Textarea label="Description" value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={3} className="col-span-2" />

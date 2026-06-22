@@ -42,7 +42,7 @@ export function usePlexSyncGuard(syncStatus) {
       </p>
       <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
         <Button variant="ghost" onClick={() => blocker.reset()}>Stay</Button>
-        <Button variant="secondary" onClick={() => blocker.proceed()}>Leave — keep syncing</Button>
+        <Button variant="secondary" onClick={() => blocker.proceed()}>Leave, keep syncing</Button>
         <Button variant="danger" onClick={handleCancelAndLeave}>Cancel sync & leave</Button>
       </div>
     </Modal>

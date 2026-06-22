@@ -52,7 +52,7 @@ export default function ScanOrSearch({ category, onResults, batchMode, query, on
     try {
       const results = await lookupApi.search(q, category, 10, category === 'films_tv' ? mediaKind : null)
       if (!results.length) {
-        toast('No results found — try a different search term.', { icon: '🔍' })
+        toast('No results found, try a different search term.', { icon: '🔍' })
       }
       onResults(results)
     } catch (err) {
@@ -70,7 +70,7 @@ export default function ScanOrSearch({ category, onResults, batchMode, query, on
         // Stay on the scan screen and keep scanning — the barcode is
         // pre-filled into the combined field so a manual exit to search still
         // has it ready to try as a title search.
-        toast('No barcode match found — try a title search.', { icon: '📋' })
+        toast('No barcode match found, try a title search.', { icon: '📋' })
         setQuery(barcode)
         setRestartSignal((n) => n + 1)
       } else {

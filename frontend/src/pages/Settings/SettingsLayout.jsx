@@ -12,7 +12,7 @@ const TABS = [
     label: 'Locations',
     icon: MapPin,
     title: 'Locations',
-    description: 'Where your physical media lives — rooms, shelves, boxes and more.',
+    description: 'Where your physical media lives: rooms, shelves, boxes and more.',
   },
   {
     to: '/settings/platforms',

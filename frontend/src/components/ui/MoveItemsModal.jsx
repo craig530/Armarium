@@ -34,14 +34,14 @@ export default function MoveItemsModal({ open, onClose, type, item, locations, p
 
   const locationGroups = [{
     options: [
-      { value: '', label: '— Remove location assignment —' },
+      { value: '', label: 'Remove location assignment' },
       ...(locations || []).filter((l) => l.id !== item.id).map((l) => ({ value: String(l.id), label: l.path || l.name })),
     ],
   }]
 
   const platformGroups = [{
     options: [
-      { value: '', label: '— Select a platform —' },
+      { value: '', label: 'Select a platform…' },
       ...(platforms || []).filter((p) => p.id !== item.id).map((p) => ({ value: String(p.id), label: p.name })),
     ],
   }]

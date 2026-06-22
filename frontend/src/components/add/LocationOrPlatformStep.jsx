@@ -136,7 +136,7 @@ export default function LocationOrPlatformStep({
                   locations={locations}
                   value={newParentId}
                   onChange={setNewParentId}
-                  placeholder="— No parent (top level) —"
+                  placeholder="No parent (top level)"
                 />
               )}
               <div className="flex gap-2">

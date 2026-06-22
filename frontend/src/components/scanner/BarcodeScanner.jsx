@@ -24,7 +24,7 @@ const INVALID_FLASH_COOLDOWN_MS = 1500
 
 const GUIDANCE_TEXT = {
   default: 'Point your camera at a barcode',
-  holdSteady: 'Hold steady — almost there',
+  holdSteady: 'Hold steady, almost there',
 }
 
 // Mirrors the shape checks in `app/services/barcode.py::process_barcode` —
@@ -78,7 +78,7 @@ function describeCameraError(err) {
   switch (err?.name) {
     case 'NotAllowedError':
     case 'PermissionDeniedError':
-      return 'Camera permission was denied. Enable camera access for this site in Settings → Safari → Camera, then reopen the scanner — or use manual entry below.'
+      return 'Camera permission was denied. Enable camera access for this site in Settings → Safari → Camera, then reopen the scanner, or use manual entry below.'
     case 'NotFoundError':
     case 'DevicesNotFoundError':
       return 'No camera was found on this device. Use manual entry below.'

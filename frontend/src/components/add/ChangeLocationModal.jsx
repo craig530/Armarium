@@ -115,7 +115,7 @@ export default function ChangeLocationModal({ supertype, locationId, platformId,
                   locations={locations}
                   value={newParentId}
                   onChange={setNewParentId}
-                  placeholder="— No parent (top level) —"
+                  placeholder="No parent (top level)"
                 />
                 <IconPicker iconKey={newIconKey} iconUrl={null} onSelect={setNewIconKey} />
               </>

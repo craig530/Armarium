@@ -18,7 +18,7 @@ export default function IGDBAttribution({ className }) {
       )}
     >
       <img src={igdbLogo} alt="IGDB" className="h-3.5 w-auto shrink-0 dark:invert" />
-      <span>Game data from IGDB — not endorsed by IGDB.</span>
+      <span>Game data from IGDB. Not endorsed by IGDB.</span>
     </a>
   )
 }

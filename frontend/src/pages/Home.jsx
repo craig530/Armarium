@@ -198,7 +198,7 @@ export default function Home() {
           <div className="text-6xl">📦</div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Your collection is empty</h2>
           <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-            Start cataloguing your music, films, TV and books — physical or digital.
+            Start cataloguing your music, films, TV and books, physical or digital.
           </p>
           <Button onClick={() => navigate('/add')} className="mx-auto">
             <Plus size={16} /> Add your first item

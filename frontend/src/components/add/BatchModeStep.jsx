@@ -14,7 +14,7 @@ export default function BatchModeStep({ batchMode, onChange, onContinue, categor
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Batch mode</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Cataloguing a whole shelf? Turn on batch mode to save each item the moment you confirm
-          it and jump straight back to scanning — no need to repeat this setup for every item.
+          it and jump straight back to scanning, no need to repeat this setup for every item.
         </p>
       </div>
 

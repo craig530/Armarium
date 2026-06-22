@@ -39,7 +39,7 @@ function LastSyncSummary({ mapping }) {
       {parts.length > 0 && <span>{parts.join(', ')}</span>}
       {mapping.last_sync_status === 'error' && mapping.last_sync_error && (
         <span className="text-red-400 truncate max-w-[200px]" title={mapping.last_sync_error}>
-          — {mapping.last_sync_error}
+          · {mapping.last_sync_error}
         </span>
       )}
     </div>
@@ -417,11 +417,11 @@ export default function SettingsPlex() {
                             <span className="text-xs text-gray-600 dark:text-gray-300">{m.media_subtype.name}</span>
                           ) : (
                             <span className="text-xs text-amber-500">
-                              Not set — ask an admin to configure this in Plex Sync settings
+                              Not set. Ask an admin to configure this in Plex Sync settings
                             </span>
                           )}
                           {!m.media_subtype && isAdmin && (
-                            <span className="text-xs text-amber-500">— sync disabled until set</span>
+                            <span className="text-xs text-amber-500">(sync disabled until set)</span>
                           )}
                         </div>
 
