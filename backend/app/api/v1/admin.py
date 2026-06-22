@@ -12,6 +12,14 @@ from ...repositories.location import LocationRepository, get_location_repository
 from ...repositories.media_item import AUTO_LINK_FIELD, MediaItemRepository, get_media_item_repository
 from ...repositories.media_subtype import MediaSubtypeRepository, get_media_subtype_repository
 from ...repositories.platform import PlatformRepository, get_platform_repository
+from ...repositories.plex import (
+    PlexConfigRepository,
+    PlexLibraryMappingRepository,
+    get_plex_config_repository,
+    get_plex_library_mapping_repository,
+)
+from ...repositories.scheduled_job import ScheduledJobRepository, get_scheduled_job_repository
+from ...services.scheduler import scheduler_service
 
 router = APIRouter()
 
@@ -47,11 +55,28 @@ async def reset_database(
     location_repo: LocationRepository = Depends(get_location_repository),
     subtype_repo: MediaSubtypeRepository = Depends(get_media_subtype_repository),
     platform_repo: PlatformRepository = Depends(get_platform_repository),
+    plex_config_repo: PlexConfigRepository = Depends(get_plex_config_repository),
+    plex_mapping_repo: PlexLibraryMappingRepository = Depends(get_plex_library_mapping_repository),
+    schedule_repo: ScheduledJobRepository = Depends(get_scheduled_job_repository),
 ):
     """Wipe all catalogue data (media, locations, platforms, links) and cover
     image files, then reseed the default media subtypes. User accounts are
     left untouched.
     """
+    # Plex config/mappings hold RESTRICT foreign keys into media_subtypes and
+    # platforms (so a sync can't silently repoint mid-flight) - on Postgres
+    # those block the deletes below unless cleared first, same as the
+    # individual delete_mapping/delete_config endpoints do.
+    for mapping in await plex_mapping_repo.list_all():
+        sched = await schedule_repo.find_plex_schedule(mapping.id)
+        if sched:
+            scheduler_service.remove(sched.id)
+            await schedule_repo.delete(sched)
+        await plex_mapping_repo.delete(mapping)
+    config = await plex_config_repo.get_singleton()
+    if config is not None:
+        await plex_config_repo.delete(config)
+
     await media_repo.delete_all()
     await location_repo.delete_all()
     await subtype_repo.delete_all()

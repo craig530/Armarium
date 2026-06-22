@@ -1,7 +1,10 @@
 """Tests for app.api.v1.admin — library-wide maintenance operations."""
+from unittest.mock import AsyncMock, patch
+
 from app.config import APP_VERSION
 
 from .conftest import _create_user_and_login, _subtype_id
+from .test_plex import _PLEX_SECTIONS, _configure_plex
 
 
 async def test_admin_system_info_returns_version_and_api_status(client, auth_headers, monkeypatch):
@@ -80,3 +83,30 @@ async def test_admin_auto_link_scans_and_links_unlinked_duplicates(client, auth_
     assert resp.status_code == 204
     resp = await client.delete(f"/api/v1/media/{digital_id}", headers=auth_headers)
     assert resp.status_code == 204
+
+
+async def test_reset_database_clears_plex_config_and_mappings(client, auth_headers):
+    """PlexConfig.platform_id and PlexLibraryMapping.media_subtype_id are
+    ON DELETE RESTRICT foreign keys (see those models), so deleting platforms
+    and media subtypes out from under a configured Plex integration without
+    clearing it first raises a foreign key violation — always enforced on
+    Postgres, and also enforced here since SQLite FK checks are on (see
+    test_database.py). Reset must clear Plex state before wiping the
+    catalogue."""
+    await _configure_plex(client, auth_headers)
+    with patch("app.services.plex.list_sections", new=AsyncMock(return_value=_PLEX_SECTIONS)):
+        resp = await client.post(
+            "/api/v1/admin/plex/mappings", json={"section_key": "1"}, headers=auth_headers
+        )
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.post("/api/v1/admin/reset-database", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get("/api/v1/admin/plex/config", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["configured"] is False
+
+    resp = await client.get("/api/v1/admin/plex/mappings", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
