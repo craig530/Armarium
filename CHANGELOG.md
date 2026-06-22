@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-arch GHCR images** — `armarium-backend`/`armarium-frontend` are
+  now built for both `linux/amd64` and `linux/arm64`, so the prebuilt-image
+  deployment flow (`docker-compose.prod.yml`) works on ARM hosts (Raspberry
+  Pi, AWS Graviton, Oracle Cloud's ARM free tier, Apple Silicon Macs)
+  without needing `--platform` overrides or building from source.
+
+### Fixed
+
+- **GHCR packages were private despite the repo being public** — container
+  package visibility doesn't automatically follow repository visibility
+  (it's set once, independently, and this repo was originally private).
+  Anonymous `docker pull` of either image returned "unauthorized" until
+  visibility was changed manually for both packages.
+
 ## [1.7.0] - 2026-06-19
 
 ### Added
