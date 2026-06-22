@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-06-22
+
+### Fixed
+
+- **Reset database failed when Plex integration was configured** — the
+  admin "Reset database" action deleted media subtypes and platforms
+  without first clearing the Plex sync config and library mappings that
+  reference them, hitting a foreign key violation (always enforced on
+  PostgreSQL, surfacing as a 500). Reset now clears the Plex integration
+  and its library mappings before wiping the catalogue.
+
 ## [1.8.0] - 2026-06-22
 
 ### Added
