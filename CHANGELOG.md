@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-06-22
+
+### Added
+
+- **Dedicated Users page** — user management moved from the Admin page to
+  its own screen (`/admin/users`), so households with many accounts aren't
+  stuck scrolling a long inline list buried among other admin cards. The
+  Admin page now shows a compact "N users" summary card linking there.
+- **System Info: configured port** — alongside the externally-observed
+  port (e.g. 443 through a reverse proxy), the Admin System Info panel now
+  also shows the `PORT` value configured in `.env`/docker-compose, wired
+  through as an actual setting rather than inferred from the browser alone.
+- **Export progress feedback** — the library CSV/JSON export buttons
+  (Settings and the navbar menu) now disable and show a spinner while the
+  export is in flight, instead of giving no indication that anything is
+  happening for large libraries.
+- **Schedule last-run time** — maintenance/Plex sync schedule rows in the
+  Admin panel now show "last ran Xh ago" (highlighted red with the error
+  message on failure) alongside the next scheduled run.
+
+### Changed
+
+- **Theme toggle icon** reflects the current state instead of what
+  clicking it would switch to: a combined sun/moon glyph for Auto,
+  otherwise whichever of Light/Dark is actually active.
+- **Search placeholder is category-aware** — "artists" for Music,
+  "directors" for Films & TV, "authors" for Books, "developers" for Games,
+  instead of one generic placeholder mentioning roles that don't apply to
+  the category you're searching.
+- **Footer**: "Armarium" now links to armarium.app.
+- Removed em-dashes from user-facing text app-wide (toasts, labels,
+  placeholders, confirmation dialogs) in favour of plain punctuation.
+
+### Fixed
+
+- **Admin Users mobile layout** — rows now stack vertically on narrow
+  screens instead of cramming the user info and action icons into one row;
+  badges wrap instead of overflowing; the password/display-name edit input
+  no longer overlaps the save/cancel buttons.
+
 ## [1.7.1] - 2026-06-22
 
 ### Added
