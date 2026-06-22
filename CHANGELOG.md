@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-06-22
+
 ### Added
 
 - **Multi-arch GHCR images** — `armarium-backend`/`armarium-frontend` are
@@ -22,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (it's set once, independently, and this repo was originally private).
   Anonymous `docker pull` of either image returned "unauthorized" until
   visibility was changed manually for both packages.
+- **Flaky Plex sync tests** — a process-global job-status dict wasn't
+  cleared between tests, so a sync left at status="running" by one test
+  (its background task not yet finished when that test's event loop was
+  torn down) could be mistaken for an in-progress sync by a later, unrelated
+  test reusing the same mapping id, causing intermittent CI failures.
+
+### Security
+
+- Upgraded `pydantic-settings` 2.14.1 → 2.14.2 (GHSA-4xgf-cpjx-pc3j) and
+  pinned `msgpack` to 1.2.1 (GHSA-6v7p-g79w-8964, a dev-only transitive
+  dependency of `pip-audit` — never shipped in the production image).
 
 ## [1.7.0] - 2026-06-19
 
