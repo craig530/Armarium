@@ -54,6 +54,22 @@ def _reset_rate_limits():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _reset_plex_sync_jobs():
+    """plex_sync_jobs._jobs is a process-global dict keyed by mapping_id, but
+    the `client` fixture gives every test a fresh in-memory database whose
+    autoincrement ids restart at 1 — so a sync job left at status="running"
+    by a prior test (e.g. its background asyncio.create_task hadn't reached
+    a terminal state before that test's event loop was torn down) would
+    otherwise be mistaken for an in-progress sync on an unrelated later
+    test's mapping with the same id, causing spurious 409s or polls that
+    never see a terminal status. Clear it before every test."""
+    from app.services import plex_sync_jobs
+
+    plex_sync_jobs._jobs.clear()
+    yield
+
+
 @pytest.fixture
 async def auth_headers(client):
     resp = await client.post(
