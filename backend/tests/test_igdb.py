@@ -181,7 +181,7 @@ async def test_igdb_details_endpoint_returns_404_when_not_found(client, auth_hea
 # ── Game media items CRUD ─────────────────────────────────────────────────────
 
 async def test_create_game_item_with_developer_and_igdb_id(client, auth_headers):
-    subtype_id = await _subtype_id(client, auth_headers, "Nintendo Switch")
+    subtype_id = await _subtype_id(client, auth_headers, "Disc")
 
     resp = await client.post(
         "/api/v1/media",
@@ -207,7 +207,7 @@ async def test_create_game_item_with_developer_and_igdb_id(client, auth_headers)
 
 
 async def test_game_item_appears_in_games_category_list(client, auth_headers):
-    subtype_id = await _subtype_id(client, auth_headers, "Nintendo Switch")
+    subtype_id = await _subtype_id(client, auth_headers, "Disc")
 
     resp = await client.post(
         "/api/v1/media",
@@ -231,4 +231,4 @@ async def test_game_subtypes_seeded_by_migration(client, auth_headers):
     subtypes = resp.json()
     game_subtypes = [s for s in subtypes if s["category"] == "games"]
     names = {s["name"] for s in game_subtypes}
-    assert {"Nintendo Switch", "Xbox", "PlayStation", "Nintendo eShop", "Microsoft Store", "PlayStation Store"}.issubset(names)
+    assert {"Disc", "Cartridge", "Game"}.issubset(names)

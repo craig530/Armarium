@@ -27,8 +27,10 @@ const AUTO_SUBTYPE_NAME = {
   'music:digital': 'Music',
   'books:digital': 'eBook',
   'books:physical': 'Book',
-  'games:digital': 'Nintendo eShop',
-  'games:physical': 'Nintendo Switch',
+  // No 'games:digital' entry — there's only one default digital games
+  // subtype ("Game"), so the "exactly 1 option" fallback below already
+  // selects it without needing a guess.
+  'games:physical': 'Disc',
 }
 
 // `item` switches the form into edit mode: fields are seeded from the

@@ -7,6 +7,7 @@ import { mediaApi } from '../api/media'
 import { useLibraryStore, useReferenceDataStore, useStatsStore } from '../store'
 import { DEFAULT_CATEGORY_SLUG, categoryFromSlug, categoryLabel } from '../lib/categories'
 import { dedupeLinkedItems } from '../lib/media'
+import { EMPTY_STATE_ICONS } from '../lib/mediaIcons'
 import MediaCard from '../components/media/MediaCard'
 import MediaListRow from '../components/media/MediaListRow'
 import IconLegend from '../components/media/IconLegend'
@@ -29,6 +30,7 @@ const EMPTY_COPY = {
   music: 'Start cataloguing your CDs, vinyl and digital or streaming music. Scan a barcode or search by title to get started.',
   films_tv: 'Start cataloguing your DVDs, Blu-rays, and digital or streaming films & TV. Scan a barcode or search by title to get started.',
   books: 'Start cataloguing your books and graphic novels. Scan a barcode or search by title to get started.',
+  games: 'Start cataloguing your discs, cartridges and digital games. Scan a barcode or search by title to get started.',
 }
 
 export default function Library() {
@@ -227,7 +229,12 @@ export default function Library() {
       {/* Empty library */}
       {isEmpty && (
         <div className="text-center py-24 space-y-4">
-          <div className="text-6xl">📦</div>
+          <div className="mx-auto h-24 w-24 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+            {(() => {
+              const EmptyIcon = EMPTY_STATE_ICONS[category] || EMPTY_STATE_ICONS.all
+              return <EmptyIcon size={40} className="text-gray-400 dark:text-gray-500" />
+            })()}
+          </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">No {categoryLabel(category).toLowerCase()} yet</h2>
           <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
             {EMPTY_COPY[category]}

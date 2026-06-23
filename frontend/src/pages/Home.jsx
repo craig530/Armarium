@@ -7,6 +7,7 @@ import { mediaApi } from '../api/media'
 import { useReferenceDataStore } from '../store'
 import { CATEGORIES } from '../lib/categories'
 import { dedupeLinkedItems } from '../lib/media'
+import { EMPTY_STATE_ICONS } from '../lib/mediaIcons'
 import MediaRow from '../components/media/MediaRow'
 import MediaCard from '../components/media/MediaCard'
 import IconLegend from '../components/media/IconLegend'
@@ -195,7 +196,9 @@ export default function Home() {
 
       {!hasActiveFilters && isEmpty && (
         <div className="text-center py-24 space-y-4">
-          <div className="text-6xl">📦</div>
+          <div className="mx-auto h-24 w-24 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+            <EMPTY_STATE_ICONS.all size={40} className="text-gray-400 dark:text-gray-500" />
+          </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Your collection is empty</h2>
           <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
             Start cataloguing your music, films, TV and books, physical or digital.

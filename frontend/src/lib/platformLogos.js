@@ -47,6 +47,7 @@ export const PLATFORM_LOGOS = {
   applemusic: { label: 'Apple Music', logoUrl: applemusic, aliases: [] },
   youtubemusic: { label: 'YouTube Music', logoUrl: youtubemusic, aliases: ['youtube music'] },
   tidal: { label: 'Tidal', logoUrl: tidal, aliases: [] },
+  amazon_music: { label: 'Amazon Music', logoUrl: null, aliases: [] },
   qobuz: { label: 'Qobuz', logoUrl: null, aliases: [] },
   mubi: { label: 'MUBI', logoUrl: mubi, aliases: [] },
   bfi_player: { label: 'BFI Player', logoUrl: null, aliases: ['bfi'] },

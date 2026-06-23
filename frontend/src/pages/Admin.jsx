@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
-import { Trash2, Check, X, RefreshCw, AlertTriangle, Download, Link2, Users, Info, ChevronRight } from 'lucide-react'
+import { Trash2, Check, X, RefreshCw, AlertTriangle, Download, Link2, Users, Info, ChevronRight, ArrowLeft } from 'lucide-react'
 import client from '../api/client'
 import { adminApi } from '../api/admin'
 import { plexApi } from '../api/plex'
@@ -50,6 +50,9 @@ export default function Admin() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
+        <Link to="/profile" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white mb-3">
+          <ArrowLeft size={14} /> Settings
+        </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage users and system settings</p>
       </div>
@@ -897,8 +900,8 @@ function DangerZonePanel() {
 
   const handleReset = async () => {
     if (!await confirm(
-      'This will permanently delete all media, locations, and platforms, and restore the default mediums. ' +
-      'User accounts are kept.\n\nMake sure you’ve taken a backup first.',
+      'This will permanently delete all media, locations, and platforms, and restore the default mediums, ' +
+      'platforms, and locations. User accounts are kept.\n\nMake sure you’ve taken a backup first.',
       { title: 'Reset database?', confirmLabel: 'Continue', variant: 'danger' }
     )) return
 
@@ -926,8 +929,8 @@ function DangerZonePanel() {
       </div>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Reset the database to its default state. All media, locations, and platforms will be
-        permanently deleted, and the default mediums will be restored. User accounts are
-        not affected.
+        permanently deleted, and the default mediums, platforms, and locations will be
+        restored. User accounts are not affected.
       </p>
       <Button size="sm" variant="danger" loading={resetting} onClick={handleReset}>
         <Trash2 size={14} /> Reset database

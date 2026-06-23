@@ -54,11 +54,12 @@ def test_upgrade_head_creates_schema_and_seeds_subtypes(tmp_sqlite_url):
     finally:
         engine.dispose()
 
-    assert len(subtypes) == 16
+    assert len(subtypes) == 13
     assert ("CD", "MUSIC", "PHYSICAL", 0) in subtypes
     assert ("Audiobook", "BOOKS", "DIGITAL", 1) in subtypes
-    assert ("Nintendo Switch", "GAMES", "PHYSICAL", 0) in subtypes
-    assert ("PlayStation Store", "GAMES", "DIGITAL", 2) in subtypes
+    assert ("Disc", "GAMES", "PHYSICAL", 0) in subtypes
+    assert ("Cartridge", "GAMES", "PHYSICAL", 1) in subtypes
+    assert ("Game", "GAMES", "DIGITAL", 0) in subtypes
 
 
 def test_upgrade_head_is_idempotent(tmp_sqlite_url):
@@ -73,8 +74,8 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
     finally:
         engine.dispose()
 
-    assert count == 16
-    assert version == "0010"
+    assert count == 13
+    assert version == "0011"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):
@@ -218,3 +219,21 @@ def test_upgrade_head_adds_display_name_and_theme(tmp_sqlite_url):
         engine.dispose()
 
     assert {"display_name", "theme_preference"}.issubset(user_columns)
+
+
+def test_upgrade_head_seeds_default_platforms_and_locations(tmp_sqlite_url):
+    _upgrade(tmp_sqlite_url)
+
+    engine = create_engine(tmp_sqlite_url)
+    try:
+        with engine.connect() as conn:
+            platforms = {row[0] for row in conn.execute(text("SELECT name FROM platforms")).fetchall()}
+            locations = {row[0] for row in conn.execute(text("SELECT name FROM locations")).fetchall()}
+    finally:
+        engine.dispose()
+
+    assert platforms == {
+        "Plex", "Audible", "Kindle", "PlayStation Store", "Microsoft Store",
+        "Nintendo eShop", "Apple TV", "Amazon Music",
+    }
+    assert locations == {"Living Room", "Master Bedroom", "Office"}

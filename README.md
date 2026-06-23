@@ -200,7 +200,7 @@ Subtypes**.
 | **Music** | CD | Digital Music, Streaming Music |
 | **Films & TV** | DVD, Blu-ray, 4K Blu-ray | Digital Film, Digital TV Series, Streaming Film, Streaming TV |
 | **Books** | Book, Graphic Novel | eBook, Audiobook |
-| **Games** | Nintendo Switch, Xbox, PlayStation | Nintendo eShop, Microsoft Store, PlayStation Store |
+| **Games** | Disc, Cartridge | Game |
 
 ## Metadata Sources
 
@@ -420,7 +420,7 @@ armarium/
 │   │                            Open Library), cover art, search, Plex sync,
 │   │                            rate limiting
 │   ├── alembic/                 migration environment (0001_baseline = v1 schema)
-│   └── tests/                   pytest test suite (252+ tests)
+│   └── tests/                   pytest test suite (254+ tests)
 ├── frontend/                  React 19 + Vite + Tailwind CSS
 │   ├── src/
 │   │   ├── api/                 API client (cookie-based auth, 401 redirect)

@@ -164,6 +164,24 @@ produce a false-positive link.
 - `alembic/versions/0001_baseline.py` is the v1 baseline — it creates every
   table with its full v1 constraints and seeds the 10 default media subtypes.
   There is no pre-v1 migration history; this baseline *is* the schema.
+- **Default seed data** (media subtypes, platforms, locations) follows one
+  pattern, doubled in two places that must stay in sync:
+  - A Python list + `seed_default_x(session)` function in
+    `app/services/media_subtypes.py` / `default_platforms.py` /
+    `default_locations.py`, each a no-op unless its table is currently
+    empty. `main.py`'s lifespan calls all three for in-memory test DBs
+    (which skip Alembic), and `POST /admin/reset-database` calls them again
+    after wiping the catalogue, so "reset to default state" reseeds them.
+  - The equivalent `op.bulk_insert` in the Alembic migration that
+    introduced/changed that data, gated the same way (empty-table check, or
+    — when *replacing* defaults, as `0011_update_games_subtypes.py` does for
+    the Games media subtypes — a per-row "not referenced by media_items/
+    plex_library_mappings" check before deleting, since `ON DELETE RESTRICT`
+    means an admin's existing items using an old default block its removal,
+    and that's correct: never destroy data to enforce a new default).
+  - Adding a new default in any of these lists needs a migration too — file-
+    based DBs (the normal case) never run the Python seed function, only
+    `alembic upgrade head`.
 - **Shared Postgres enum types (`mediacategory`, `supertype`) — use
   `postgresql.ENUM(..., create_type=False)`, not `sa.Enum(...,
   create_type=False)`.** The generic `sa.Enum`'s `create_type` flag is
@@ -575,7 +593,7 @@ every PR. Run locally before committing structural changes:
 **Backend** (from `backend/`, with `.venv` activated):
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt   # requirements-dev.txt: test/lint/SAST tools, not in the production image
-python -m pytest -q          # full test suite (252 tests)
+python -m pytest -q          # full test suite (254 tests)
 ruff check app                # lint
 bandit -r app -ll              # SAST — see "accepted findings" below
 pip-audit                       # dependency CVEs

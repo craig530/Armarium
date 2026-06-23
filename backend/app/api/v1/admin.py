@@ -5,6 +5,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from ...config import settings, APP_VERSION
 from ...database import AsyncSessionLocal
+from ...services.default_locations import seed_default_locations
+from ...services.default_platforms import seed_default_platforms
 from ...services.media_subtypes import seed_default_media_subtypes
 from ...services.auth import get_current_admin
 from ...services.cover_art import download_cover
@@ -60,8 +62,8 @@ async def reset_database(
     schedule_repo: ScheduledJobRepository = Depends(get_scheduled_job_repository),
 ):
     """Wipe all catalogue data (media, locations, platforms, links) and cover
-    image files, then reseed the default media subtypes. User accounts are
-    left untouched.
+    image files, then reseed the default media subtypes, platforms, and
+    locations. User accounts are left untouched.
     """
     # Plex config/mappings hold RESTRICT foreign keys into media_subtypes and
     # platforms (so a sync can't silently repoint mid-flight) - on Postgres
@@ -88,6 +90,8 @@ async def reset_database(
     _reset_dir(settings.platform_logos_dir)
 
     await seed_default_media_subtypes(media_repo.db)
+    await seed_default_platforms(media_repo.db)
+    await seed_default_locations(media_repo.db)
 
     return {"status": "ok"}
 

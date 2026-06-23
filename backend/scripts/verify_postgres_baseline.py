@@ -42,7 +42,7 @@ async def main() -> None:
             result = await conn.execute(text("SELECT category, supertype, name FROM media_subtypes"))
             rows = result.all()
 
-        assert len(rows) == 16, f"expected 16 seeded media subtypes, got {len(rows)}: {rows}"
+        assert len(rows) == 13, f"expected 13 seeded media subtypes, got {len(rows)}: {rows}"
         categories = {row[0] for row in rows}
         assert categories == {"MUSIC", "FILMS_TV", "BOOKS", "GAMES"}, categories
         print(f"media_subtypes seed: OK ({len(rows)} rows)")

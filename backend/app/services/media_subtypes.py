@@ -8,8 +8,9 @@ from ..models.media_subtype import MediaSubtype
 
 logger = logging.getLogger("armarium")
 
-# Kept in sync with alembic/versions/0001_baseline.py's seed data, which
-# applies this list to fresh databases. This copy backs reset_database's
+# Kept in sync with alembic/versions/0001_baseline.py (Music/Films & TV/
+# Books) and 0011_update_games_subtypes.py (Games), which apply this list to
+# fresh/existing databases respectively. This copy backs reset_database's
 # reseed of an already-migrated database.
 M, F, B, G = MediaCategory.MUSIC, MediaCategory.FILMS_TV, MediaCategory.BOOKS, MediaCategory.GAMES
 P, D = Supertype.PHYSICAL, Supertype.DIGITAL
@@ -24,12 +25,9 @@ DEFAULT_MEDIA_SUBTYPES = [
     ("Graphic Novel", B, P, 1),
     ("eBook", B, D, 0),
     ("Audiobook", B, D, 1),
-    ("Nintendo Switch", G, P, 0),
-    ("Xbox", G, P, 1),
-    ("PlayStation", G, P, 2),
-    ("Nintendo eShop", G, D, 0),
-    ("Microsoft Store", G, D, 1),
-    ("PlayStation Store", G, D, 2),
+    ("Disc", G, P, 0),
+    ("Cartridge", G, P, 1),
+    ("Game", G, D, 0),
 ]
 
 

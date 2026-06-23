@@ -179,48 +179,53 @@ export default function FilterPanel({
   }]
 
   return (
-    <div className="flex flex-wrap gap-3 items-end">
-      {showCategory && (
-        <SelectMenu groups={categoryGroups} value={filters.category || ''} onChange={handleCategoryChange} className="w-40" />
-      )}
+    <div className="space-y-3">
+      {/* Below sm:, a 2-column grid so filters fill the screen width 50/50
+          (an odd trailing filter naturally lands alone in the left column
+          of its own row). From sm: up, the original fixed-width flex-wrap. */}
+      <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
+        {showCategory && (
+          <SelectMenu groups={categoryGroups} value={filters.category || ''} onChange={handleCategoryChange} className="w-full sm:w-40" />
+        )}
 
-      <SelectMenu groups={supertypeGroups} value={filters.supertype} onChange={(value) => setFilter('supertype', value)} className="w-36" />
+        <SelectMenu groups={supertypeGroups} value={filters.supertype} onChange={(value) => setFilter('supertype', value)} className="w-full sm:w-36" />
 
-      <SelectMenu groups={mediaSubtypeGroups} value={filters.media_subtype_id} onChange={(value) => setFilter('media_subtype_id', value)} className="w-40" />
+        <SelectMenu groups={mediaSubtypeGroups} value={filters.media_subtype_id} onChange={(value) => setFilter('media_subtype_id', value)} className="w-full sm:w-40" />
 
-      {visiblePlatforms.length > 0 && (
-        <SelectMenu
-          groups={platformGroups}
-          value={filters.platform_id}
-          onChange={(value) => setFilter('platform_id', value)}
-          renderIcon={(opt) => opt.platform && <PlatformLogo platform={opt.platform} className="h-5 w-5" />}
-          className="w-40"
-        />
-      )}
+        {visiblePlatforms.length > 0 && (
+          <SelectMenu
+            groups={platformGroups}
+            value={filters.platform_id}
+            onChange={(value) => setFilter('platform_id', value)}
+            renderIcon={(opt) => opt.platform && <PlatformLogo platform={opt.platform} className="h-5 w-5" />}
+            className="w-full sm:w-40"
+          />
+        )}
 
-      {visibleLocations.length > 0 && (
-        <LocationPicker
-          locations={visibleLocations}
-          value={filters.location_id}
-          onChange={(value) => setFilter('location_id', value)}
-          placeholder="All locations"
-          className="w-48"
-        />
-      )}
+        {visibleLocations.length > 0 && (
+          <LocationPicker
+            locations={visibleLocations}
+            value={filters.location_id}
+            onChange={(value) => setFilter('location_id', value)}
+            placeholder="All locations"
+            className="w-full sm:w-48"
+          />
+        )}
 
-      {lists.length > 0 && (
-        <SelectMenu groups={listGroups} value={filters.list_id} onChange={(value) => setFilter('list_id', value)} className="w-40" />
-      )}
+        {lists.length > 0 && (
+          <SelectMenu groups={listGroups} value={filters.list_id} onChange={(value) => setFilter('list_id', value)} className="w-full sm:w-40" />
+        )}
 
-      {users.length > 0 && (
-        <SelectMenu groups={ownerGroups} value={filters.owner_id || ''} onChange={(value) => setFilter('owner_id', value)} className="w-36" />
-      )}
+        {users.length > 0 && (
+          <SelectMenu groups={ownerGroups} value={filters.owner_id || ''} onChange={(value) => setFilter('owner_id', value)} className="w-full sm:w-36" />
+        )}
 
-      <SelectMenu groups={ratingGroups} value={filters.rating || ''} onChange={(value) => setFilter('rating', value)} className="w-40" />
+        <SelectMenu groups={ratingGroups} value={filters.rating || ''} onChange={(value) => setFilter('rating', value)} className="w-full sm:w-40" />
 
-      <SelectMenu groups={sortGroups} value={filters.sort} onChange={(value) => setFilter('sort', value)} className="w-40" />
+        <SelectMenu groups={sortGroups} value={filters.sort} onChange={(value) => setFilter('sort', value)} className="w-full sm:w-40" />
 
-      <SelectMenu groups={orderGroups} value={filters.order} onChange={(value) => setFilter('order', value)} className="w-28" />
+        <SelectMenu groups={orderGroups} value={filters.order} onChange={(value) => setFilter('order', value)} className="w-full sm:w-28" />
+      </div>
 
       {hasActiveFilters && (
         <Button variant="ghost" size="sm" onClick={resetFilters}>

@@ -110,3 +110,34 @@ async def test_reset_database_clears_plex_config_and_mappings(client, auth_heade
     resp = await client.get("/api/v1/admin/plex/mappings", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+async def test_reset_database_reseeds_default_platforms_and_locations(client, auth_headers):
+    """Reset wipes any custom platforms/locations and restores the defaults
+    (it already did this for media subtypes; platforms/locations are seeded
+    the same way as of this change)."""
+    resp = await client.post("/api/v1/platforms", json={"name": "My Custom Platform"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    resp = await client.post("/api/v1/locations", json={"name": "My Custom Location"}, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+
+    resp = await client.post("/api/v1/admin/reset-database", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get("/api/v1/platforms", headers=auth_headers)
+    assert resp.status_code == 200
+    platform_names = {p["name"] for p in resp.json()}
+    assert platform_names == {
+        "Plex", "Audible", "Kindle", "PlayStation Store", "Microsoft Store",
+        "Nintendo eShop", "Apple TV", "Amazon Music",
+    }
+
+    resp = await client.get("/api/v1/locations", headers=auth_headers)
+    assert resp.status_code == 200
+    location_names = {l["name"] for l in resp.json()}
+    assert location_names == {"Living Room", "Master Bedroom", "Office"}
+
+    resp = await client.get("/api/v1/media-subtypes", headers=auth_headers)
+    assert resp.status_code == 200
+    game_subtype_names = {s["name"] for s in resp.json() if s["category"] == "games"}
+    assert game_subtype_names == {"Disc", "Cartridge", "Game"}

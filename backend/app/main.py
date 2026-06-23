@@ -14,6 +14,8 @@ from .config import settings, APP_VERSION
 from .database import engine, Base, AsyncSessionLocal
 from .repositories.app_config import AppConfigRepository
 from .repositories.user import UserRepository
+from .services.default_locations import seed_default_locations
+from .services.default_platforms import seed_default_platforms
 from .services.media_subtypes import seed_default_media_subtypes
 from .services.scheduler import scheduler_service
 from .services.search import setup_fts
@@ -104,10 +106,12 @@ async def lifespan(app: FastAPI):
     Path(settings.platform_logos_dir).mkdir(parents=True, exist_ok=True)
 
     if settings.database_url.endswith(":memory:"):
-        # The Alembic baseline seeds these for file-based DBs; in-memory test
-        # DBs need the same seed data applied directly.
+        # The Alembic migrations seed these for file-based DBs; in-memory
+        # test DBs need the same seed data applied directly.
         async with AsyncSessionLocal() as db:
             await seed_default_media_subtypes(db)
+            await seed_default_platforms(db)
+            await seed_default_locations(db)
 
     await _ensure_admin()
     await _ensure_shared_user_and_config()
