@@ -74,7 +74,7 @@ def test_upgrade_head_is_idempotent(tmp_sqlite_url):
         engine.dispose()
 
     assert count == 16
-    assert version == "0009"
+    assert version == "0010"
 
 
 def test_upgrade_head_adds_rating_columns(tmp_sqlite_url):

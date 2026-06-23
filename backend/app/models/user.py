@@ -35,5 +35,23 @@ class User(Base):
     # Per-user theme preference: 'auto' (follow OS), 'light', or 'dark'.
     theme_preference = Column(String(10), nullable=False, default='auto', server_default='auto')
 
+    # Nullable: existing accounts, the env-defined super-admin, and the
+    # "shared" system user predate/don't need this. Required (at the schema
+    # level, not here) for newly invited users — it's their only way to
+    # receive a set-password link.
+    email = Column(String(255), nullable=True, unique=True, index=True)
+
+    # False while a user is mid-invite or mid-forced-reset: hashed_password
+    # is an unusable random placeholder and only the emailed link can set a
+    # real one. True (the default) for existing accounts, which already log
+    # in with a real password today.
+    password_set = Column(Boolean, nullable=False, default=True, server_default=true())
+    # SHA-256 hex digest of the current outstanding set-password token (the
+    # token itself is a high-entropy secrets.token_urlsafe value, so an
+    # unsalted hash is fine here — this isn't a password). One token at a
+    # time per user; issuing a new one overwrites the previous.
+    password_reset_token_hash = Column(String(64), nullable=True, unique=True, index=True)
+    password_reset_expires_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())

@@ -83,6 +83,13 @@ See [armarium.app](https://armarium.app) for a full gallery with light/dark/mobi
   panel for managing additional user accounts. Each user can set a display
   name (shown in the navbar and on owned items, falling back to `@username`)
   and a Light/Dark/Auto theme preference that syncs across devices.
+- **Email-based invites and password resets** — admins add new users by
+  email rather than setting a password directly; the user gets a link to
+  choose their own. Admins can also force a password reset on any account
+  (immediately invalidating the old one), and users can self-service via
+  "Forgot password?" on the login screen. Requires SMTP to be configured
+  (see Configuration below); the initial admin account from `.env` is
+  exempt from all of this and always managed via `ADMIN_PASSWORD`.
 - **Export and import** — back up or migrate your library as CSV or JSON.
 - **Scheduled maintenance** — recurring schedules for database backups, cover
   image management (redownload, purge orphans, export), and library linking,
@@ -174,6 +181,12 @@ is already excluded via `.gitignore`.
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///./data/armarium.db` | Database connection string. Defaults to a SQLite file stored in the persistent data volume. See [Advanced: Using PostgreSQL](#advanced-using-postgresql) to use a different database. |
 | `CORS_ORIGINS` | No | *(same-origin only)* | Comma-separated list of extra origins allowed to call the API directly. Not needed for the default setup, where the frontend and backend share an origin via the bundled reverse proxy. |
 | `COOKIE_SECURE` | No | `true` | Whether the browser login session cookie requires HTTPS. Only set to `false` for HTTP-only deployments (e.g. an internal network without TLS) — otherwise the browser won't send the cookie back and login won't work. |
+| `SMTP_HOST` | No | *(none)* | SMTP server used to send user-invite and password-reset emails. Without it, adding users and password resets are unavailable (the rest of the app is unaffected). Works with any provider — Gmail, SES, Mailgun, self-hosted Postfix, etc. |
+| `SMTP_PORT` | No | `587` | SMTP server port. |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | No | *(none)* | SMTP credentials, if your relay requires them. |
+| `SMTP_FROM_ADDRESS` | No | `SMTP_USERNAME` | Sender address for outgoing mail. |
+| `SMTP_USE_TLS` | No | `true` | Whether to use STARTTLS when connecting to the SMTP server. |
+| `PUBLIC_BASE_URL` | No | *(auto-detected)* | Overrides the host used to build set-password/reset links in emails. Only needed if the auto-detected host (from the request that triggered the email) is wrong, e.g. an unusual reverse-proxy setup. |
 
 ## Supported Media Types
 
@@ -407,7 +420,7 @@ armarium/
 │   │                            Open Library), cover art, search, Plex sync,
 │   │                            rate limiting
 │   ├── alembic/                 migration environment (0001_baseline = v1 schema)
-│   └── tests/                   pytest test suite (234+ tests)
+│   └── tests/                   pytest test suite (252+ tests)
 ├── frontend/                  React 19 + Vite + Tailwind CSS
 │   ├── src/
 │   │   ├── api/                 API client (cookie-based auth, 401 redirect)

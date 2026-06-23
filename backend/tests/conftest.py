@@ -45,13 +45,34 @@ def _reset_rate_limits():
     """The login/lookup rate limiters are in-process globals, so they persist
     across tests within the same pytest run. Reset them before each test so
     the number of tests doesn't accidentally trip the production limits."""
-    from app.api.v1.auth import login_limiter
+    from app.api.v1.auth import forgot_password_limiter, login_limiter
     from app.api.v1.lookup import lookup_limiter, scan_limiter
 
     login_limiter.reset()
+    forgot_password_limiter.reset()
     lookup_limiter.reset()
     scan_limiter.reset()
     yield
+
+
+@pytest.fixture(autouse=True)
+def sent_emails(monkeypatch):
+    """User creation/password-reset require SMTP to be "configured" (see
+    services/email.is_configured) — stub that on for the whole suite, and
+    capture (rather than actually send) every email so tests never hit a
+    real SMTP server. Autouse so every test gets this for free; tests that
+    care about email content request it by name to inspect the list."""
+    from app.services import email as email_service
+
+    monkeypatch.setattr(email_service, "is_configured", lambda: True)
+
+    sent: list[dict] = []
+
+    async def _capture(to, subject, text_body, html_body=None):
+        sent.append({"to": to, "subject": subject, "text": text_body, "html": html_body})
+
+    monkeypatch.setattr(email_service, "send_email_logged", _capture)
+    yield sent
 
 
 @pytest.fixture(autouse=True)
@@ -92,13 +113,32 @@ async def _subtype_id(client, auth_headers, name: str) -> int:
 
 
 async def _create_user_and_login(client, auth_headers, username, **permission_overrides):
-    """Create a non-admin user with optional permission overrides and log in as them."""
-    payload = {"username": username, "password": "userpass123", **permission_overrides}
+    """Create a non-admin user with optional permission overrides and log in
+    as them. Users are invite-only via the API (no password field — see
+    api/v1/users.create_user), so this sets a known password directly
+    through the repository, bypassing the emailed set-password link."""
+    payload = {"username": username, "email": f"{username}@example.com", **permission_overrides}
     resp = await client.post("/api/v1/users", json=payload, headers=auth_headers)
     assert resp.status_code == 201, resp.text
     user = resp.json()
+
+    await _set_password_directly(username, "userpass123")
 
     resp = await client.post("/api/v1/auth/login", json={"username": username, "password": "userpass123"})
     assert resp.status_code == 200, resp.text
     token = resp.json()["access_token"]
     return user, {"Authorization": f"Bearer {token}"}
+
+
+async def _set_password_directly(username: str, password: str) -> None:
+    """Bypass the emailed set-password link and give a user a known,
+    working password directly — for test setup only."""
+    from app.database import AsyncSessionLocal
+    from app.repositories.user import UserRepository
+    from app.services.auth import hash_password
+
+    async with AsyncSessionLocal() as db:
+        repo = UserRepository(db)
+        user = await repo.get_by_username(username)
+        repo.complete_password_set(user, hash_password(password))
+        await repo.commit()

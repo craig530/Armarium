@@ -40,7 +40,7 @@ setup (including this file's role) in more depth.
 ## Before considering a change done
 
 - Backend: `cd backend && source .venv/bin/activate && python -m pytest -q`
-  must pass (234+ tests).
+  must pass (252+ tests).
 - Frontend: `cd frontend && npm run build && npm test -- --run && npm run
   lint` must all pass cleanly.
 - For security-relevant changes (auth, permissions, external fetches, file

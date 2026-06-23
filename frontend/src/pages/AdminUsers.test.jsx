@@ -16,15 +16,15 @@ vi.mock('../api/client', () => ({
 
 const mockUsers = [
   {
-    id: 1, username: 'admin', is_admin: true, is_active: true, is_read_only: false,
+    id: 1, username: 'admin', email: 'admin@example.com', is_admin: true, is_active: true, is_read_only: false,
     can_add_items: true, can_manage_locations: true, can_manage_platforms: true, can_manage_media_types: true,
-    can_manage_lists: true,
+    can_manage_lists: true, password_set: true, is_protected_super_admin: true,
     created_at: '2024-01-01T00:00:00Z',
   },
   {
-    id: 2, username: 'alice', is_admin: false, is_active: true, is_read_only: false,
+    id: 2, username: 'alice', email: 'alice@example.com', is_admin: false, is_active: true, is_read_only: false,
     can_add_items: true, can_manage_locations: false, can_manage_platforms: false, can_manage_media_types: false,
-    can_manage_lists: false,
+    can_manage_lists: false, password_set: true, is_protected_super_admin: false,
     created_at: '2024-02-01T00:00:00Z',
   },
 ]
@@ -61,38 +61,61 @@ describe('AdminUsers', () => {
     expect(within(adminRow).getByText('(you)')).toBeTruthy()
   })
 
-  it('shows validation errors for an invalid username and short password', async () => {
+  it('shows validation errors for an invalid username and email', async () => {
     renderAdminUsers()
     await screen.findByText('alice')
 
     fireEvent.click(screen.getByText('New user'))
     const form = screen.getByText('Create user').closest('form')
     fireEvent.change(within(form).getAllByRole('textbox')[0], { target: { value: 'a' } })
-    fireEvent.change(form.querySelector('input[type="password"]'), { target: { value: 'short' } })
+    fireEvent.change(form.querySelector('input[type="email"]'), { target: { value: 'not-an-email' } })
     fireEvent.click(within(form).getByText('Create'))
 
     expect(await screen.findByText('Use 3-50 characters: letters, numbers, underscores or hyphens only')).toBeTruthy()
-    expect(screen.getByText('Password must be at least 8 characters')).toBeTruthy()
+    expect(screen.getByText('Enter a valid email address')).toBeTruthy()
     expect(client.post).not.toHaveBeenCalled()
   })
 
-  it('creates a user and reloads the list', async () => {
+  it('creates a user (invite-only, no password field) and reloads the list', async () => {
     renderAdminUsers()
     await screen.findByText('alice')
 
     fireEvent.click(screen.getByText('New user'))
     const form = screen.getByText('Create user').closest('form')
+    expect(form.querySelector('input[type="password"]')).toBeNull()
     fireEvent.change(within(form).getAllByRole('textbox')[0], { target: { value: 'bob' } })
-    fireEvent.change(form.querySelector('input[type="password"]'), { target: { value: 'longenoughpassword' } })
+    fireEvent.change(form.querySelector('input[type="email"]'), { target: { value: 'bob@example.com' } })
 
     fireEvent.click(within(form).getByText('Create'))
 
     await waitFor(() => {
-      expect(client.post).toHaveBeenCalledWith('/users', expect.objectContaining({ username: 'bob', password: 'longenoughpassword' }))
+      expect(client.post).toHaveBeenCalledWith('/users', expect.objectContaining({ username: 'bob', email: 'bob@example.com' }))
     })
     await waitFor(() => {
       expect(screen.queryByText('Create user')).toBeNull()
     })
+  })
+
+  it('force-resets a user\'s password by emailing them a link, after confirming', async () => {
+    renderAdminUsers()
+    await screen.findByText('alice')
+
+    const aliceRow = screen.getByText('alice').closest('.py-3')
+    fireEvent.click(within(aliceRow).getByTitle('Email a password-reset link'))
+
+    fireEvent.click(await screen.findByText('Send reset link'))
+
+    await waitFor(() => {
+      expect(client.post).toHaveBeenCalledWith('/users/2/force-password-reset')
+    })
+  })
+
+  it('disables force-password-reset for the protected super-admin account', async () => {
+    renderAdminUsers()
+    await screen.findByText('alice')
+
+    const adminRow = screen.getByText('admin').closest('.py-3')
+    expect(within(adminRow).getByTitle("The default admin account's password is managed via .env").disabled).toBe(true)
   })
 
   it("toggles a non-admin user's admin role", async () => {

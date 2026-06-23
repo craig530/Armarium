@@ -54,6 +54,24 @@ class Settings(BaseSettings):
     # different external port.
     port: str = "8080"
 
+    # SMTP — required for user invites and password-reset emails. Features
+    # that need to send mail return 503 (see services/email.is_configured)
+    # when smtp_host is unset, the same "not configured" posture as the
+    # TMDB/IGDB integrations.
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    # Sender address for outgoing mail — falls back to smtp_username if unset.
+    smtp_from_address: Optional[str] = None
+    smtp_use_tls: bool = True
+
+    # Overrides the host used to build set-password/reset links in emails.
+    # Unset by default: the triggering request's own Host header (this app
+    # is always single-origin behind one reverse proxy, per ARCHITECTURE.md
+    # §3) is normally correct. Only needed if that's somehow wrong.
+    public_base_url: Optional[str] = None
+
     model_config = SettingsConfigDict(env_file=".env")
 
     @model_validator(mode="after")

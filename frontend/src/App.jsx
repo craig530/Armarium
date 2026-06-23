@@ -7,6 +7,8 @@ import { PageLoader } from './components/ui/LoadingSpinner'
 import { DEFAULT_CATEGORY_SLUG } from './lib/categories'
 
 const Login = lazy(() => import('./pages/Login'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const SetPassword = lazy(() => import('./pages/SetPassword'))
 const Home = lazy(() => import('./pages/Home'))
 const Library = lazy(() => import('./pages/Library'))
 const AddItem = lazy(() => import('./pages/AddItem'))
@@ -26,6 +28,8 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/set-password" element={<SetPassword />} />
       <Route
         path="/"
         element={

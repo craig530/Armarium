@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
@@ -32,6 +33,15 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+def generate_unusable_password_hash() -> str:
+    """A bcrypt hash of random noise — used as a placeholder for accounts
+    that are mid-invite or mid-forced-reset, so `verify_password` stays
+    well-defined (always False) with no special-casing, unlike the `shared`
+    system user's sentinel `"!"` hash (which instead relies on
+    `is_active=False` to block login)."""
+    return hash_password(secrets.token_urlsafe(32))
 
 
 def create_access_token(username: str, is_admin: bool) -> str:

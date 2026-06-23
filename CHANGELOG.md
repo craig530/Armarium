@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-06-23
+
+### Added
+
+- **Email-based user invites and password resets** — adding a user now
+  asks for an email instead of a password; the new account gets a link to
+  set its own password. Admins can force a password reset on any existing
+  user (immediately invalidating their current password) from the same
+  email-link flow. The login screen gained a "Forgot password?" option for
+  self-service resets. None of this applies to the admin account defined
+  by `ADMIN_USERNAME`/`ADMIN_PASSWORD` in `.env`, which is managed there
+  and via restart, not through the UI. Requires SMTP to be configured
+  (`SMTP_HOST` etc. in `.env`) — see README's Configuration section.
+
 ## [1.8.2] - 2026-06-22
 
 ### Fixed

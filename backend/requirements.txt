@@ -13,6 +13,9 @@ pillow==12.2.0
 python-dotenv==1.2.2
 pydantic==2.13.4
 pydantic-settings==2.14.2
+# Pydantic's EmailStr (used by schemas/user.py) requires this at import
+# time — without it the app fails to start, not just the email feature.
+email-validator==2.3.0
 aiofiles==23.2.1
 apscheduler==3.10.4
 

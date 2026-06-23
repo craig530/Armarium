@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, Pencil, ArrowLeft } from 'lucide-react'
+import { Plus, Trash2, Shield, ShieldOff, Check, X, RefreshCw, Pencil, ArrowLeft, Mail } from 'lucide-react'
 import client from '../api/client'
+import { usersApi } from '../api/users'
 import { useAuthStore, useReferenceDataStore } from '../store'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -9,6 +10,7 @@ import { useConfirm } from '../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,50}$/
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const PERMISSION_FLAGS = [
   { key: 'can_add_items', label: 'Add items' },
@@ -22,7 +24,7 @@ const PERMISSION_FLAGS = [
 const EMPTY_FORM = {
   username: '',
   display_name: '',
-  password: '',
+  email: '',
   is_admin: false,
   is_read_only: false,
   can_add_items: true,
@@ -67,9 +69,9 @@ function PermissionToggles({ value, onChange }) {
 }
 
 function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
-  const [editMode, setEditMode] = useState(null) // null | 'password' | 'display_name'
-  const [newPassword, setNewPassword] = useState('')
+  const [editMode, setEditMode] = useState(null) // null | 'display_name' | 'email'
   const [newDisplayName, setNewDisplayName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirm, confirmDialog] = useConfirm()
 
@@ -105,14 +107,32 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
     }
   }
 
-  const handlePasswordSave = async () => {
-    if (!newPassword.trim()) return
+  const handleForceReset = async () => {
+    if (!await confirm(
+      `Send ${user.username} a link to set a new password? Their current password stops working immediately.`,
+      { title: 'Reset password?', confirmLabel: 'Send reset link' }
+    )) return
     setSaving(true)
     try {
-      await client.put(`/users/${user.id}`, { password: newPassword })
-      toast.success('Password updated')
+      await usersApi.forcePasswordReset(user.id)
+      toast.success(`Password reset email sent to ${user.email}`)
+      onUpdated()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEmailSave = async () => {
+    if (!newEmail.trim()) return
+    setSaving(true)
+    try {
+      await client.put(`/users/${user.id}`, { email: newEmail.trim() })
+      toast.success('Email updated')
       setEditMode(null)
-      setNewPassword('')
+      setNewEmail('')
+      onUpdated()
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -167,6 +187,11 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
                 Inactive
               </span>
             )}
+            {!user.password_set && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                Invited — pending
+              </span>
+            )}
             {isSelf && (
               <span className="text-xs text-gray-400">(you)</span>
             )}
@@ -174,27 +199,35 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
           <p className="text-xs text-gray-400 mt-0.5">
             Added {new Date(user.created_at).toLocaleDateString()}
           </p>
+          {editMode === 'email' ? (
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder={user.email || 'Email'}
+                className="flex-1 sm:flex-none sm:w-48 text-base sm:text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                autoFocus
+              />
+              <button onClick={handleEmailSave} disabled={saving} className="p-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 shrink-0">
+                <Check size={14} />
+              </button>
+              <button onClick={() => { setEditMode(null); setNewEmail('') }} className="p-1 rounded-sm text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 shrink-0">
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setEditMode('email'); setNewEmail(user.email || '') }}
+              className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-brand-600 mt-0.5"
+            >
+              <Mail size={11} /> {user.email || 'No email on file'}
+            </button>
+          )}
         </div>
 
-        {/* Inline edit panel for password or display name */}
-        {editMode === 'password' ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="New password"
-              className="flex-1 sm:flex-none sm:w-36 text-base sm:text-sm rounded-lg border px-2 py-1 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
-              autoFocus
-            />
-            <button onClick={handlePasswordSave} disabled={saving} className="p-1 rounded-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 shrink-0">
-              <Check size={14} />
-            </button>
-            <button onClick={() => { setEditMode(null); setNewPassword('') }} className="p-1 rounded-sm text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 shrink-0">
-              <X size={14} />
-            </button>
-          </div>
-        ) : editMode === 'display_name' ? (
+        {/* Inline edit panel for display name */}
+        {editMode === 'display_name' ? (
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -222,9 +255,14 @@ function UserRow({ user, currentUserId, adminCount, onUpdated, onDeleted }) {
               <Pencil size={14} />
             </button>
             <button
-              onClick={() => setEditMode('password')}
-              title="Reset password"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+              onClick={handleForceReset}
+              disabled={user.is_protected_super_admin || !user.email}
+              title={
+                user.is_protected_super_admin ? "The default admin account's password is managed via .env"
+                  : !user.email ? 'Add an email first'
+                    : 'Email a password-reset link'
+              }
+              className="p-1.5 rounded-lg text-gray-400 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30"
             >
               <RefreshCw size={14} />
             </button>
@@ -329,8 +367,8 @@ export default function AdminUsers() {
     if (!USERNAME_PATTERN.test(form.username)) {
       errors.username = 'Use 3-50 characters: letters, numbers, underscores or hyphens only'
     }
-    if (form.password.length < 8) {
-      errors.password = 'Password must be at least 8 characters'
+    if (!EMAIL_PATTERN.test(form.email)) {
+      errors.email = 'Enter a valid email address'
     }
     setFormErrors(errors)
     if (Object.keys(errors).length > 0) return
@@ -338,7 +376,7 @@ export default function AdminUsers() {
     setCreating(true)
     try {
       await client.post('/users', { ...form, display_name: form.display_name.trim() || undefined })
-      toast.success(`User "${form.username}" created`)
+      toast.success(`User "${form.username}" created — they'll get an email to set their password`)
       setShowForm(false)
       setForm({ ...EMPTY_FORM })
       setFormErrors({})
@@ -376,7 +414,7 @@ export default function AdminUsers() {
         </div>
 
         {showForm && (
-          <form onSubmit={handleCreate} className="mb-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800 space-y-3">
+          <form onSubmit={handleCreate} noValidate className="mb-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800 space-y-3">
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Create user</h3>
             <Input
               label="Username"
@@ -392,11 +430,12 @@ export default function AdminUsers() {
               placeholder="Shown in ownership labels, defaults to username"
             />
             <Input
-              label="Password"
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              error={formErrors.password}
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              error={formErrors.email}
+              placeholder="They'll get a link to this address to set their password"
             />
             <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
               <input

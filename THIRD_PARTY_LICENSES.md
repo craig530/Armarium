@@ -8,10 +8,10 @@ requirements.
 ## Summary
 
 Every software dependency in Armarium's direct dependency tree is licensed
-under a permissive licence (MIT, BSD, Apache-2.0, ISC, MIT-CMU, or PSF-2.0),
-all of which are compatible with Armarium's MIT licence — they impose no
-copyleft, source-disclosure, or "same licence" requirements on Armarium
-itself.
+under a permissive licence (MIT, BSD, Apache-2.0, ISC, MIT-CMU, PSF-2.0, or
+Unlicense), all of which are compatible with Armarium's MIT licence — they
+impose no copyleft, source-disclosure, or "same licence" requirements on
+Armarium itself.
 
 One transitive dependency, **certifi** (used internally by `httpx`), is
 licensed under the **Mozilla Public License 2.0**. MPL-2.0 is a file-level
@@ -49,6 +49,7 @@ are **not** covered by Armarium's MIT licence — see
 | [python-dotenv](https://github.com/theskumar/python-dotenv) | 1.2.2 | [BSD-3-Clause](https://spdx.org/licenses/BSD-3-Clause.html) | Loading `.env` configuration |
 | [Pydantic](https://github.com/pydantic/pydantic) | 2.13.4 | [MIT](https://spdx.org/licenses/MIT.html) | Data validation / schemas |
 | [pydantic-settings](https://github.com/pydantic/pydantic-settings) | 2.14.1 | [MIT](https://spdx.org/licenses/MIT.html) | Settings management |
+| [email-validator](https://github.com/JoshData/python-email-validator) | 2.3.0 | [Unlicense](https://spdx.org/licenses/Unlicense.html) | Email address validation (Pydantic `EmailStr`, used by user invites) |
 | [aiofiles](https://github.com/Tinche/aiofiles) | 23.2.1 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Async file I/O |
 | [APScheduler](https://github.com/agronholm/apscheduler) | 3.10.4 | [MIT](https://spdx.org/licenses/MIT.html) | In-process background job scheduling (Plex sync, maintenance tasks) |
 | [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) | 3.0.0 | [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) | Server-side barcode decoding for the camera scanner |
@@ -97,6 +98,7 @@ are likewise MIT, BSD, Apache-2.0, or PSF-licensed.
 | starlette | 1.3.1 | BSD-3-Clause | https://github.com/Kludex/starlette |
 | uvicorn | 0.24.0 | BSD-3-Clause | https://www.uvicorn.org/ |
 | websockets | 16.0 | BSD-3-Clause | https://github.com/python-websockets/websockets |
+| dnspython | 2.8.0 | ISC License (ISCL) | https://www.dnspython.org |
 | SQLAlchemy | 2.0.50 | MIT | https://www.sqlalchemy.org |
 | alembic | 1.18.4 | MIT | https://alembic.sqlalchemy.org |
 | annotated-doc | 0.0.4 | MIT | https://github.com/fastapi/annotated-doc |
@@ -121,6 +123,7 @@ are likewise MIT, BSD, Apache-2.0, or PSF-licensed.
 | pillow | 12.2.0 | MIT-CMU | https://python-pillow.github.io |
 | certifi | 2026.5.20 | Mozilla Public License 2.0 (MPL 2.0) | https://github.com/certifi/python-certifi |
 | typing_extensions | 4.15.0 | PSF-2.0 | https://github.com/python/typing_extensions |
+| email-validator | 2.3.0 | The Unlicense (Unlicense) | https://github.com/JoshData/python-email-validator |
 
 To regenerate: create a clean virtualenv, `pip install -r backend/requirements.txt pip-licenses`,
 then `pip-licenses --format=markdown --with-urls --order=license`.

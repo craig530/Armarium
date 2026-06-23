@@ -242,6 +242,50 @@ produce a false-positive link.
   adding a new gated capability. `can_manage_schedules` is special: Plex sync
   schedule mutations check it inline via `_require_can_manage_schedules`
   (not `require_permission`) because admins bypass it regardless.
+- **User creation is invite-only, not admin-set-password.** `POST /users`
+  takes an `email`, not a `password` — `api/v1/users.create_user` gives the
+  new row an unusable random placeholder hash
+  (`services/auth.generate_unusable_password_hash`), sets
+  `User.password_set=False`, and emails a set-password link
+  (`services/email.py`, stdlib `smtplib` over the `SMTP_*` settings in
+  `config.py`). `login()` rejects any account with `password_set=False`
+  regardless of what's submitted. Returns 503 if SMTP isn't configured
+  (`services.email.is_configured()`), matching the TMDB/IGDB
+  "not configured → 503" posture (§4.7) — there's otherwise no way the
+  account would ever become usable.
+- **Three flows share the same token plumbing** (`UserRepository` on
+  `app/repositories/user.py`: `issue_reset_token`, `invalidate_password`,
+  `complete_password_set`, `find_by_valid_reset_token`) but differ in
+  whether the *existing* password keeps working while a link is pending:
+  - **Invite** (`create_user`) and **admin force-reset**
+    (`POST /users/{id}/force-password-reset`) both call
+    `invalidate_password` — the old password (or placeholder) stops working
+    immediately, before the email even sends.
+  - **Self-service forgot-password** (`POST /auth/forgot-password`, public)
+    does *not* touch the password — only `issue_reset_token` — so a
+    malicious "forgot password" request against someone else's account
+    can't lock them out. It always returns the same generic response
+    (rate-limited via a `SlidingWindowRateLimiter`, same pattern as
+    `login_limiter`) regardless of whether the account/email exists, is the
+    super-admin, `is_system`, inactive, or has no email on file — except a
+    503 if SMTP itself isn't configured, since that's a deployment fact,
+    not something user-enumeration-sensitive.
+  - Both paths converge on `POST /auth/reset-password` (token + new
+    password) → `complete_password_set`, which sets `password_set=True` and
+    clears the token. `password_reset_token_hash` stores a SHA-256 digest of
+    the raw token (high-entropy `secrets.token_urlsafe`, so unsalted is
+    fine) — never the raw token; `GET /auth/reset-password/{token}` lets the
+    frontend check validity before rendering the set-password form.
+- **The env-defined super-admin (`username == settings.admin_username`) is
+  exempt from all of the above** — `force-password-reset` 403s on it (its
+  password is managed via `ADMIN_PASSWORD`/restart, not this UI) and
+  `forgot-password` silently no-ops on it (same generic response, so it
+  isn't distinguishable from a nonexistent account). This is computed at
+  request time, not a stored flag, so it tracks `ADMIN_USERNAME` if that
+  changes — see `_ensure_admin()` in `main.py` for how that account is
+  seeded. `UserResponse.is_protected_super_admin` surfaces this to the
+  frontend (`AdminUsers.jsx` disables the force-reset button for that row)
+  but the backend enforces it regardless of what the client sends.
 
 ### 4.5 Error handling
 
@@ -365,10 +409,10 @@ managed by `services/scheduler.py`, which wraps an APScheduler
 **Logger hierarchy** — use `logging.getLogger("armarium")` for general
 service-level messages, and child loggers (`"armarium.<module>"`) for modules
 where log origin matters: `armarium.scheduler`, `armarium.auth`,
-`armarium.plex`. `main.py` and `config.py` also use the root `"armarium"`
-logger.  Never use `logging.getLogger(__name__)` — module paths like
-`app.services.plex` are harder to filter in Docker log streams than the
-explicit names above.
+`armarium.plex`, `armarium.email`. `main.py` and `config.py` also use the
+root `"armarium"` logger.  Never use `logging.getLogger(__name__)` — module
+paths like `app.services.plex` are harder to filter in Docker log streams
+than the explicit names above.
 
 **Level conventions:**
 - `INFO` — significant state changes: scheduler startup/job dispatch, Plex
@@ -531,7 +575,7 @@ every PR. Run locally before committing structural changes:
 **Backend** (from `backend/`, with `.venv` activated):
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt   # requirements-dev.txt: test/lint/SAST tools, not in the production image
-python -m pytest -q          # full test suite (234 tests)
+python -m pytest -q          # full test suite (252 tests)
 ruff check app                # lint
 bandit -r app -ll              # SAST — see "accepted findings" below
 pip-audit                       # dependency CVEs
@@ -621,6 +665,12 @@ future work can revisit them deliberately rather than rediscover them:
   `pages/Admin.jsx`, and several `components/add/*` steps have tests.
   `ItemDetail.jsx` and `BarcodeScanner.jsx` do not yet — adding tests for
   these (and any other page/component you touch) is encouraged.
+- **Invite/reset email links default to the triggering request's own
+  host** (`services.email.resolve_base_url`), correct in production
+  (single origin, §3) but wrong when running the frontend (`:3000`) and
+  backend (`:8000`) as separate local dev servers — the link points at the
+  backend port. Set `PUBLIC_BASE_URL=http://localhost:3000` in `.env` for
+  that setup, or test against the production-style single-origin build.
 
 ## 11. Documentation map
 
