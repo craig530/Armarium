@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-23
+
+### Added
+
+- **Default platforms and locations** — a fresh database (or a database
+  reset) now seeds 8 starter platforms (Plex, Audible, Kindle, PlayStation
+  Store, Microsoft Store, Nintendo eShop, Apple TV, Amazon Music) and 3
+  starter locations (Living Room, Master Bedroom, Office), the same way
+  default media subtypes already were. Only applies when the
+  platforms/locations table is empty — an admin's own existing platforms or
+  locations are never touched.
+- **Themed empty-collection icons** — each category's "no items yet" state
+  now shows an icon matching its medium (a stack of discs for Music, a
+  clapperboard for Films & TV, a bookshelf for Books, a gamepad for Games,
+  a stack of boxes for "All") instead of a single generic box.
+
+### Changed
+
+- **Default Games mediums simplified** — the six console-specific defaults
+  (Nintendo Switch, Xbox, PlayStation; Nintendo eShop, Microsoft Store,
+  PlayStation Store) are replaced by three format-based ones: Disc and
+  Cartridge (Physical), Game (Digital). Existing games using an old default
+  keep their current medium — nothing is deleted out from under real data.
+
+### Fixed
+
+- **Mobile filter panel didn't fill the screen width** — expanded filters
+  on mobile now lay out in a 2-column grid that fills the full width
+  (50/50), with an odd trailing filter left-aligned on its own row,
+  instead of an uneven flex-wrap of fixed-width fields.
+- **Admin page had no way back to Settings on mobile/PWA** — added a
+  "← Settings" link at the top, matching the existing "← Admin" link on
+  the Users page.
+
 ## [1.8.3] - 2026-06-23
 
 ### Added
