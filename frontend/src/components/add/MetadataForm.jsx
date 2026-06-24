@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Plus } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { Plus, Upload, X } from 'lucide-react'
 import clsx from 'clsx'
 import Input, { Textarea, Select } from '../ui/Input'
 import Button from '../ui/Button'
@@ -12,6 +12,7 @@ import { platformsApi } from '../../api/platforms'
 import { coverProxyUrl } from '../../api/lookup'
 import { useReferenceDataStore } from '../../store'
 import { matchPlatformLogo } from '../../lib/platformLogos'
+import { useConfirm } from '../../hooks/useConfirm'
 import toast from 'react-hot-toast'
 
 const NEW_PLATFORM = '__new__'
@@ -37,7 +38,7 @@ const AUTO_SUBTYPE_NAME = {
 // existing item (rather than a lookup `candidate`), Save does a PUT instead
 // of a POST, and `onCancel` replaces `onBack`. Used both by the Add flow
 // (create) and the batch-mode/"Recently added" edit modal (update).
-export default function MetadataForm({ candidate, item, category, supertype, locationId, platformId, defaultListIds = [], onBack, onCancel, onSaved }) {
+export default function MetadataForm({ candidate, item, category, supertype, locationId, platformId, defaultListIds = [], onBack, onCancel, onSaved, onDuplicateCancelled }) {
   const isEdit = !!item
 
   const [form, setForm] = useState(() => {
@@ -130,8 +131,28 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
   const [creatingPlatform, setCreatingPlatform] = useState(false)
   const [newPlatformName, setNewPlatformName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [coverFile, setCoverFile] = useState(null)
+  const fileRef = useRef(null)
+  const [confirm, confirmDialog] = useConfirm()
 
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
+
+  // Local preview for a freshly-picked file — revoked on change/unmount so
+  // it doesn't leak while the form stays open across several saves (batch
+  // mode remounts a fresh MetadataForm per item, but this still matters for
+  // the longer-lived edit modal).
+  const filePreviewUrl = useMemo(() => (coverFile ? URL.createObjectURL(coverFile) : null), [coverFile])
+  useEffect(() => () => { if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl) }, [filePreviewUrl])
+
+  const handleCoverFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) setCoverFile(file)
+  }
+
+  const clearCoverFile = () => {
+    setCoverFile(null)
+    if (fileRef.current) fileRef.current.value = ''
+  }
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -190,6 +211,26 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
     if (!form.media_subtype_id) return toast.error('Please choose a type')
     setSaving(true)
     try {
+      if (!isEdit) {
+        const duplicate = await mediaApi.checkDuplicate({
+          title: form.title.trim(),
+          media_subtype_id: Number(form.media_subtype_id),
+          year: form.year ? Number(form.year) : undefined,
+        })
+        if (duplicate) {
+          setSaving(false)
+          const proceed = await confirm(
+            `You already have "${duplicate.title}" filed as ${duplicate.media_subtype?.name}. Add it anyway?`,
+            { title: 'Possible duplicate', confirmLabel: 'Add anyway', cancelLabel: 'Cancel', variant: 'primary' }
+          )
+          if (!proceed) {
+            onDuplicateCancelled?.()
+            return
+          }
+          setSaving(true)
+        }
+      }
+
       const payload = {
         ...form,
         media_subtype_id: Number(form.media_subtype_id),
@@ -205,9 +246,18 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
         location_id: supertype === 'physical' && form.location_id ? Number(form.location_id) : null,
         platform_id: supertype === 'digital' && form.platform_id ? Number(form.platform_id) : null,
       }
-      const saved = isEdit
+      let saved = isEdit
         ? await mediaApi.update(item.id, payload)
         : await mediaApi.create(payload)
+
+      if (coverFile) {
+        try {
+          saved = await mediaApi.uploadCover(saved.id, coverFile)
+        } catch (err) {
+          toast.error(`Saved, but cover upload failed: ${err.message}`)
+        }
+      }
+
       toast.success(isEdit ? `"${saved.title}" updated` : `"${saved.title}" added to your collection!`)
       onSaved(saved)
     } catch (err) {
@@ -217,10 +267,12 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
     }
   }
 
-  const previewSrc = (isEdit && (item.cover_url || item.cover_thumb_url)) || form.cover_image_url
+  const previewSrc = filePreviewUrl || (isEdit && (item.cover_url || item.cover_thumb_url)) || form.cover_image_url
 
   return (
     <div className="flex flex-col gap-6">
+      {confirmDialog}
+
       {/* Header */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -325,12 +377,27 @@ export default function MetadataForm({ candidate, item, category, supertype, loc
           </div>
         )}
 
-        <Input
-          label="Cover image URL"
-          value={form.cover_image_url}
-          onChange={(e) => set('cover_image_url', e.target.value)}
-          className="sm:col-span-2"
-        />
+        <div className="sm:col-span-2 flex items-end gap-2">
+          <Input
+            label="Cover image URL"
+            value={form.cover_image_url}
+            onChange={(e) => set('cover_image_url', e.target.value)}
+            className="flex-1"
+          />
+          {coverFile ? (
+            <Button type="button" variant="outline" size="icon" title="Remove selected photo" onClick={clearCoverFile}>
+              <X size={14} />
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" size="icon" title="Upload a cover photo" onClick={() => fileRef.current?.click()}>
+              <Upload size={14} />
+            </Button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleCoverFileChange} />
+        </div>
+        {coverFile && (
+          <p className="sm:col-span-2 -mt-2 text-xs text-gray-400">Selected: {coverFile.name} (replaces the URL above)</p>
+        )}
 
         <Textarea
           label="Description"

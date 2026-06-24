@@ -100,6 +100,14 @@ def _item_to_response(
     icon_info = icon_map.get(item.location_id, {})
     linked = link_summaries.get(item.id, [])
 
+    # This copy has no cover of its own — borrow a linked copy's instead of
+    # showing nothing, since both copies represent the same title.
+    if cover_url is None:
+        partner_with_cover = next((link for link in linked if link.cover_url), None)
+        if partner_with_cover is not None:
+            cover_url = partner_with_cover.cover_url
+            cover_thumb_url = partner_with_cover.cover_thumb_url
+
     own_supertype = subtype_info["supertype"] if subtype_info else None
     group_supertypes = {link.supertype for link in linked}
     if own_supertype is not None:
@@ -213,6 +221,23 @@ async def list_media(
         per_page=per_page,
         pages=math.ceil(total / per_page) if total else 0,
     )
+
+
+@router.get("/duplicate-check", response_model=Optional[MediaItemResponse])
+async def check_duplicate(
+    title: str,
+    media_subtype_id: int,
+    year: Optional[int] = None,
+    _=Depends(require_permission("can_add_items")),
+    repo: MediaItemRepository = Depends(get_media_item_repository),
+):
+    """An existing item with the same title and media subtype, so the Add
+    flow can warn before filing an apparent duplicate. Returns null when
+    there's no match."""
+    existing = await repo.find_duplicate(title=title, media_subtype_id=media_subtype_id, year=year)
+    if existing is None:
+        return None
+    return await _build_response(repo, existing)
 
 
 def _validate_ownership_fields(supertype: Supertype, location_id: Optional[int], platform_id: Optional[int]) -> None:

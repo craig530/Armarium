@@ -92,6 +92,9 @@ export default function AddFlow({ onSaved }) {
   // (those components would otherwise remount with empty state).
   const [searchQuery, setSearchQuery] = useState('')
   const [mediaKind, setMediaKind] = useState('movie')
+  // Bumped to force MetadataForm to remount (fresh state) when a duplicate
+  // warning is cancelled outside batch mode — see handleDuplicateCancelled.
+  const [formKey, setFormKey] = useState(0)
 
   const { locations, platforms, lists, appConfig, ensureLoaded } = useReferenceDataStore()
   useEffect(() => { ensureLoaded() }, [ensureLoaded])
@@ -235,8 +238,26 @@ export default function AddFlow({ onSaved }) {
       setCandidates([])
       setSearchQuery('')
       navigator.vibrate?.(50)
+      // The form step can be scrolled down past the header/scanner — jump
+      // back to the top so the scanner is visible for the next scan.
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
       onSaved(item)
+    }
+  }
+
+  // Called when the user backs out of an "Add anyway?" duplicate warning.
+  // In batch mode that just skips to the next scan; outside batch mode the
+  // form remounts (via `formKey`) so its fields reset to the candidate's
+  // original values.
+  const handleDuplicateCancelled = () => {
+    if (batchMode) {
+      replaceStack([supertype === 'physical' ? 'search' : 'digitalSearch'])
+      setSelected(null)
+      setCandidates([])
+      setSearchQuery('')
+    } else {
+      setFormKey((k) => k + 1)
     }
   }
 
@@ -413,6 +434,7 @@ export default function AddFlow({ onSaved }) {
 
       {!enriching && step === 'form' && (
         <MetadataForm
+          key={formKey}
           candidate={selected}
           category={category}
           supertype={supertype}
@@ -421,6 +443,7 @@ export default function AddFlow({ onSaved }) {
           defaultListIds={batchListId ? [Number(batchListId)] : []}
           onBack={back}
           onSaved={handleItemSaved}
+          onDuplicateCancelled={handleDuplicateCancelled}
         />
       )}
 

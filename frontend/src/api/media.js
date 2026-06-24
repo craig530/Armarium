@@ -8,6 +8,7 @@ export const mediaApi = {
   update: (id, data) => client.put(`/media/${id}`, data).then((r) => r.data),
   delete: (id) => client.delete(`/media/${id}`),
   stats: () => client.get('/media/stats').then((r) => r.data),
+  checkDuplicate: (params) => client.get('/media/duplicate-check', { params }).then((r) => r.data),
   uploadCover: (id, file) => {
     const fd = new FormData()
     fd.append('file', file)

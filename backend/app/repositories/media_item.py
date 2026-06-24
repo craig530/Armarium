@@ -568,6 +568,24 @@ class MediaItemRepository(BaseRepository[MediaItem]):
             return stmt.where(MediaItem.musicbrainz_id == musicbrainz_id)
         return stmt.where(MediaItem.title.ilike(title), MediaItem.year == year)
 
+    async def find_duplicate(
+        self, *, title: str, media_subtype_id: int, year: Optional[int] = None
+    ) -> Optional[MediaItem]:
+        """An existing item with the same title (case-insensitive) filed
+        under the same media subtype — used to warn before adding an
+        apparent duplicate. When `year` is given, an existing item with a
+        differing, explicit year is treated as a different item (e.g. a
+        remake) rather than a duplicate; a blank year on either side is
+        "no information" and doesn't rule out a match, mirroring
+        `_editions_compatible`."""
+        stmt = select(MediaItem).where(
+            MediaItem.media_subtype_id == media_subtype_id,
+            MediaItem.title.ilike(title),
+        )
+        if year is not None:
+            stmt = stmt.where(or_(MediaItem.year.is_(None), MediaItem.year == year))
+        return (await self.db.execute(stmt)).scalars().first()
+
     async def find_plex_duplicate(
         self,
         *,

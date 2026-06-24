@@ -401,6 +401,131 @@ async def test_delete_linked_item_clears_partner_link(client, auth_headers):
     assert resp.status_code == 204
 
 
+async def test_linked_item_without_cover_falls_back_to_partner_cover(client, auth_headers):
+    from sqlalchemy import update
+    from app.database import AsyncSessionLocal
+    from app.models.media import MediaItem
+
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+    digital_film_id = await _subtype_id(client, auth_headers, "Film")
+
+    physical_resp = await client.post(
+        "/api/v1/media", json={"title": "Covered Physical", "media_subtype_id": bluray_id}, headers=auth_headers
+    )
+    physical_id = physical_resp.json()["id"]
+
+    digital_resp = await client.post(
+        "/api/v1/media", json={"title": "Coverless Digital", "media_subtype_id": digital_film_id}, headers=auth_headers
+    )
+    digital_id = digital_resp.json()["id"]
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(MediaItem).where(MediaItem.id == physical_id).values(cover_image_path="/covers/ab/cd/test.jpg")
+        )
+        await db.commit()
+
+    resp = await client.post(
+        "/api/v1/media/link",
+        json={"item_a_id": physical_id, "item_b_id": digital_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+
+    # The digital copy has no cover of its own — it should inherit the
+    # physical copy's rather than showing nothing.
+    resp = await client.get(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["cover_image_path"] is None
+    assert body["cover_url"] == "/covers/ab/cd/test.jpg"
+
+    # The covered copy keeps showing its own cover, unaffected.
+    resp = await client.get(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.json()["cover_url"] == "/covers/ab/cd/test.jpg"
+
+    resp = await client.delete(f"/api/v1/media/{physical_id}", headers=auth_headers)
+    assert resp.status_code == 204
+    resp = await client.delete(f"/api/v1/media/{digital_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+# ── Duplicate detection ──────────────────────────────────────────────────────
+
+async def test_duplicate_check_finds_same_title_and_medium(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+
+    resp = await client.post(
+        "/api/v1/media", json={"title": "Abbey Road", "media_subtype_id": cd_id, "year": 1969}, headers=auth_headers
+    )
+    item_id = resp.json()["id"]
+
+    resp = await client.get(
+        "/api/v1/media/duplicate-check",
+        params={"title": "abbey road", "media_subtype_id": cd_id, "year": 1969},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["id"] == item_id
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_duplicate_check_ignores_other_medium(client, auth_headers):
+    cd_id = await _subtype_id(client, auth_headers, "CD")
+    digital_music_id = await _subtype_id(client, auth_headers, "Music")
+
+    resp = await client.post(
+        "/api/v1/media", json={"title": "Abbey Road", "media_subtype_id": cd_id}, headers=auth_headers
+    )
+    item_id = resp.json()["id"]
+
+    resp = await client.get(
+        "/api/v1/media/duplicate-check",
+        params={"title": "Abbey Road", "media_subtype_id": digital_music_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json() is None
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
+async def test_duplicate_check_respects_year_mismatch(client, auth_headers):
+    bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
+
+    resp = await client.post(
+        "/api/v1/media",
+        json={"title": "Total Recall", "media_subtype_id": bluray_id, "year": 1990},
+        headers=auth_headers,
+    )
+    item_id = resp.json()["id"]
+
+    # Same title, same medium, but a different explicit year — a remake,
+    # not a duplicate.
+    resp = await client.get(
+        "/api/v1/media/duplicate-check",
+        params={"title": "Total Recall", "media_subtype_id": bluray_id, "year": 2012},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json() is None
+
+    # No year given at all -> still flagged, since "no information" doesn't
+    # rule out a match.
+    resp = await client.get(
+        "/api/v1/media/duplicate-check",
+        params={"title": "Total Recall", "media_subtype_id": bluray_id},
+        headers=auth_headers,
+    )
+    assert resp.json()["id"] == item_id
+
+    resp = await client.delete(f"/api/v1/media/{item_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+
 async def test_auto_link_on_matching_tmdb_id(client, auth_headers):
     bluray_id = await _subtype_id(client, auth_headers, "Blu-ray")
     digital_film_id = await _subtype_id(client, auth_headers, "Film")
