@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-24
+
+### Added
+
+- **Cover photo upload when adding an item** — the Add Item form now has the
+  same "upload a photo" option as editing, instead of only a cover image
+  URL field.
+- **Duplicate warning when adding an item** — saving now checks for an
+  existing item with the same title and medium and asks you to confirm
+  before adding a second copy. Cancelling resets the form (or, in batch
+  mode, skips straight to the next scan).
+
+### Changed
+
+- **Linked copies without their own cover now borrow one** — if a physical
+  copy and its linked digital copy aren't both covered, the one missing a
+  cover now shows the other's instead of a blank cover.
+
+### Fixed
+
+- **Batch scanning lost the scanner off-screen after each save** — saving
+  an item in batch mode now scrolls back to the top so the scanner is
+  visible for the next scan.
+
 ## [1.9.0] - 2026-06-23
 
 ### Added
