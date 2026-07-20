@@ -14,7 +14,7 @@
   "dependencies": {
     "@fontsource/fraunces": "^5.2.9",
     "@fontsource/inter": "^5.2.8",
-    "axios": "^1.6.2",
+    "axios": "^1.18.0",
     "clsx": "^2.0.0",
     "lucide-react": "^1.18.0",
     "react": "^19.2.7",
